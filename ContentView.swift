@@ -110,7 +110,7 @@ struct ContentView: View {
                 
                 // Contador + lupa
                 ZStack {
-                    Text("\(visitedCount + livedCount) / \(features.count) países")
+                    Text("\(visitedCount + livedCount) / \(features.count)")
                         .font(.palatino(.caption))
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -134,20 +134,18 @@ struct ContentView: View {
             }
         }
         // MARK: - Sheet país
-        .sheet(isPresented: $showSheet) {
-            if let country = selectedCountry {
-                CountryBottomSheet(
-                    country: country,
-                    displayName: localizedName(for: country),
-                    onStatusChange: { newStatus in
-                        updateCountryStatus(country: country, newStatus: newStatus)
-                        showSheet = false
-                    },
-                    onDismiss: { showSheet = false }
-                )
-                .presentationDetents([.fraction(0.40)])
-                .presentationDragIndicator(.visible)
-            }
+        .sheet(item: $selectedCountry) { country in
+            CountryBottomSheet(
+                country: country,
+                displayName: localizedName(for: country),
+                onStatusChange: { newStatus in
+                    updateCountryStatus(country: country, newStatus: newStatus)
+                    selectedCountry = nil
+                },
+                onDismiss: { selectedCountry = nil }
+            )
+            .presentationDetents([.fraction(0.40)])
+            .presentationDragIndicator(.visible)
         }
 
         // MARK: - Sheet búsqueda
@@ -248,8 +246,18 @@ struct ContentView: View {
         // MARK: - Carga inicial
         .task {
             if features.isEmpty {
-                GeoJSONLoader.loadCountriesAsync { countries in
-                    self.features = countries
+                GeoJSONLoader.loadCountriesAsync { loadedFeatures in
+                    self.features = loadedFeatures
+                    // Pre-insertar todos los países que aún no existen en SwiftData.
+                    // Así el primer tap siempre encuentra el objeto en @Query
+                    // y nunca hay race condition → pantalla blanca eliminada.
+                    let existingCodes = Set(self.countries.map { $0.isoCode })
+                    for feature in loadedFeatures {
+                        if !existingCodes.contains(feature.isoCode) {
+                            let country = Country(name: feature.adminName, isoCode: feature.isoCode)
+                            self.modelContext.insert(country)
+                        }
+                    }
                     self.isLoadingFeatures = false
                     self.onContentReady?()
                 }
@@ -270,18 +278,26 @@ struct ContentView: View {
         mapStore.centerOnCountry?(isoCode)
     }
 
-    private func handleCountryTap(_ country: Country) {
+    private func handleCountryTap(_ tapped: Country) {
         guard !isLoadingFeatures else { return }
-        if let existing = countries.first(where: { $0.isoCode == country.isoCode }) {
+        let isoCode = tapped.isoCode
+
+        // Caso normal: país ya en SwiftData (segunda apertura o ya visitado antes)
+        if let existing = countries.first(where: { $0.isoCode == isoCode }) {
             selectedCountry = existing
-        } else {
-            modelContext.insert(country)
-            selectedCountry = country
+            return
         }
-        // Esperar al siguiente ciclo de render para que selectedCountry
-        // esté completamente propagado antes de abrir la sheet
+
+        // Primera vez viendo este país: insertar + save + esperar a @Query
+        modelContext.insert(tapped)
+        try? modelContext.save()
+
+        // @Query se actualiza en el próximo ciclo del RunLoop tras el save.
+        // DispatchQueue.main.async garantiza que esperamos ese ciclo completo.
         DispatchQueue.main.async {
-            showSheet = true
+            if let saved = self.countries.first(where: { $0.isoCode == isoCode }) {
+                self.selectedCountry = saved
+            }
         }
     }
 

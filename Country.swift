@@ -39,7 +39,7 @@ enum CountryStatus: String, Codable {
         switch self {
         case .none:        return "Sin marcar"
         case .visited:     return "✅ Visitado"
-        case .wantToVisit: return "🔵 Quiero ir"
+        case .wantToVisit: return "🔵 Próximo"
         case .lived:       return "🏠 He vivido"
         }
     }

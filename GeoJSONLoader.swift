@@ -210,13 +210,16 @@ class GeoJSONLoader {
         let area = latSpan * lonSpan
         let tolerance: Double
         switch area {
-        case 500...: tolerance = 0.05
-        case 50...:  tolerance = 0.02
-        case 5...:   tolerance = 0.01
-        default:     tolerance = 0.005
+        case 500...:    tolerance = 0.05
+        case 50...:     tolerance = 0.02
+        case 5...:      tolerance = 0.01
+        case 0.01...:   tolerance = 0.005
+        default:        tolerance = 0.0  // microestados (Vaticano, San Marino…): no simplificar
         }
 
-        let simplifiedOuter = simplifyCoords(outerCoords, tolerance: tolerance)
+        let simplifiedOuter = tolerance > 0
+            ? simplifyCoords(outerCoords, tolerance: tolerance)
+            : outerCoords
         guard simplifiedOuter.count >= 3 else { return nil }
 
         // Polígonos interiores = "huecos" — usan la misma tolerancia que su padre
@@ -226,7 +229,9 @@ class GeoJSONLoader {
                 return CLLocationCoordinate2D(latitude: point[1], longitude: point[0])
             }
             guard holeCoords.count >= 3 else { return nil }
-            let simplified = simplifyCoords(holeCoords, tolerance: tolerance)
+            let simplified = tolerance > 0
+                ? simplifyCoords(holeCoords, tolerance: tolerance)
+                : holeCoords
             guard simplified.count >= 3 else { return nil }
             return MKPolygon(coordinates: simplified, count: simplified.count)
         }

@@ -255,9 +255,17 @@ struct RaskMapView: UIViewRepresentable {
             let tapCoord = mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView)
             let tapPoint = MKMapPoint(tapCoord)
 
-            for country in visibleCountries(for: mapView) {
-                if !country.boundingMapRect.contains(tapPoint) { continue }
+            // Ordenar por área ascendente: los territorios pequeños (enclaves,
+            // territorios en conflicto) tienen prioridad sobre el país grande que los contiene
+            let candidates = visibleCountries(for: mapView)
+                .filter { $0.boundingMapRect.contains(tapPoint) }
+                .sorted {
+                    let a0 = $0.boundingMapRect.size.width * $0.boundingMapRect.size.height
+                    let a1 = $1.boundingMapRect.size.width * $1.boundingMapRect.size.height
+                    return a0 < a1
+                }
 
+            for country in candidates {
                 for polygon in country.polygons {
                     guard let renderer = mapView.renderer(for: polygon) as? MKPolygonRenderer else { continue }
                     let rendererPoint = renderer.point(for: tapPoint)
