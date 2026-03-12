@@ -12,6 +12,8 @@ class MapStore: ObservableObject {
 }
 
 struct ContentView: View {
+    var onContentReady: (() -> Void)? = nil
+
     @Environment(\.modelContext) private var modelContext
     @Query private var countries: [Country]
 
@@ -78,34 +80,15 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            // MARK: - Indicador de carga
-            if isLoadingFeatures {
-                VStack {
-                    Spacer()
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .tint(.white)
-                        Text("Cargando países...")
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    Spacer()
-                }
-                .allowsHitTesting(false)
-            }
-            
             // MARK: - Header
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Raskmap")
-                            .font(.headline)
+                            .font(.palatino(.headline))
                             .fontWeight(.bold)
                         Text("@\(username)")
-                            .font(.caption)
+                            .font(.palatino(.caption))
                             .foregroundStyle(.secondary)
                     }
                     
@@ -127,7 +110,7 @@ struct ContentView: View {
                 // Contador + lupa
                 ZStack {
                     Text("\(visitedCount + livedCount) / \(features.count) países")
-                        .font(.caption)
+                        .font(.palatino(.caption))
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -136,7 +119,7 @@ struct ContentView: View {
                         Spacer()
                         Button(action: { showSearch = true }) {
                             Image(systemName: "magnifyingglass")
-                                .font(.title3)
+                                .font(.palatino(.title3))
                                 .padding(8)
                                 .background(Color(.systemGray5), in: Circle())
                         }
@@ -192,7 +175,7 @@ struct ContentView: View {
                                         Spacer()
                                         if let status = countryStatusMap[feature.isoCode], status != .none {
                                             Text(status.label)
-                                                .font(.caption)
+                                                .font(.palatino(.caption))
                                                 .foregroundStyle(.secondary)
                                         }
                                     }
@@ -222,9 +205,9 @@ struct ContentView: View {
             VStack(spacing: 24) {
                 Spacer()
                 Text("👋 Bienvenido a Raskmap")
-                    .font(.title2).fontWeight(.bold)
+                    .font(.palatino(.title2, weight: .bold))
                 Text("¿Cómo quieres que te llamemos?")
-                    .font(.subheadline)
+                    .font(.palatino(.subheadline))
                     .foregroundStyle(.secondary)
                 TextField("Tu nombre de usuario", text: $usernameInput)
                     .textFieldStyle(.roundedBorder)
@@ -262,9 +245,11 @@ struct ContentView: View {
                 GeoJSONLoader.loadCountriesAsync { countries in
                     self.features = countries
                     self.isLoadingFeatures = false
+                    self.onContentReady?()
                 }
             } else {
                 isLoadingFeatures = false
+                onContentReady?()
             }
 
             if username.isEmpty {
@@ -314,10 +299,10 @@ struct StatBadge: View {
     var body: some View {
         VStack(spacing: 1) {
             Text("\(value)")
-                .font(.title3).fontWeight(.bold)
+                .font(.palatino(.title3, weight: .bold))
                 .foregroundStyle(color)
             Text(label)
-                .font(.caption2)
+                .font(.palatino(.caption2))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
@@ -340,7 +325,7 @@ struct LegendItem: View {
                         .stroke(color, lineWidth: 1)
                 )
             Text(label)
-                .font(.caption2)
+                .font(.palatino(.caption2))
                 .foregroundStyle(.secondary)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
@@ -359,9 +344,9 @@ struct CountryBottomSheet: View {
         VStack(spacing: 20) {
             VStack(spacing: 4) {
                 Text(displayName)
-                    .font(.title2).fontWeight(.bold)
+                    .font(.palatino(.title2, weight: .bold))
                 Text("Estado actual: \(country.status.label)")
-                    .font(.subheadline)
+                    .font(.palatino(.subheadline))
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 0)
@@ -389,7 +374,7 @@ struct CountryBottomSheet: View {
                     Button("✕  Desmarcar") {
                         onStatusChange(.none)
                     }
-                    .font(.subheadline)
+                    .font(.palatino(.subheadline))
                     .foregroundStyle(.secondary)
                 }
             }
@@ -436,3 +421,28 @@ struct ActionButton: View {
         .modelContainer(for: Country.self, inMemory: true)
 }
 
+// MARK: - Extensión para aplicar Palatino respetando los tamaños del sistema
+extension Font {
+    static func palatino(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+        let size: CGFloat
+        switch style {
+        case .largeTitle:  size = 34
+        case .title:       size = 28
+        case .title2:      size = 22
+        case .title3:      size = 20
+        case .headline:    size = 17
+        case .body:        size = 17
+        case .callout:     size = 16
+        case .subheadline: size = 15
+        case .footnote:    size = 13
+        case .caption:     size = 12
+        case .caption2:    size = 11
+        @unknown default:  size = 17
+        }
+        switch weight {
+        case .bold:        return .custom("Palatino-Bold", size: size)
+        case .semibold:    return .custom("Palatino-Bold", size: size)
+        default:           return .custom("Palatino", size: size)
+        }
+    }
+}
