@@ -130,6 +130,8 @@ struct RaskMapView: UIViewRepresentable {
 
         /// Debounce para regionDidChange — evita recargar en cada frame del scroll
         private var regionChangeWorkItem: DispatchWorkItem?
+        /// IDs de polígonos grises ocultados durante el scroll para recuperarlos después
+        private var hiddenGrayPolygons: [CountryPolygon] = []
 
         init(parent: RaskMapView) {
             self.parent = parent
@@ -172,41 +174,78 @@ struct RaskMapView: UIViewRepresentable {
             return renderer
         }
 
-        // MARK: - Carga diferencial de overlays al hacer pan/zoom con debounce
+        // MARK: - Ocultar grises al empezar scroll para máxima fluidez
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            regionChangeWorkItem?.cancel()
+
+            // Durante el scroll, quitar temporalmente los polígonos grises del mapa
+            // Los coloreados se quedan siempre visibles
+            let markedIsoCodes = Set(parent.countries
+                .filter { $0.status != .none }
+                .map { $0.isoCode })
+
+            let grays = mapView.overlays
+                .compactMap { $0 as? CountryPolygon }
+                .filter { !markedIsoCodes.contains($0.isoCode) }
+
+            if !grays.isEmpty {
+                hiddenGrayPolygons = grays
+                mapView.removeOverlays(grays)
+            }
+        }
+
+        // MARK: - Restaurar grises cuando el scroll termina
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             regionChangeWorkItem?.cancel()
 
             let workItem = DispatchWorkItem { [weak self, weak mapView] in
                 guard let self, let mapView else { return }
+                self.hiddenGrayPolygons = []
                 self.reloadVisibleOverlays(in: mapView)
             }
             regionChangeWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
+            // Pequeño delay para que el mapa termine de asentarse antes de repintar
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
         }
 
         private func reloadVisibleOverlays(in mapView: MKMapView) {
             let visibleRect = mapView.visibleMapRect
 
-            // Polígonos que DEBEN estar en el mapa (todos los de países visibles)
-            let targetPolygons = parent.features
+            // IsoCodes de países marcados — estos NUNCA se quitan del mapa
+            let markedIsoCodes = Set(parent.countries
+                .filter { $0.status != .none }
+                .map { $0.isoCode })
+
+            // Polígonos que DEBEN estar en el mapa:
+            // - todos los de países visibles (grises)
+            // - SIEMPRE todos los de países marcados (coloreados), aunque no sean visibles
+            let visibleFeaturePolygons = parent.features
                 .filter { $0.boundingMapRect.intersects(visibleRect) }
                 .flatMap { $0.polygons }
-            let targetSet = Set(targetPolygons.map { ObjectIdentifier($0) })
+            let markedFeaturePolygons = parent.features
+                .filter { markedIsoCodes.contains($0.isoCode) }
+                .flatMap { $0.polygons }
 
-            // Polígonos que HAY actualmente en el mapa
+            // Unión sin duplicados usando ObjectIdentifier
+            var targetMap: [ObjectIdentifier: CountryPolygon] = [:]
+            for p in visibleFeaturePolygons { targetMap[ObjectIdentifier(p)] = p }
+            for p in markedFeaturePolygons  { targetMap[ObjectIdentifier(p)] = p }
+
             let currentPolygons = mapView.overlays.compactMap { $0 as? CountryPolygon }
             let currentSet = Set(currentPolygons.map { ObjectIdentifier($0) })
 
-            // Quitar los que sobran (ya no visibles)
-            let toRemove = currentPolygons.filter { !targetSet.contains(ObjectIdentifier($0)) }
+            // Quitar solo los grises que ya no son visibles (nunca quitar marcados)
+            let toRemove = currentPolygons.filter {
+                !targetMap.keys.contains(ObjectIdentifier($0))
+            }
             if !toRemove.isEmpty {
                 mapView.removeOverlays(toRemove)
             }
 
-            // Añadir solo los que faltan (evita duplicados)
-            let toAdd = targetPolygons.filter { !currentSet.contains(ObjectIdentifier($0)) }
+            // Añadir los que faltan
+            let toAdd = targetMap.values.filter { !currentSet.contains(ObjectIdentifier($0)) }
             if !toAdd.isEmpty {
-                mapView.addOverlays(toAdd, level: .aboveRoads)
+                mapView.addOverlays(Array(toAdd), level: .aboveRoads)
             }
         }
 
