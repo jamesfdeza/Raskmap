@@ -24,9 +24,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		02A198752F5F383C0057AA98 /* Raskmap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Raskmap.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		02A198862F5F383D0057AA98 /* RaskmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		02A198902F5F383D0057AA98 /* RaskmapUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		027640A82F61C407000FC517 /* Raskmap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Raskmap.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		027640A92F61C407000FC517 /* RaskmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		027640AA2F61C407000FC517 /* RaskmapUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -91,18 +91,10 @@
 				02A198772F5F383C0057AA98 /* Raskmap */,
 				02A198892F5F383D0057AA98 /* RaskmapTests */,
 				02A198932F5F383D0057AA98 /* RaskmapUITests */,
-				02A198762F5F383C0057AA98 /* Products */,
+				027640A82F61C407000FC517 /* Raskmap.app */,
+				027640A92F61C407000FC517 /* RaskmapTests.xctest */,
+				027640AA2F61C407000FC517 /* RaskmapUITests.xctest */,
 			);
-			sourceTree = "<group>";
-		};
-		02A198762F5F383C0057AA98 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				02A198752F5F383C0057AA98 /* Raskmap.app */,
-				02A198862F5F383D0057AA98 /* RaskmapTests.xctest */,
-				02A198902F5F383D0057AA98 /* RaskmapUITests.xctest */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -127,7 +119,7 @@
 			packageProductDependencies = (
 			);
 			productName = Raskmap;
-			productReference = 02A198752F5F383C0057AA98 /* Raskmap.app */;
+			productReference = 027640A82F61C407000FC517 /* Raskmap.app */;
 			productType = "com.apple.product-type.application";
 		};
 		02A198852F5F383D0057AA98 /* RaskmapTests */ = {
@@ -150,7 +142,7 @@
 			packageProductDependencies = (
 			);
 			productName = RaskmapTests;
-			productReference = 02A198862F5F383D0057AA98 /* RaskmapTests.xctest */;
+			productReference = 027640A92F61C407000FC517 /* RaskmapTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		02A1988F2F5F383D0057AA98 /* RaskmapUITests */ = {
@@ -173,7 +165,7 @@
 			packageProductDependencies = (
 			);
 			productName = RaskmapUITests;
-			productReference = 02A198902F5F383D0057AA98 /* RaskmapUITests.xctest */;
+			productReference = 027640AA2F61C407000FC517 /* RaskmapUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -209,7 +201,7 @@
 			mainGroup = 02A1986C2F5F383C0057AA98;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 02A198762F5F383C0057AA98 /* Products */;
+			productRefGroup = 02A1986C2F5F383C0057AA98;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
