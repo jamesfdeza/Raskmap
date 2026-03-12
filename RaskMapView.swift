@@ -4,9 +4,8 @@ import Combine
 
 struct RaskMapView: UIViewRepresentable {
 
-    @Binding var countries: [Country]
+    var countries: [Country]
     var features: [CountryFeature]
-
     var onCountryTapped: (Country) -> Void
     var onReady: ((_ center: @escaping (String) -> Void) -> Void)? = nil
 
@@ -20,135 +19,127 @@ struct RaskMapView: UIViewRepresentable {
         mapView.showsUserLocation = false
         mapView.isRotateEnabled = false
 
-        // Zoom inicial: vista del mundo
-        let worldRegion = MKCoordinateRegion(
+        mapView.setRegion(MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
             span: MKCoordinateSpan(latitudeDelta: 140, longitudeDelta: 180)
-        )
-        mapView.setRegion(worldRegion, animated: false)
+        ), animated: false)
+        let maxZoom: CLLocationDistance = 20_000_000   // ~20,000 km (impide ver demasiado “mundo” por rendimiento ya se verá)
+          mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: maxZoom)
+        
+        let tap = InstantTapGestureRecognizer(target: context.coordinator,
+                                              action: #selector(Coordinator.handleTap(_:)))
+        tap.delegate = context.coordinator
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesBegan  = false
+        tap.delaysTouchesEnded  = false
+        mapView.addGestureRecognizer(tap)
 
-        // Gesture recognizer para detectar toques en países
-        let tapGesture = InstantTapGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handleTap(_:))
-        )
-        tapGesture.delegate = context.coordinator
-        tapGesture.cancelsTouchesInView = false
-        tapGesture.delaysTouchesBegan = false
-        tapGesture.delaysTouchesEnded = false
-        mapView.addGestureRecognizer(tapGesture)
-
-        // Añadir TODOS los polígonos de una vez al inicio.
-        // MapKit solo renderiza los visibles, pero tenerlos todos registrados
-        // evita el coste de addOverlay durante el scroll (que cae en el hilo principal).
-        let allPolygons = features.flatMap { $0.polygons }
-        mapView.addOverlays(allPolygons, level: .aboveRoads)
-
-        // callback onReady
-        onReady?({ isoCode in
-            guard let feature = context.coordinator.parent.features.first(where: { $0.isoCode == isoCode }),
-                  let polygon = feature.polygons.first else { return }
-            let rect = polygon.boundingMapRect
-            let paddedRect = rect.insetBy(dx: -rect.size.width * 0.5, dy: -rect.size.height * 0.5)
-
+        let coordinator = context.coordinator
+        onReady?({ [weak mapView, weak coordinator] isoCode in
+            guard let mapView, let coordinator,
+                  let feature = coordinator.parent.features.first(where: { $0.isoCode == isoCode }) else { return }
+            // Ajustar la región para encajar TODO el país (no solo el primer polígono)
+            let rect = feature.boundingMapRect
+            let padded = rect.insetBy(dx: -rect.size.width * 0.5, dy: -rect.size.height * 0.5)
             let minSize = MKMapSize(width: 13_000_000, height: 13_000_000)
             let finalRect = MKMapRect(
-                x: paddedRect.midX - max(paddedRect.size.width, minSize.width) / 2,
-                y: paddedRect.midY - max(paddedRect.size.height, minSize.height) / 2,
-                width: max(paddedRect.size.width, minSize.width),
-                height: max(paddedRect.size.height, minSize.height)
-            )
-            let region = MKCoordinateRegion(finalRect)
-            mapView.setRegion(region, animated: true)
+                x: padded.midX - max(padded.size.width,  minSize.width)  / 2,
+                y: padded.midY - max(padded.size.height, minSize.height) / 2,
+                width:  max(padded.size.width,  minSize.width),
+                height: max(padded.size.height, minSize.height))
+            mapView.setRegion(MKCoordinateRegion(finalRect), animated: true)
         })
 
         return mapView
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
+        // Siempre actualizar parent para que el coordinator tenga datos frescos
         context.coordinator.parent = self
 
-        // Si no hay overlays aún, añadir los visibles
-        if mapView.overlays.isEmpty {
-            let visible = context.coordinator.visibleCountries(for: mapView)
-            let polygons = visible.flatMap { $0.polygons }
-            mapView.addOverlays(polygons, level: .aboveRoads)
-            return
+        // ── 1. Añadir overlays la primera vez que llegan los features ──
+        if mapView.overlays.isEmpty, !features.isEmpty {
+            // Poblar lastKnownStatus ANTES de addOverlays para que rendererFor
+            // tenga los colores correctos cuando MapKit llame al delegate
+            context.coordinator.lastKnownStatus =
+                Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+            let allPolygons = features.flatMap { $0.polygons }
+            mapView.addOverlays(allPolygons, level: .aboveRoads)
+
+            // Pre-calentar paths en background para el primer scroll
+            let statusSnap = context.coordinator.lastKnownStatus
+            DispatchQueue.global(qos: .utility).async { [weak coordinator = context.coordinator] in
+                var built: [(ObjectIdentifier, MKPolygonRenderer)] = []
+                for polygon in allPolygons {
+                    let pid = ObjectIdentifier(polygon)
+                    let renderer = MKPolygonRenderer(polygon: polygon)
+                    let status = statusSnap[polygon.isoCode] ?? .none
+                    RaskMapView.applyStyle(status: status, to: renderer)
+                    _ = renderer.path  // forzar CGPath fuera del hilo principal
+                    built.append((pid, renderer))
+                }
+                DispatchQueue.main.async {
+                    guard let coordinator else { return }
+                    for (pid, r) in built where coordinator.rendererCache[pid] == nil {
+                        coordinator.rendererCache[pid] = r
+                    }
+                }
+            }
         }
 
-        // --- OPTIMIZACIÓN CLAVE: Solo actualizar países que realmente cambiaron ---
-        let newStatusMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
-        let oldStatusMap = context.coordinator.lastKnownStatus
+        // ── 2. Actualizaciones de status ──
+        let newMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+        let oldMap = context.coordinator.lastKnownStatus
+        guard newMap != oldMap else { return }
+        context.coordinator.lastKnownStatus = newMap
 
-        // Detectar isoCodes cuyo status cambió
-        var changedIsoCodes = Set<String>()
-        for (iso, status) in newStatusMap {
-            if oldStatusMap[iso] != status { changedIsoCodes.insert(iso) }
-        }
-        for iso in oldStatusMap.keys where newStatusMap[iso] == nil {
-            changedIsoCodes.insert(iso)
-        }
+        var changed = Set<String>()
+        for (iso, s) in newMap where oldMap[iso] != s { changed.insert(iso) }
+        for iso in oldMap.keys where newMap[iso] == nil { changed.insert(iso) }
 
-        guard !changedIsoCodes.isEmpty else { return }
-
-        // Guardar nuevo snapshot de estado
-        context.coordinator.lastKnownStatus = newStatusMap
-
-        // Invalidar caché de renderers para los polígonos de países que cambiaron
-        let polygonIDsToInvalidate = features
-            .filter { changedIsoCodes.contains($0.isoCode) }
-            .flatMap { $0.polygons }
-            .map { ObjectIdentifier($0) }
-        for pid in polygonIDsToInvalidate {
-            context.coordinator.rendererCache.removeValue(forKey: pid)
-        }
-
-        // Quitar overlays de países cambiados que estén actualmente en el mapa
-        let overlaysToRemove = mapView.overlays
-            .compactMap { $0 as? CountryPolygon }
-            .filter { changedIsoCodes.contains($0.isoCode) }
-        mapView.removeOverlays(overlaysToRemove)
-
-        // Re-añadir solo los polígonos de países cambiados que son visibles
-        let visibleRect = mapView.visibleMapRect
-        let polygonsToAdd = features
-            .filter { changedIsoCodes.contains($0.isoCode) && $0.boundingMapRect.intersects(visibleRect) }
-            .flatMap { $0.polygons }
-
-        if !polygonsToAdd.isEmpty {
-            mapView.addOverlays(polygonsToAdd, level: .aboveRoads)
+        for isoCode in changed {
+            guard let feature = features.first(where: { $0.isoCode == isoCode }) else { continue }
+            let status = newMap[isoCode] ?? .none
+            for polygon in feature.polygons {
+                let pid = ObjectIdentifier(polygon)
+                if let renderer = context.coordinator.rendererCache[pid] {
+                    Self.applyStyle(status: status, to: renderer)
+                    renderer.setNeedsDisplay()
+                } else {
+                    mapView.removeOverlay(polygon)
+                    mapView.addOverlay(polygon, level: .aboveRoads)
+                }
+            }
         }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
+    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer) {
+        if status == .none {
+            renderer.fillColor   = UIColor.systemGray.withAlphaComponent(0.08)
+            renderer.strokeColor = UIColor.systemGray.withAlphaComponent(0.3)
+            renderer.lineWidth   = 0.5
+        } else {
+            renderer.fillColor   = status.overlayColor
+            renderer.strokeColor = nil
+            renderer.lineWidth   = 0
+        }
     }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     // MARK: - Coordinator
     class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: RaskMapView
-
-        /// Caché de renderers: ObjectIdentifier(polygon) → MKPolygonRenderer
-        /// Evita recrear renderers en cada llamada. Usa identidad del objeto, no isoCode,
-        /// para soportar correctamente países multipolígono (España, EEUU, etc.)
         var rendererCache: [ObjectIdentifier: MKPolygonRenderer] = [:]
-
-        /// Snapshot del estado previo para detectar cambios reales
         var lastKnownStatus: [String: CountryStatus] = [:]
-
-        /// Debounce para regionDidChange — evita recargar en cada frame del scroll
-        private var regionChangeWorkItem: DispatchWorkItem?
         private var colorCancellables = Set<AnyCancellable>()
+        private var scrollWorkItem: DispatchWorkItem?
         weak var mapView: MKMapView?
 
-        init(parent: RaskMapView) {
-            self.parent = parent
-        }
+        init(parent: RaskMapView) { self.parent = parent }
 
-        // Llamado desde makeUIView tras tener la referencia al mapView
         func subscribeToColorChanges() {
             let theme = ColorThemeManager.shared
-            // Suscribirse a cada color individualmente para disparar DESPUÉS del cambio
             Publishers.MergeMany(
                 theme.$visitedColor.dropFirst().map { _ in () },
                 theme.$wantToVisitColor.dropFirst().map { _ in () },
@@ -162,178 +153,146 @@ struct RaskMapView: UIViewRepresentable {
         func refreshRendererColors() {
             guard let mapView else { return }
             for overlay in mapView.overlays {
-                guard let polygon = overlay as? CountryPolygon else { continue }
-                guard let renderer = mapView.renderer(for: polygon) as? MKPolygonRenderer else { continue }
+                guard let polygon = overlay as? CountryPolygon,
+                      let renderer = rendererCache[ObjectIdentifier(polygon)] else { continue }
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
                 guard status != .none else { continue }
                 renderer.fillColor = status.overlayColor
-                renderer.strokeColor = nil
-                renderer.lineWidth = 0
                 renderer.setNeedsDisplay()
             }
-            rendererCache.removeAll()
         }
 
         func visibleCountries(for mapView: MKMapView) -> [CountryFeature] {
-            let visibleRect = mapView.visibleMapRect
-            return parent.features.filter { $0.boundingMapRect.intersects(visibleRect) }
+            let r = mapView.visibleMapRect
+            return parent.features.filter { $0.boundingMapRect.intersects(r) }
         }
 
-        // MARK: - Renderer con caché
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let polygon = overlay as? CountryPolygon else {
                 return MKOverlayRenderer(overlay: overlay)
             }
-
-            // Devolver renderer cacheado si existe
-            let polygonID = ObjectIdentifier(polygon)
-            if let cached = rendererCache[polygonID] {
-                return cached
-            }
+            let pid = ObjectIdentifier(polygon)
+            if let cached = rendererCache[pid] { return cached }
 
             let renderer = MKPolygonRenderer(polygon: polygon)
-
-            let status = parent.countries
-                .first { $0.isoCode == polygon.isoCode }?
-                .status ?? .none
-
-            if status == .none {
-                renderer.fillColor = UIColor.systemGray.withAlphaComponent(0.08)
-                renderer.strokeColor = UIColor.systemGray.withAlphaComponent(0.3)
-                renderer.lineWidth = 0.5
-            } else {
-                renderer.fillColor = status.overlayColor
-                renderer.strokeColor = nil
-                renderer.lineWidth = 0
-            }
-
-            // Cachear todos los renderers — el coste de recrearlos en cada entrada
-            // al viewport es mayor que el coste de memoria de mantenerlos en cache
-            rendererCache[polygonID] = renderer
-
+            let status = lastKnownStatus[polygon.isoCode]
+                      ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status
+                      ?? .none
+            RaskMapView.applyStyle(status: status, to: renderer)
+            rendererCache[pid] = renderer
             return renderer
         }
 
-        // MARK: - Inicio de scroll: solo cancelar el workItem pendiente
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            regionChangeWorkItem?.cancel()
+            scrollWorkItem?.cancel()
         }
 
-        // MARK: - Fin de scroll: recargar visibles y ajustar lineWidth
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            regionChangeWorkItem?.cancel()
-
-            let workItem = DispatchWorkItem { [weak self, weak mapView] in
+            scrollWorkItem?.cancel()
+            let item = DispatchWorkItem { [weak self, weak mapView] in
                 guard let self, let mapView else { return }
-                self.reloadVisibleOverlays(in: mapView)
+                self.updateVisibleOverlays(in: mapView)
             }
-            regionChangeWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
-
-            // lineWidth fijo — no necesitamos ajustar por zoom
+            scrollWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
         }
 
-        private func reloadVisibleOverlays(in mapView: MKMapView) {
+        func updateVisibleOverlays(in mapView: MKMapView) {
             let visibleRect = mapView.visibleMapRect
+            // Expandir ligeramente el rect para pre-cargar polígonos cercanos
+            let expandedRect = visibleRect.insetBy(dx: -visibleRect.size.width * 0.3,
+                                                   dy: -visibleRect.size.height * 0.3)
+            let markedIsoCodes = Set(lastKnownStatus.filter { $0.value != .none }.keys)
 
-            // IsoCodes de países marcados — estos NUNCA se quitan del mapa
-            let markedIsoCodes = Set(parent.countries
-                .filter { $0.status != .none }
-                .map { $0.isoCode })
-
-            // Un solo recorrido: visible O marcado (evita dos filter+flatMap)
-            var targetMap: [ObjectIdentifier: CountryPolygon] = [:]
+            var target = Set<ObjectIdentifier>()
+            var toAddPolygons: [CountryPolygon] = []
             for feature in parent.features {
-                let isMarked  = markedIsoCodes.contains(feature.isoCode)
-                let isVisible = feature.boundingMapRect.intersects(visibleRect)
-                guard isMarked || isVisible else { continue }
-                for p in feature.polygons { targetMap[ObjectIdentifier(p)] = p }
+                if markedIsoCodes.contains(feature.isoCode) ||
+                   feature.boundingMapRect.intersects(expandedRect) {
+                    for p in feature.polygons { target.insert(ObjectIdentifier(p)) }
+                }
             }
 
-            let currentPolygons = mapView.overlays.compactMap { $0 as? CountryPolygon }
-            let currentSet = Set(currentPolygons.map { ObjectIdentifier($0) })
+            let current = mapView.overlays.compactMap { $0 as? CountryPolygon }
+            let currentIDs = Set(current.map { ObjectIdentifier($0) })
 
-            // Quitar solo los grises que ya no son visibles (nunca quitar marcados)
-            let toRemove = currentPolygons.filter {
-                !targetMap.keys.contains(ObjectIdentifier($0))
-            }
-            if !toRemove.isEmpty {
-                mapView.removeOverlays(toRemove)
+            let toRemove = current.filter { !target.contains(ObjectIdentifier($0)) }
+            if !toRemove.isEmpty { mapView.removeOverlays(toRemove) }
+
+            let toAddIDs = target.subtracting(currentIDs)
+            guard !toAddIDs.isEmpty else { return }
+
+            for feature in parent.features {
+                for p in feature.polygons where toAddIDs.contains(ObjectIdentifier(p)) {
+                    toAddPolygons.append(p)
+                }
             }
 
-            // Añadir los que faltan
-            let toAdd = targetMap.values.filter { !currentSet.contains(ObjectIdentifier($0)) }
-            if !toAdd.isEmpty {
-                mapView.addOverlays(Array(toAdd), level: .aboveRoads)
+            // Pre-crear renderers y forzar el CGPath en background
+            // para que cuando MapKit los pida en el render loop ya estén listos
+            let statusSnapshot = lastKnownStatus
+            let cache = rendererCache
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                var newRenderers: [(ObjectIdentifier, MKPolygonRenderer)] = []
+                for polygon in toAddPolygons {
+                    let pid = ObjectIdentifier(polygon)
+                    guard cache[pid] == nil else { continue }
+                    let renderer = MKPolygonRenderer(polygon: polygon)
+                    let status = statusSnapshot[polygon.isoCode] ?? .none
+                    RaskMapView.applyStyle(status: status, to: renderer)
+                    // Forzar CGPath — trabajo costoso que hacemos fuera del hilo principal
+                    _ = renderer.path
+                    newRenderers.append((pid, renderer))
+                }
+                DispatchQueue.main.async { [weak self, weak mapView] in
+                    guard let self, let mapView else { return }
+                    for (pid, renderer) in newRenderers {
+                        self.rendererCache[pid] = renderer
+                    }
+                    mapView.addOverlays(toAddPolygons, level: .aboveRoads)
+                }
             }
         }
 
-        // Permitir que el tap y el pan de MapKit coexistan sin bloqueo
-        func gestureRecognizer(_ gr: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            return true
-        }
-
-        // Rechazar el tap si el toque ya se movió (es un pan, no un tap)
-        func gestureRecognizer(_ gr: UIGestureRecognizer,
-                               shouldReceive touch: UITouch) -> Bool {
-            return true
-        }
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldReceive t: UITouch) -> Bool { true }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let mapView = gesture.view as? MKMapView else { return }
-
-            let tapCoord = mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView)
-            let tapPoint = MKMapPoint(tapCoord)
-
-            // Ordenar por área ascendente: los territorios pequeños (enclaves,
-            // territorios en conflicto) tienen prioridad sobre el país grande que los contiene
+            let tapPoint = MKMapPoint(mapView.convert(gesture.location(in: mapView),
+                                                      toCoordinateFrom: mapView))
             let candidates = visibleCountries(for: mapView)
                 .filter { $0.boundingMapRect.contains(tapPoint) }
                 .sorted {
-                    let a0 = $0.boundingMapRect.size.width * $0.boundingMapRect.size.height
-                    let a1 = $1.boundingMapRect.size.width * $1.boundingMapRect.size.height
-                    return a0 < a1
+                    $0.boundingMapRect.size.width * $0.boundingMapRect.size.height <
+                    $1.boundingMapRect.size.width * $1.boundingMapRect.size.height
                 }
 
             for country in candidates {
                 for polygon in country.polygons {
-                    guard let renderer = mapView.renderer(for: polygon) as? MKPolygonRenderer else { continue }
-                    let rendererPoint = renderer.point(for: tapPoint)
-
-                    if renderer.path?.contains(rendererPoint) == true {
-                        if let countryData = parent.countries.first(where: { $0.isoCode == polygon.isoCode }) {
-                            parent.onCountryTapped(countryData)
-                        } else {
-                            let newCountry = Country(name: polygon.countryName, isoCode: polygon.isoCode)
-                            parent.onCountryTapped(newCountry)
-                        }
-                        return
-                    }
+                    guard let r = mapView.renderer(for: polygon) as? MKPolygonRenderer,
+                          r.path?.contains(r.point(for: tapPoint)) == true else { continue }
+                    // Buscar en parent.countries (siempre fresco)
+                    let result = parent.countries.first { $0.isoCode == polygon.isoCode }
+                              ?? Country(name: polygon.countryName, isoCode: polygon.isoCode)
+                    parent.onCountryTapped(result)
+                    return
                 }
             }
         }
     }
 }
 
-// MARK: - Reconocedor de tap sin delay
-// Falla inmediatamente si el dedo se mueve más de 10pt — elimina el delay
-// que MapKit introduce esperando a discriminar tap vs pan
 private class InstantTapGestureRecognizer: UITapGestureRecognizer {
-    private var startLocation: CGPoint = .zero
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        super.touchesBegan(touches, with: event)
-        startLocation = touches.first?.location(in: view) ?? .zero
+    private var start: CGPoint = .zero
+    override func touchesBegan(_ t: Set<UITouch>, with e: UIEvent) {
+        super.touchesBegan(t, with: e); start = t.first?.location(in: view) ?? .zero
     }
-
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
-        super.touchesMoved(touches, with: event)
-        guard let current = touches.first?.location(in: view) else { return }
-        let dx = current.x - startLocation.x
-        let dy = current.y - startLocation.y
-        if sqrt(dx*dx + dy*dy) > 10 {
-            state = .failed
-        }
+    override func touchesMoved(_ t: Set<UITouch>, with e: UIEvent) {
+        super.touchesMoved(t, with: e)
+        guard let c = t.first?.location(in: view) else { return }
+        if hypot(c.x - start.x, c.y - start.y) > 10 { state = .failed }
     }
 }

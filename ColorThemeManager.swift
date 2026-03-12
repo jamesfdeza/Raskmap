@@ -12,6 +12,10 @@ import Combine
 
 class ColorThemeManager: ObservableObject {
     static let shared = ColorThemeManager()
+    
+    static let defaultVisited: Color = .red
+    static let defaultWantToVisit: Color = .blue
+    static let defaultLived: Color = .green
 
     @Published var visitedColor: Color {
         didSet { save(visitedColor, key: "color_visited") }
@@ -24,9 +28,9 @@ class ColorThemeManager: ObservableObject {
     }
 
     init() {
-        visitedColor   = ColorThemeManager.load(key: "color_visited",     default: Color.red)
-        wantToVisitColor = ColorThemeManager.load(key: "color_wantToVisit", default: Color.blue)
-        livedColor     = ColorThemeManager.load(key: "color_lived",       default: Color.green)
+        visitedColor   = ColorThemeManager.load(key: "color_visited",     default: Self.defaultVisited)
+        wantToVisitColor = ColorThemeManager.load(key: "color_wantToVisit", default: Self.defaultWantToVisit)
+        livedColor     = ColorThemeManager.load(key: "color_lived",       default: Self.defaultLived)
     }
 
     func color(for status: CountryStatus) -> Color {
@@ -57,5 +61,11 @@ class ColorThemeManager: ObservableObject {
         ui.getRed(&r, green: &g, blue: &b, alpha: &a)
         let data = try? JSONEncoder().encode([Double(r), Double(g), Double(b), Double(a)])
         UserDefaults.standard.set(data, forKey: key)
+    }
+    
+    func resetToDefaults() {
+        visitedColor = Self.defaultVisited
+        wantToVisitColor = Self.defaultWantToVisit
+        livedColor = Self.defaultLived
     }
 }

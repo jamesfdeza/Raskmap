@@ -95,7 +95,7 @@ struct ContentView: View {
             
             // MARK: - Mapa
             RaskMapView(
-                countries: .constant(countries),
+                countries: countries,
                 features: features,
                 onCountryTapped: { country in
                     handleCountryTap(country)
@@ -147,7 +147,7 @@ struct ContentView: View {
                 // Contador + lupa
                 ZStack {
                     Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
-                        .font(.palatino(.caption))
+                        .font(.palatino(.title3, weight: .bold))
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -450,7 +450,7 @@ struct CountryBottomSheet: View {
                     }
                 )
                 ActionButton(
-                    label: "🔵 Próximo",
+                    label: "🔜 Próximo",
                     color: colorTheme.wantToVisitColor,
                     isSelected: country.status == .wantToVisit,
                     action: {
@@ -679,6 +679,7 @@ struct ProfileSheet: View {
     @State private var usernameError: String? = nil
     @State private var showSavedToast: Bool = false
     @State private var showCountingToast: Bool = false
+    @State private var showResetToast: Bool = false
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
@@ -803,6 +804,23 @@ struct ProfileSheet: View {
                         }
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 24)
+
+                        Button {
+                            colorTheme.resetToDefaults()
+                            showResetToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                showResetToast = false
+                            }
+                        } label: {
+                            Text("Restablecer colores predeterminados")
+                                .font(.palatino(.footnote, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .foregroundStyle(.white)
+                                .background(Color.red, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
                     }
 
                     .padding(.bottom, 24)
@@ -818,12 +836,12 @@ struct ProfileSheet: View {
             }
             .onAppear { usernameInput = username }
             .overlay {
-                if showSavedToast || showCountingToast {
+                if showSavedToast || showCountingToast || showResetToast {
                     VStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 36))
                             .foregroundStyle(.white)
-                        Text(showSavedToast ? "Nombre actualizado" : "Se ha actualizado el conteo")
+                        Text(showSavedToast ? "Nombre actualizado" : (showCountingToast ? "Se ha actualizado el conteo" : "Colores restablecidos"))
                             .font(.palatino(.subheadline, weight: .bold))
                             .foregroundStyle(.white)
                     }
@@ -835,6 +853,7 @@ struct ProfileSheet: View {
             }
             .animation(.easeInOut(duration: 0.2), value: showSavedToast)
             .animation(.easeInOut(duration: 0.2), value: showCountingToast)
+            .animation(.easeInOut(duration: 0.2), value: showResetToast)
         }
         .sheet(isPresented: $showImagePicker) {
             ImagePickerView(image: $profileImage)
@@ -923,3 +942,4 @@ extension Font {
         }
     }
 }
+
