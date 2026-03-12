@@ -11,7 +11,8 @@ import SwiftData
 import UIKit
 
 // MARK: - Estado del país (como un enum de Java)
-enum CountryStatus: String, Codable {
+enum CountryStatus: String, Codable, Identifiable {
+    var id: String { rawValue }
     case none        = "none"
     case visited     = "visited"     // Rojo
     case wantToVisit = "wantToVisit" // Azul

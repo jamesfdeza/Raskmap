@@ -18,6 +18,7 @@ struct ContentView: View {
     @Query private var countries: [Country]
 
     @State private var selectedCountry: Country? = nil
+    @State private var statusListFilter: CountryStatus? = nil
     @State private var showSheet: Bool = false
     @State private var features: [CountryFeature] = []
     @State private var showSearch: Bool = false
@@ -98,8 +99,11 @@ struct ContentView: View {
                     HStack(spacing: 8) {
                         Spacer()
                         StatBadge(value: visitedCount, label: "Visitado",  color: .red)
+                            .onTapGesture { statusListFilter = .visited }
                         StatBadge(value: wantCount,    label: "Próximo",   color: .blue)
+                            .onTapGesture { statusListFilter = .wantToVisit }
                         StatBadge(value: livedCount,   label: "He vivido", color: .green)
+                            .onTapGesture { statusListFilter = .lived }
                         
                     }             }
                 .padding(.horizontal, 16)
@@ -162,7 +166,7 @@ struct ContentView: View {
                             ForEach(section.features, id: \.isoCode) { feature in
                                 // contentShape hace que TODO el ancho de la fila sea tappable
                                 HStack {
-                                    Text(feature.flagEmoji ?? "⚠️")
+                                    Text(feature.flagEmoji ?? "🌐")
                                     Text(feature.localizedName)
                                         .foregroundStyle(.primary)
                                     Spacer()
@@ -241,6 +245,19 @@ struct ContentView: View {
                 Spacer()
             }
             .interactiveDismissDisabled(true)
+        }
+
+        // MARK: - Sheet lista por estado
+        .sheet(item: $statusListFilter) { filter in
+            StatusListSheet(
+                filter: filter,
+                countries: countries,
+                features: features,
+                onRemove: { country in
+                    country.status = .none
+                    try? modelContext.save()
+                }
+            )
         }
 
         // MARK: - Carga inicial
@@ -366,49 +383,68 @@ struct CountryBottomSheet: View {
     let onStatusChange: (CountryStatus) -> Void
     let onDismiss: () -> Void
 
+    @State private var showRemoveConfirm = false
+
     var body: some View {
         VStack(spacing: 20) {
-            VStack(spacing: 4) {
-                Text(displayName)
-                    .font(.palatino(.title2, weight: .bold))
-                Text("Estado actual: \(country.status.label)")
-                    .font(.palatino(.subheadline))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 0)
+            Text(displayName)
+                .font(.palatino(.title2, weight: .bold))
+                .padding(.top, 36)
 
             VStack(spacing: 10) {
                 ActionButton(
                     label: "✅ Visitado",
                     color: .red,
                     isSelected: country.status == .visited,
-                    action: { onStatusChange(.visited) }
+                    action: {
+                        if country.status == .visited { showRemoveConfirm = true }
+                        else { onStatusChange(.visited) }
+                    }
                 )
                 ActionButton(
                     label: "🔵 Próximo",
                     color: .blue,
                     isSelected: country.status == .wantToVisit,
-                    action: { onStatusChange(.wantToVisit) }
+                    action: {
+                        if country.status == .wantToVisit { showRemoveConfirm = true }
+                        else { onStatusChange(.wantToVisit) }
+                    }
                 )
                 ActionButton(
                     label: "🏠 He vivido aquí",
                     color: .green,
                     isSelected: country.status == .lived,
-                    action: { onStatusChange(.lived) }
-                )
-                if country.status != .none {
-                    Button("✕  Desmarcar") {
-                        onStatusChange(.none)
+                    action: {
+                        if country.status == .lived { showRemoveConfirm = true }
+                        else { onStatusChange(.lived) }
                     }
-                    .font(.palatino(.subheadline))
-                    .foregroundStyle(.secondary)
+                )
+                Divider()
+                    .padding(.top, 14)
+                Button("✕  Desmarcar") {
+                    if country.status != .none { showRemoveConfirm = true }
                 }
+                .font(.palatino(.subheadline))
+                .foregroundStyle(country.status == .none ? .tertiary : .secondary)
+                .padding(.top, 2)
+                .disabled(country.status == .none)
             }
             .padding(.horizontal, 24)
 
             Spacer()
         }
-        .padding(.top, 24)
+        .confirmationDialog(
+            "¿Eliminar de la lista?",
+            isPresented: $showRemoveConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Eliminar \(displayName)", role: .destructive) {
+                onStatusChange(.none)
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("\(displayName) se eliminará de la lista.")
+        }
     }
 }
 
@@ -438,6 +474,123 @@ struct ActionButton: View {
                     .stroke(isSelected ? color : .clear, lineWidth: 1.5)
             )
             .foregroundStyle(isSelected ? color : .primary)
+        }
+    }
+}
+
+// MARK: - Sheet lista de países por estado
+struct StatusListSheet: View {
+    let filter: CountryStatus
+    let countries: [Country]
+    let features: [CountryFeature]
+    let onRemove: (Country) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var countryToRemove: Country? = nil
+
+    private var filtered: [Country] {
+        countries.filter { $0.status == filter }
+    }
+
+    private func displayName(for country: Country) -> String {
+        features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
+    }
+
+    private func flagEmoji(for country: Country) -> String {
+        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
+    }
+
+    // Agrupados por primera letra, igual que la búsqueda
+    private var grouped: [(letter: String, items: [Country])] {
+        let sorted = filtered.sorted { displayName(for: $0) < displayName(for: $1) }
+        var result: [(letter: String, items: [Country])] = []
+        for country in sorted {
+            let letter = String(displayName(for: country)
+                .folding(options: .diacriticInsensitive, locale: .current)
+                .prefix(1).uppercased())
+            if let idx = result.firstIndex(where: { $0.letter == letter }) {
+                result[idx].items.append(country)
+            } else {
+                result.append((letter: letter, items: [country]))
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if filtered.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer()
+                        Text("Ningún país marcado como")
+                            .font(.palatino(.subheadline))
+                            .foregroundStyle(.secondary)
+                        Text(filter.label)
+                            .font(.palatino(.title3, weight: .bold))
+                        Spacer()
+                    }
+                } else {
+                    List {
+                        ForEach(grouped, id: \.letter) { section in
+                            Section(header: Text(section.letter).font(.palatino(.caption, weight: .bold))) {
+                                ForEach(section.items, id: \.isoCode) { country in
+                                    HStack {
+                                        Text(flagEmoji(for: country))
+                                        Text(displayName(for: country))
+                                            .font(.palatino(.body))
+                                        Spacer()
+                                        Button {
+                                            countryToRemove = country
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundStyle(.red)
+                                                .font(.title3)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle(filter.label)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") {
+                        // Cierra la sheet asignando nil al binding externo
+                        // Se hace pasando un @Environment dismiss
+                        dismiss()
+                    }
+                    .font(.palatino(.body))
+                }
+            }
+        }
+        .confirmationDialog(
+            "¿Eliminar de la lista?",
+            isPresented: Binding(
+                get: { countryToRemove != nil },
+                set: { if !$0 { countryToRemove = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let c = countryToRemove {
+                Button("Eliminar \(displayName(for: c))", role: .destructive) {
+                    onRemove(c)
+                    countryToRemove = nil
+                }
+                Button("Cancelar", role: .cancel) {
+                    countryToRemove = nil
+                }
+            }
+        } message: {
+            if let c = countryToRemove {
+                Text("\(displayName(for: c)) se eliminará de la lista.")
+            }
         }
     }
 }
