@@ -32,6 +32,8 @@ struct RaskmapApp: App {
         }
     }
 
+    @StateObject private var colorTheme = ColorThemeManager.shared
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -41,6 +43,7 @@ struct RaskmapApp: App {
                     })
                     .modelContainer(sharedModelContainer)
                     .environment(\.font, .custom("Palatino", size: 16))
+                    .environmentObject(colorTheme)
 
                 if showSplash {
                     SplashView()

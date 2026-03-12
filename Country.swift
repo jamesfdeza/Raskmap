@@ -19,20 +19,13 @@ enum CountryStatus: String, Codable, Identifiable {
     case lived       = "lived"       // Verde
 
     var overlayColor: UIColor {
-        switch self {
-        case .none:        return .clear
-        case .visited:     return UIColor.systemRed.withAlphaComponent(0.45)
-        case .wantToVisit: return UIColor.systemBlue.withAlphaComponent(0.45)
-        case .lived:       return UIColor.systemGreen.withAlphaComponent(0.45)
-        }
+        ColorThemeManager.shared.uiColor(for: self)
     }
 
     var strokeColor: UIColor {
         switch self {
-        case .none:        return UIColor.systemGray.withAlphaComponent(0.2)
-        case .visited:     return UIColor.systemRed
-        case .wantToVisit: return UIColor.systemBlue
-        case .lived:       return UIColor.systemGreen
+        case .none: return UIColor.systemGray.withAlphaComponent(0.2)
+        default:    return ColorThemeManager.shared.uiColor(for: self)
         }
     }
 

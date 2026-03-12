@@ -24,15 +24,39 @@ struct ContentView: View {
     @State private var showSearch: Bool = false
     @State private var searchText: String = ""
     @StateObject private var mapStore = MapStore()
+    @EnvironmentObject private var colorTheme: ColorThemeManager
     @AppStorage("username") private var username: String = ""
     @State private var showOnboarding: Bool = false
     @State private var usernameInput: String = ""
     @State private var isLoadingFeatures: Bool = true
     @State private var pendingShowSheet: Bool = false
+    @State private var showProfile: Bool = false
+    @AppStorage("countingMode") private var countingModeRaw: String = CountingMode.all.rawValue
+    @State private var profileImage: UIImage? = {
+        guard let data = UserDefaults.standard.data(forKey: "profileImageData") else { return nil }
+        return UIImage(data: data)
+    }()
 
-    private var visitedCount: Int { countries.filter { $0.status == .visited }.count }
-    private var wantCount: Int    { countries.filter { $0.status == .wantToVisit }.count }
-    private var livedCount: Int   { countries.filter { $0.status == .lived }.count }
+    private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    // Conteos totales reales (para listas)
+    private var visitedCountAll: Int { countries.filter { $0.status == .visited }.count }
+    private var wantCountAll: Int    { countries.filter { $0.status == .wantToVisit }.count }
+    private var livedCountAll: Int   { countries.filter { $0.status == .lived }.count }
+
+    // Conteos filtrados según modo activo (para badges y contador)
+    private var visitedCount: Int {
+        countingMode == .all ? visitedCountAll :
+        countries.filter { $0.status == .visited && countingMode.counts($0.isoCode) }.count
+    }
+    private var wantCount: Int {
+        countingMode == .all ? wantCountAll :
+        countries.filter { $0.status == .wantToVisit && countingMode.counts($0.isoCode) }.count
+    }
+    private var livedCount: Int {
+        countingMode == .all ? livedCountAll :
+        countries.filter { $0.status == .lived && countingMode.counts($0.isoCode) }.count
+    }
 
     private var sortedFeatures: [CountryFeature] {
         features.sorted { $0.localizedName < $1.localizedName }
@@ -85,27 +109,35 @@ struct ContentView: View {
             // MARK: - Header
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Raskmap")
-                            .font(.palatino(.headline))
-                            .fontWeight(.bold)
-                        Text("@\(username)")
-                            .font(.palatino(.caption))
-                            .foregroundStyle(.secondary)
+                    // Avatar + título tappable → abre perfil
+                    Button { showProfile = true } label: {
+                        HStack(spacing: 8) {
+                            ProfileAvatarView(image: profileImage, size: 34)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Raskmap")
+                                    .font(.palatino(.headline, weight: .bold))
+                                    .foregroundStyle(.primary)
+                                if !username.isEmpty {
+                                    Text("@\(username)")
+                                        .font(.palatino(.caption))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
                     }
-                    
+                    .buttonStyle(.plain)
+
                     Spacer()
-                    
+
                     HStack(spacing: 8) {
-                        Spacer()
-                        StatBadge(value: visitedCount, label: "Visitado",  color: .red)
+                        StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
                             .onTapGesture { statusListFilter = .visited }
-                        StatBadge(value: wantCount,    label: "Próximo",   color: .blue)
+                        StatBadge(value: wantCount,    label: "Próximo",   color: colorTheme.wantToVisitColor)
                             .onTapGesture { statusListFilter = .wantToVisit }
-                        StatBadge(value: livedCount,   label: "He vivido", color: .green)
+                        StatBadge(value: livedCount,   label: "Vivido", color: colorTheme.livedColor)
                             .onTapGesture { statusListFilter = .lived }
-                        
-                    }             }
+                    }
+                }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -114,7 +146,7 @@ struct ContentView: View {
                 
                 // Contador + lupa
                 ZStack {
-                    Text("\(visitedCount + livedCount) / \(features.count)")
+                    Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
                         .font(.palatino(.caption))
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -194,6 +226,7 @@ struct ContentView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollIndicators(.visible)
                 .searchable(text: $searchText, prompt: "Buscar país...")
                 .navigationTitle("Buscar país")
                 .navigationBarTitleDisplayMode(.inline)
@@ -258,6 +291,20 @@ struct ContentView: View {
                     try? modelContext.save()
                 }
             )
+        }
+
+        // MARK: - Sheet perfil
+        .sheet(isPresented: $showProfile) {
+            ProfileSheet(
+                username: $username,
+                profileImage: $profileImage,
+                countingModeRaw: $countingModeRaw
+            )
+        }
+        .onChange(of: profileImage) {
+            if let img = profileImage, let data = img.jpegData(compressionQuality: 0.8) {
+                UserDefaults.standard.set(data, forKey: "profileImageData")
+            }
         }
 
         // MARK: - Carga inicial
@@ -383,6 +430,7 @@ struct CountryBottomSheet: View {
     let onStatusChange: (CountryStatus) -> Void
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var colorTheme: ColorThemeManager
     @State private var showRemoveConfirm = false
 
     var body: some View {
@@ -394,7 +442,7 @@ struct CountryBottomSheet: View {
             VStack(spacing: 10) {
                 ActionButton(
                     label: "✅ Visitado",
-                    color: .red,
+                    color: colorTheme.visitedColor,
                     isSelected: country.status == .visited,
                     action: {
                         if country.status == .visited { showRemoveConfirm = true }
@@ -403,7 +451,7 @@ struct CountryBottomSheet: View {
                 )
                 ActionButton(
                     label: "🔵 Próximo",
-                    color: .blue,
+                    color: colorTheme.wantToVisitColor,
                     isSelected: country.status == .wantToVisit,
                     action: {
                         if country.status == .wantToVisit { showRemoveConfirm = true }
@@ -412,7 +460,7 @@ struct CountryBottomSheet: View {
                 )
                 ActionButton(
                     label: "🏠 He vivido aquí",
-                    color: .green,
+                    color: colorTheme.livedColor,
                     isSelected: country.status == .lived,
                     action: {
                         if country.status == .lived { showRemoveConfirm = true }
@@ -591,6 +639,256 @@ struct StatusListSheet: View {
             if let c = countryToRemove {
                 Text("\(displayName(for: c)) se eliminará de la lista.")
             }
+        }
+    }
+}
+
+// MARK: - Avatar pequeño para el header
+struct ProfileAvatarView: View {
+    let image: UIImage?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "person.circle.fill")
+                    .resizable()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color(.systemGray4), lineWidth: 1))
+    }
+}
+
+// MARK: - Pantalla de perfil
+struct ProfileSheet: View {
+    @Binding var username: String
+    @Binding var profileImage: UIImage?
+    @Binding var countingModeRaw: String
+
+    @EnvironmentObject private var colorTheme: ColorThemeManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var usernameInput: String = ""
+    @State private var showImagePicker: Bool = false
+    @State private var usernameError: String? = nil
+    @State private var showSavedToast: Bool = false
+    @State private var showCountingToast: Bool = false
+
+    private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 28) {
+                    // Foto de perfil
+                    Button { showImagePicker = true } label: {
+                        ZStack(alignment: .bottomTrailing) {
+                            ProfileAvatarView(image: profileImage, size: 100)
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.blue)
+                                .background(Color(.systemBackground), in: Circle())
+                        }
+                    }
+                    .padding(.top, 16)
+
+                    // Campo de nombre de usuario
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Nombre de usuario")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            HStack {
+                                Text("@")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.secondary)
+                                TextField("usuario", text: $usernameInput)
+                                    .font(.palatino(.body))
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                                    .onChange(of: usernameInput) {
+                                        usernameInput = String(
+                                            usernameInput
+                                                .lowercased()
+                                                .filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                                                .prefix(15)
+                                        )
+                                        usernameError = nil
+                                    }
+                            }
+                            .padding(12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+
+                            Button {
+                                let clean = usernameInput.trimmingCharacters(in: .whitespaces)
+                                if clean.isEmpty {
+                                    usernameError = "El nombre no puede estar vacío."
+                                } else {
+                                    username = clean
+                                    showSavedToast = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                        dismiss()
+                                    }
+                                }
+                            } label: {
+                                Text("Guardar")
+                                    .font(.palatino(.footnote, weight: .bold))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 12)
+                                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+
+                        if let err = usernameError {
+                            Text(err)
+                                .font(.palatino(.caption))
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                    // Sección de conteo
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Conteo de territorios/países:")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            ForEach(CountingMode.allCases, id: \.self) { mode in
+                                Button {
+                                    countingModeRaw = mode.rawValue
+                                    showCountingToast = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                        showCountingToast = false
+                                    }
+                                } label: {
+                                    Text(mode.label)
+                                        .font(.palatino(.footnote, weight: countingMode == mode ? .bold : .regular))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            countingMode == mode
+                                                ? Color.blue
+                                                : Color(.systemGray5),
+                                            in: RoundedRectangle(cornerRadius: 10)
+                                        )
+                                        .foregroundStyle(countingMode == mode ? .white : .primary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                    // Colores por categoría
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Colores")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 24)
+
+                        VStack(spacing: 0) {
+                            ColorPickerRow(label: "Viajado",   color: $colorTheme.visitedColor)
+                            Divider().padding(.leading, 56)
+                            ColorPickerRow(label: "Próximo",   color: $colorTheme.wantToVisitColor)
+                            Divider().padding(.leading, 56)
+                            ColorPickerRow(label: "He vivido", color: $colorTheme.livedColor)
+                        }
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 24)
+                    }
+
+                    .padding(.bottom, 24)
+                }
+            }
+            .navigationTitle("Perfil")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+            }
+            .onAppear { usernameInput = username }
+            .overlay {
+                if showSavedToast || showCountingToast {
+                    VStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 36))
+                            .foregroundStyle(.white)
+                        Text(showSavedToast ? "Nombre actualizado" : "Se ha actualizado el conteo")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 20)
+                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
+                    .transition(.opacity.combined(with: .scale))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: showSavedToast)
+            .animation(.easeInOut(duration: 0.2), value: showCountingToast)
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePickerView(image: $profileImage)
+        }
+    }
+}
+
+// MARK: - Fila de selector de color
+struct ColorPickerRow: View {
+    let label: String
+    @Binding var color: Color
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.palatino(.body))
+            Spacer()
+            ColorPicker("", selection: $color, supportsOpacity: false)
+                .labelsHidden()
+                .frame(width: 32, height: 32)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Selector de imagen del sistema
+struct ImagePickerView: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePickerView
+        init(_ parent: ImagePickerView) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            parent.image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage
+            parent.dismiss()
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }
