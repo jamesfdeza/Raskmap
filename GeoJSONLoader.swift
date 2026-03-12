@@ -130,7 +130,6 @@ class GeoJSONLoader {
              "NOR": "NO",  // Norway
              "FRA": "FR",  // France
              "KOS": "XK",  // Kosovo
-             "SOL": "SO",  // Somaliland (usamos SO de Somalia)
              "TWN": "TW",  // Taiwan
          ]
          var isoA2 = "-99"
@@ -199,23 +198,93 @@ class GeoJSONLoader {
         }
         guard outerCoords.count >= 3 else { return nil }
 
-        // Polígonos interiores = "huecos" (ej: El Vaticano dentro de Italia)
+        // Tolerancia adaptativa según el tamaño del bounding box del polígono (en grados²):
+        //  > 500°²  → muy grandes (Rusia, Canadá, EEUU…)     → 0.05°  (~5 km)
+        //  > 50°²   → medianos (España, Francia, Alemania…)   → 0.02°  (~2 km)
+        //  > 5°²    → pequeños (Bélgica, Suiza, Portugal…)    → 0.01°  (~1 km)
+        //  ≤ 5°²    → microestados e islas (Malta, Maldivas…) → 0.005° (~500 m)
+        let lats = outerCoords.map { $0.latitude }
+        let lons = outerCoords.map { $0.longitude }
+        let latSpan = (lats.max() ?? 0) - (lats.min() ?? 0)
+        let lonSpan = (lons.max() ?? 0) - (lons.min() ?? 0)
+        let area = latSpan * lonSpan
+        let tolerance: Double
+        switch area {
+        case 500...: tolerance = 0.05
+        case 50...:  tolerance = 0.02
+        case 5...:   tolerance = 0.01
+        default:     tolerance = 0.005
+        }
+
+        let simplifiedOuter = simplifyCoords(outerCoords, tolerance: tolerance)
+        guard simplifiedOuter.count >= 3 else { return nil }
+
+        // Polígonos interiores = "huecos" — usan la misma tolerancia que su padre
         let interiorPolygons: [MKPolygon] = rings.dropFirst().compactMap { ring in
             let holeCoords: [CLLocationCoordinate2D] = ring.compactMap { point in
                 guard point.count >= 2 else { return nil }
                 return CLLocationCoordinate2D(latitude: point[1], longitude: point[0])
             }
             guard holeCoords.count >= 3 else { return nil }
-            return MKPolygon(coordinates: holeCoords, count: holeCoords.count)
+            let simplified = simplifyCoords(holeCoords, tolerance: tolerance)
+            guard simplified.count >= 3 else { return nil }
+            return MKPolygon(coordinates: simplified, count: simplified.count)
         }
 
         let polygon = CountryPolygon(
-            coordinates: outerCoords,
-            count: outerCoords.count,
+            coordinates: simplifiedOuter,
+            count: simplifiedOuter.count,
             interiorPolygons: interiorPolygons.isEmpty ? nil : interiorPolygons
         )
         polygon.countryName = name
         polygon.isoCode = iso
         return polygon
+    }
+
+    /// Simplificación de Ramer–Douglas–Peucker: elimina puntos redundantes manteniendo la forma
+    private nonisolated static func simplifyCoords(
+        _ coords: [CLLocationCoordinate2D],
+        tolerance: Double
+    ) -> [CLLocationCoordinate2D] {
+        guard coords.count > 2 else { return coords }
+
+        var maxDist = 0.0
+        var maxIdx  = 0
+        let last = coords.count - 1
+
+        for i in 1..<last {
+            let d = perpendicularDistance(coords[i], lineStart: coords[0], lineEnd: coords[last])
+            if d > maxDist { maxDist = d; maxIdx = i }
+        }
+
+        if maxDist > tolerance {
+            let left  = simplifyCoords(Array(coords[0...maxIdx]), tolerance: tolerance)
+            let right = simplifyCoords(Array(coords[maxIdx...last]), tolerance: tolerance)
+            return left.dropLast() + right
+        } else {
+            return [coords[0], coords[last]]
+        }
+    }
+
+    private nonisolated static func perpendicularDistance(
+        _ point: CLLocationCoordinate2D,
+        lineStart: CLLocationCoordinate2D,
+        lineEnd: CLLocationCoordinate2D
+    ) -> Double {
+        let dx = lineEnd.longitude - lineStart.longitude
+        let dy = lineEnd.latitude  - lineStart.latitude
+        let len2 = dx * dx + dy * dy
+        if len2 == 0 {
+            let ex = point.longitude - lineStart.longitude
+            let ey = point.latitude  - lineStart.latitude
+            return sqrt(ex * ex + ey * ey)
+        }
+        let t = ((point.longitude - lineStart.longitude) * dx +
+                 (point.latitude  - lineStart.latitude)  * dy) / len2
+        let projX = lineStart.longitude + t * dx
+        let projY = lineStart.latitude  + t * dy
+        let ex = point.longitude - projX
+        let ey = point.latitude  - projY
+        return sqrt(ex * ex + ey * ey)
     }
 }

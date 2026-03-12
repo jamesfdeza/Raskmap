@@ -60,6 +60,7 @@ struct RaskMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
 
+        // Si no hay overlays aún, añadir los visibles
         if mapView.overlays.isEmpty {
             let visible = context.coordinator.visibleCountries(for: mapView)
             let polygons = visible.flatMap { $0.polygons }
@@ -67,19 +68,48 @@ struct RaskMapView: UIViewRepresentable {
             return
         }
 
-        let dbIsoCodes = Set(countries.map { $0.isoCode })
+        // --- OPTIMIZACIÓN CLAVE: Solo actualizar países que realmente cambiaron ---
+        let newStatusMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+        let oldStatusMap = context.coordinator.lastKnownStatus
 
-        let overlaysToRefresh = mapView.overlays
+        // Detectar isoCodes cuyo status cambió
+        var changedIsoCodes = Set<String>()
+        for (iso, status) in newStatusMap {
+            if oldStatusMap[iso] != status { changedIsoCodes.insert(iso) }
+        }
+        for iso in oldStatusMap.keys where newStatusMap[iso] == nil {
+            changedIsoCodes.insert(iso)
+        }
+
+        guard !changedIsoCodes.isEmpty else { return }
+
+        // Guardar nuevo snapshot de estado
+        context.coordinator.lastKnownStatus = newStatusMap
+
+        // Invalidar caché de renderers para los polígonos de países que cambiaron
+        let polygonIDsToInvalidate = features
+            .filter { changedIsoCodes.contains($0.isoCode) }
+            .flatMap { $0.polygons }
+            .map { ObjectIdentifier($0) }
+        for pid in polygonIDsToInvalidate {
+            context.coordinator.rendererCache.removeValue(forKey: pid)
+        }
+
+        // Quitar overlays de países cambiados que estén actualmente en el mapa
+        let overlaysToRemove = mapView.overlays
             .compactMap { $0 as? CountryPolygon }
-            .filter { dbIsoCodes.contains($0.isoCode) }
+            .filter { changedIsoCodes.contains($0.isoCode) }
+        mapView.removeOverlays(overlaysToRemove)
 
-        mapView.removeOverlays(overlaysToRefresh)
-
+        // Re-añadir solo los polígonos de países cambiados que son visibles
+        let visibleRect = mapView.visibleMapRect
         let polygonsToAdd = features
-            .filter { dbIsoCodes.contains($0.isoCode) }
+            .filter { changedIsoCodes.contains($0.isoCode) && $0.boundingMapRect.intersects(visibleRect) }
             .flatMap { $0.polygons }
 
-        mapView.addOverlays(polygonsToAdd, level: .aboveRoads)
+        if !polygonsToAdd.isEmpty {
+            mapView.addOverlays(polygonsToAdd, level: .aboveRoads)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -90,19 +120,36 @@ struct RaskMapView: UIViewRepresentable {
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: RaskMapView
 
+        /// Caché de renderers: ObjectIdentifier(polygon) → MKPolygonRenderer
+        /// Evita recrear renderers en cada llamada. Usa identidad del objeto, no isoCode,
+        /// para soportar correctamente países multipolígono (España, EEUU, etc.)
+        var rendererCache: [ObjectIdentifier: MKPolygonRenderer] = [:]
+
+        /// Snapshot del estado previo para detectar cambios reales
+        var lastKnownStatus: [String: CountryStatus] = [:]
+
+        /// Debounce para regionDidChange — evita recargar en cada frame del scroll
+        private var regionChangeWorkItem: DispatchWorkItem?
+
         init(parent: RaskMapView) {
             self.parent = parent
         }
 
-        // Calcula qué países son visibles en el mapa
         func visibleCountries(for mapView: MKMapView) -> [CountryFeature] {
             let visibleRect = mapView.visibleMapRect
             return parent.features.filter { $0.boundingMapRect.intersects(visibleRect) }
         }
 
+        // MARK: - Renderer con caché
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let polygon = overlay as? CountryPolygon else {
                 return MKOverlayRenderer(overlay: overlay)
+            }
+
+            // Devolver renderer cacheado si existe
+            let polygonID = ObjectIdentifier(polygon)
+            if let cached = rendererCache[polygonID] {
+                return cached
             }
 
             let renderer = MKPolygonRenderer(polygon: polygon)
@@ -117,15 +164,50 @@ struct RaskMapView: UIViewRepresentable {
                 : status.strokeColor
             renderer.lineWidth = status == .none ? 0.4 : 1.2
 
+            // Cachear solo países con estado marcado (los grises se recrean rápido y hay muchos)
+            if status != .none {
+                rendererCache[polygonID] = renderer
+            }
+
             return renderer
         }
 
+        // MARK: - Carga diferencial de overlays al hacer pan/zoom con debounce
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            mapView.removeOverlays(mapView.overlays)
+            regionChangeWorkItem?.cancel()
 
-            let visible = visibleCountries(for: mapView)
-            let polygons = visible.flatMap { $0.polygons }
-            mapView.addOverlays(polygons, level: .aboveRoads)
+            let workItem = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else { return }
+                self.reloadVisibleOverlays(in: mapView)
+            }
+            regionChangeWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
+        }
+
+        private func reloadVisibleOverlays(in mapView: MKMapView) {
+            let visibleRect = mapView.visibleMapRect
+
+            // Polígonos que DEBEN estar en el mapa (todos los de países visibles)
+            let targetPolygons = parent.features
+                .filter { $0.boundingMapRect.intersects(visibleRect) }
+                .flatMap { $0.polygons }
+            let targetSet = Set(targetPolygons.map { ObjectIdentifier($0) })
+
+            // Polígonos que HAY actualmente en el mapa
+            let currentPolygons = mapView.overlays.compactMap { $0 as? CountryPolygon }
+            let currentSet = Set(currentPolygons.map { ObjectIdentifier($0) })
+
+            // Quitar los que sobran (ya no visibles)
+            let toRemove = currentPolygons.filter { !targetSet.contains(ObjectIdentifier($0)) }
+            if !toRemove.isEmpty {
+                mapView.removeOverlays(toRemove)
+            }
+
+            // Añadir solo los que faltan (evita duplicados)
+            let toAdd = targetPolygons.filter { !currentSet.contains(ObjectIdentifier($0)) }
+            if !toAdd.isEmpty {
+                mapView.addOverlays(toAdd, level: .aboveRoads)
+            }
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {

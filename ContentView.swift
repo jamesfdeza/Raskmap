@@ -24,6 +24,7 @@ struct ContentView: View {
     @AppStorage("username") private var username: String = ""
     @State private var showOnboarding: Bool = false
     @State private var usernameInput: String = ""
+    @State private var isLoadingFeatures: Bool = true
 
     private var visitedCount: Int { countries.filter { $0.status == .visited }.count }
     private var wantCount: Int    { countries.filter { $0.status == .wantToVisit }.count }
@@ -44,6 +45,23 @@ struct ContentView: View {
         }
     }
 
+    /// Países agrupados por primera letra para el índice lateral
+    private var groupedSearchResults: [(letter: String, features: [CountryFeature])] {
+        let list = searchResults
+        guard searchText.isEmpty else { return [(letter: "", features: list)] }
+
+        let grouped = Dictionary(grouping: list) { feature -> String in
+            let first = feature.localizedName
+                .folding(options: .diacriticInsensitive, locale: .current)
+                .prefix(1)
+                .uppercased()
+            return first.isEmpty ? "#" : first
+        }
+        return grouped.keys.sorted().map { letter in
+            (letter: letter, features: grouped[letter]!.sorted { $0.localizedName < $1.localizedName })
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             
@@ -59,6 +77,25 @@ struct ContentView: View {
                 }
             )
             .ignoresSafeArea()
+
+            // MARK: - Indicador de carga
+            if isLoadingFeatures {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Cargando países...")
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
             
             // MARK: - Header
             VStack(spacing: 0) {
@@ -132,31 +169,40 @@ struct ContentView: View {
         // MARK: - Sheet búsqueda
         .sheet(isPresented: $showSearch) {
             NavigationStack {
-                List(searchResults, id: \.isoCode) { feature in
-                    Button(action: {
-                        let isoCode = feature.isoCode
-                        if let existing = countries.first(where: { $0.isoCode == isoCode }) {
-                            selectedCountry = existing
-                        } else {
-                            let newCountry = Country(name: feature.name, isoCode: isoCode)
-                            modelContext.insert(newCountry)
-                            selectedCountry = newCountry
-                        }
-                        showSearch = false
-                        showSheet = true
-                    }) {
-                        HStack {
-                            Text(feature.flagEmoji ?? "⚠️")
-                            Text(feature.localizedName)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if let status = countryStatusMap[feature.isoCode], status != .none {
-                                Text(status.label)
-                                    .font(.caption)
+                List {
+                    ForEach(groupedSearchResults, id: \.letter) { section in
+                        Section(header: searchText.isEmpty ? Text(section.letter) : nil) {
+                            ForEach(section.features, id: \.isoCode) { feature in
+                                Button(action: {
+                                    let isoCode = feature.isoCode
+                                    if let existing = countries.first(where: { $0.isoCode == isoCode }) {
+                                        selectedCountry = existing
+                                    } else {
+                                        let newCountry = Country(name: feature.name, isoCode: isoCode)
+                                        modelContext.insert(newCountry)
+                                        selectedCountry = newCountry
+                                    }
+                                    showSearch = false
+                                    showSheet = true
+                                }) {
+                                    HStack {
+                                        Text(feature.flagEmoji ?? "⚠️")
+                                        Text(feature.localizedName)
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        if let status = countryStatusMap[feature.isoCode], status != .none {
+                                            Text(status.label)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
+                .listStyle(.plain)
                 .searchable(text: $searchText, prompt: "Buscar país...")
                 .navigationTitle("Buscar país")
                 .navigationBarTitleDisplayMode(.inline)
@@ -215,7 +261,10 @@ struct ContentView: View {
             if features.isEmpty {
                 GeoJSONLoader.loadCountriesAsync { countries in
                     self.features = countries
+                    self.isLoadingFeatures = false
                 }
+            } else {
+                isLoadingFeatures = false
             }
 
             if username.isEmpty {
@@ -231,6 +280,7 @@ struct ContentView: View {
     }
 
     private func handleCountryTap(_ country: Country) {
+        guard !isLoadingFeatures else { return }
         if let existing = countries.first(where: { $0.isoCode == country.isoCode }) {
             selectedCountry = existing
         } else {
