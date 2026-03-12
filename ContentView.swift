@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var showOnboarding: Bool = false
     @State private var usernameInput: String = ""
     @State private var isLoadingFeatures: Bool = true
+    @State private var pendingShowSheet: Bool = false
 
     private var visitedCount: Int { countries.filter { $0.status == .visited }.count }
     private var wantCount: Int    { countries.filter { $0.status == .wantToVisit }.count }
@@ -150,13 +151,31 @@ struct ContentView: View {
         }
 
         // MARK: - Sheet búsqueda
-        .sheet(isPresented: $showSearch) {
+        .sheet(isPresented: $showSearch, onDismiss: {
+            if pendingShowSheet {
+                pendingShowSheet = false
+                showSheet = true
+            }
+        }) {
             NavigationStack {
                 List {
                     ForEach(groupedSearchResults, id: \.letter) { section in
                         Section(header: searchText.isEmpty ? Text(section.letter) : nil) {
                             ForEach(section.features, id: \.isoCode) { feature in
-                                Button(action: {
+                                // contentShape hace que TODO el ancho de la fila sea tappable
+                                HStack {
+                                    Text(feature.flagEmoji ?? "⚠️")
+                                    Text(feature.localizedName)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if let status = countryStatusMap[feature.isoCode], status != .none {
+                                        Text(status.label)
+                                            .font(.palatino(.caption))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
                                     let isoCode = feature.isoCode
                                     if let existing = countries.first(where: { $0.isoCode == isoCode }) {
                                         selectedCountry = existing
@@ -165,22 +184,9 @@ struct ContentView: View {
                                         modelContext.insert(newCountry)
                                         selectedCountry = newCountry
                                     }
+                                    pendingShowSheet = true
                                     showSearch = false
-                                    showSheet = true
-                                }) {
-                                    HStack {
-                                        Text(feature.flagEmoji ?? "⚠️")
-                                        Text(feature.localizedName)
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        if let status = countryStatusMap[feature.isoCode], status != .none {
-                                            Text(status.label)
-                                                .font(.palatino(.caption))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -272,7 +278,11 @@ struct ContentView: View {
             modelContext.insert(country)
             selectedCountry = country
         }
-        showSheet = true
+        // Esperar al siguiente ciclo de render para que selectedCountry
+        // esté completamente propagado antes de abrir la sheet
+        DispatchQueue.main.async {
+            showSheet = true
+        }
     }
 
     private func localizedName(for country: Country) -> String {
