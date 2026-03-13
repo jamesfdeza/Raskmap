@@ -150,11 +150,11 @@ struct RaskMapView: UIViewRepresentable {
         if status == .none {
             renderer.fillColor   = UIColor.clear
             renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
-            renderer.lineWidth   = highlighted ? 2.5 : 0
+            renderer.lineWidth   = highlighted ? 1.0 : 0
         } else {
             renderer.fillColor   = status.overlayColor
-            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : nil
-            renderer.lineWidth   = highlighted ? 2.5 : 0
+            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.black.withAlphaComponent(0.35)
+            renderer.lineWidth   = highlighted ? 1.5 : 0.5
         }
     }
 
@@ -195,10 +195,10 @@ struct RaskMapView: UIViewRepresentable {
                 renderer.fillColor = status.overlayColor
                 if isHighlighted {
                     renderer.strokeColor = UIColor.black.withAlphaComponent(0.85)
-                    renderer.lineWidth = 2.5
+                    renderer.lineWidth = 1.5
                 } else {
-                    renderer.strokeColor = nil
-                    renderer.lineWidth = 0
+                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.35)
+                    renderer.lineWidth = 0.5
                 }
                 renderer.setNeedsDisplay()
             }

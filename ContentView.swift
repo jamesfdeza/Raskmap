@@ -135,11 +135,12 @@ struct ContentView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 }
+                                Spacer()
                             }
                         }
                         .buttonStyle(.plain)
-                        Spacer()
-                        HStack(spacing: 8) {
+                        
+                        HStack(spacing: 4) {
                             StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
                                 .onTapGesture { statusListFilter = .visited }
                             StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
@@ -213,7 +214,7 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                         Spacer()
-                        HStack(spacing: 8) {
+                        HStack(spacing: 4) {
                             StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
                                 .onTapGesture { statusListFilter = .visited }
                             StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
@@ -484,7 +485,7 @@ struct StatBadge: View {
                 .font(.palatino(.caption2))
                 .foregroundStyle(.secondary)
         }
-        .frame(width: 72)
+        .frame(width: 56)
         .padding(.vertical, 6)
         .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }

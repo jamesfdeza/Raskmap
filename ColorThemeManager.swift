@@ -13,9 +13,9 @@ import Combine
 class ColorThemeManager: ObservableObject {
     static let shared = ColorThemeManager()
     
-    static let defaultVisited: Color = .red
-    static let defaultWantToVisit: Color = .blue
-    static let defaultLived: Color = .green
+    static let defaultVisited: Color     = Color(red: 0xEE/255, green: 0x6E/255, blue: 0x7D/255)
+    static let defaultWantToVisit: Color = Color(red: 0x32/255, green: 0xE9/255, blue: 0xEB/255)
+    static let defaultLived: Color       = Color(red: 0x71/255, green: 0xEB/255, blue: 0x71/255)
 
     @Published var visitedColor: Color {
         didSet { save(visitedColor, key: "color_visited") }
