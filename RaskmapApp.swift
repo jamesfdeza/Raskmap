@@ -5,9 +5,29 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
+
+// MARK: - Bloqueo de orientación
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    static var orientationLock: UIInterfaceOrientationMask = .portrait
+
+    static func lockOrientation(_ orientation: UIInterfaceOrientationMask) {
+        orientationLock = orientation
+    }
+
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return AppDelegate.orientationLock
+    }
+}
+
+// MARK: - App
 
 @main
 struct RaskmapApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     @State private var showSplash: Bool = true
     @State private var splashTimerDone: Bool = false
     @State private var contentReady: Bool = false
@@ -50,7 +70,6 @@ struct RaskmapApp: App {
                         .transition(.opacity)
                         .zIndex(1)
                         .onAppear {
-                            // Timer mínimo de 3s
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                                 splashTimerDone = true
                                 dismissSplashIfReady()

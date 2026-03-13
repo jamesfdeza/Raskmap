@@ -36,6 +36,7 @@ struct ContentView: View {
     @AppStorage("topGold")   private var topGold:   String = "[]"
     @AppStorage("topSilver") private var topSilver: String = "[]"
     @AppStorage("topBronze") private var topBronze: String = "[]"
+    @AppStorage("topTable")  private var topTable:  String = "{}"
     @State private var highlightedIsoCode: String? = nil
     @State private var profileImage: UIImage? = {
         guard let data = UserDefaults.standard.data(forKey: "profileImageData") else { return nil }
@@ -379,7 +380,10 @@ struct ContentView: View {
                 topGold: $topGold,
                 topSilver: $topSilver,
                 topBronze: $topBronze,
-                visitedFlags: visitedFlags
+                topTable: $topTable,
+                visitedFlags: visitedFlags,
+                allFeatures: features,
+                visitedIsoCodes: Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
             )
         }
         .onChange(of: profileImage) {
@@ -771,7 +775,10 @@ struct ProfileSheet: View {
     @Binding var topGold: String
     @Binding var topSilver: String
     @Binding var topBronze: String
-    let visitedFlags: Set<String>  // emojis disponibles (solo visitado/vivido)
+    @Binding var topTable: String
+    let visitedFlags: Set<String>
+    let allFeatures: [CountryFeature]
+    let visitedIsoCodes: Set<String>
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @Environment(\.dismiss) private var dismiss
@@ -782,6 +789,7 @@ struct ProfileSheet: View {
     @State private var showCountingToast: Bool = false
     @State private var showResetToast: Bool = false
     @State private var editingMedal: MedalSlot? = nil
+    @State private var editingSpot: TopSpot? = nil
     @State private var showSettings: Bool = false
 
     enum MedalSlot: String, Identifiable {
@@ -797,28 +805,84 @@ struct ProfileSheet: View {
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
-    // Helpers para leer/escribir JSON arrays desde AppStorage String
-    private func flags(for slot: MedalSlot) -> [String] {
-        let raw = rawString(for: slot)
-        return (try? JSONDecoder().decode([String].self, from: Data(raw.utf8))) ?? []
-    }
-    private func setFlags(_ flags: [String], for slot: MedalSlot) {
-        let data = (try? JSONEncoder().encode(flags)) ?? Data()
-        let s = String(data: data, encoding: .utf8) ?? "[]"
-        switch slot {
-        case .gold:   topGold   = s
-        case .silver: topSilver = s
-        case .bronze: topBronze = s
+    // MARK: - Tabla Top
+    enum TopRegion: String, CaseIterable, Identifiable {
+        case europa       = "Europa"
+        case asia         = "Asia"
+        case medioOriente = "M. Oriente"
+        case africa       = "África"
+        case america      = "América"
+        case oceania      = "Oceanía"
+        var id: String { rawValue }
+
+        var isoCodes: Set<String> {
+            switch self {
+            case .europa:
+                return ["ALB","AND","AUT","BLR","BEL","BIH","BGR","HRV","CYP","CZE",
+                        "DNK","EST","FIN","FRA","DEU","GRC","HUN","ISL","IRL","ITA",
+                        "LVA","LIE","LTU","LUX","MLT","MDA","MCO","MNE","NLD","MKD",
+                        "NOR","POL","PRT","ROU","RUS","SMR","SRB","SVK","SVN","ESP",
+                        "SWE","CHE","UKR","GBR","VAT","KOS","XKX"]
+            case .asia:
+                return ["AFG","ARM","AZE","BGD","BTN","BRN","KHM","CHN","GEO","IND",
+                        "IDN","JPN","KAZ","PRK","KOR","KGZ","LAO","MYS","MDV","MNG",
+                        "MMR","NPL","PAK","PHL","SGP","LKA","TWN","TJK","THA","TLS",
+                        "TKM","UZB","VNM"]
+            case .medioOriente:
+                return ["BHR","IRN","IRQ","ISR","JOR","KWT","LBN","OMN","PSE",
+                        "QAT","SAU","SYR","TUR","ARE","YEM"]
+            case .africa:
+                return ["DZA","AGO","BEN","BWA","BFA","BDI","CPV","CMR","CAF","TCD",
+                        "COM","COD","COG","CIV","DJI","EGY","GNQ","ERI","ETH","GAB",
+                        "GMB","GHA","GIN","GNB","KEN","LSO","LBR","LBY","MDG","MWI",
+                        "MLI","MRT","MUS","MAR","MOZ","NAM","NER","NGA","RWA","STP",
+                        "SEN","SYC","SLE","SOM","ZAF","SSD","SDN","SWZ","TZA","TGO",
+                        "TUN","UGA","ZMB","ZWE"]
+            case .america:
+                return ["ATG","ARG","BHS","BRB","BLZ","BOL","BRA","CAN","CHL","COL",
+                        "CRI","CUB","DMA","DOM","ECU","SLV","GRD","GTM","GUY","HTI",
+                        "HND","JAM","MEX","NIC","PAN","PRY","PER","KNA","LCA","VCT",
+                        "SUR","TTO","USA","URY","VEN"]
+            case .oceania:
+                return ["AUS","FJI","KIR","MHL","FSM","NRU","NZL","PLW","PNG","WSM",
+                        "SLB","TON","TUV","VUT"]
+            }
         }
     }
-    private func rawString(for slot: MedalSlot) -> String {
-        switch slot { case .gold: topGold; case .silver: topSilver; case .bronze: topBronze }
+
+    struct TopSpot: Identifiable {
+        let region: TopRegion
+        let medal: MedalSlot
+        var id: String { "\(region.rawValue)_\(medal.rawValue)" }
     }
 
-    // Todas las banderas ya usadas en las otras medallas (para excluirlas del picker)
-    private func usedFlags(excluding slot: MedalSlot) -> Set<String> {
-        let others: [MedalSlot] = [.gold, .silver, .bronze].filter { $0 != slot }
-        return Set(others.flatMap { flags(for: $0) })
+    private func tableFlag(region: TopRegion, medal: MedalSlot) -> String? {
+        tableDict()[region.rawValue + "_" + medal.rawValue]
+    }
+
+    private func setTableFlag(_ emoji: String?, region: TopRegion, medal: MedalSlot) {
+        var dict = tableDict()
+        let key = region.rawValue + "_" + medal.rawValue
+        if let emoji { dict[key] = emoji } else { dict.removeValue(forKey: key) }
+        let data = (try? JSONEncoder().encode(dict)) ?? Data()
+        topTable = String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private func tableDict() -> [String: String] {
+        guard let data = topTable.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return [:] }
+        return dict
+    }
+
+    private func allUsedTableFlags() -> Set<String> {
+        Set(tableDict().values)
+    }
+
+    private func visitedFeaturesForRegion(_ region: TopRegion) -> [CountryFeature] {
+        allFeatures
+            .filter { visitedIsoCodes.contains($0.isoCode) && region.isoCodes.contains($0.isoCode) }
+            .sorted { $0.localizedName < $1.localizedName }
     }
 
     var body: some View {
@@ -895,23 +959,68 @@ struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 24)
 
-                    // ── Mi top — grande y centrado ──
+                    // ── Mi top — tabla región × medalla ──
                     VStack(spacing: 12) {
                         Text("Mi top")
                             .font(.palatino(.title2, weight: .bold))
                             .frame(maxWidth: .infinity, alignment: .center)
 
-                        VStack(spacing: 16) {
-                            ForEach([MedalSlot.gold, .silver, .bronze], id: \.id) { slot in
-                                MedalRow(
-                                    slot: slot,
-                                    flags: flags(for: slot),
-                                    onEdit: { editingMedal = slot }
-                                )
+                        VStack(spacing: 0) {
+                            // Cabecera medallas
+                            HStack(spacing: 0) {
+                                Text("")
+                                    .frame(width: 88)
+                                ForEach([MedalSlot.gold, .silver, .bronze], id: \.id) { medal in
+                                    Text(medal.emoji)
+                                        .font(.title2)
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .padding(.vertical, 8)
+
+                            Divider()
+
+                            ForEach(TopRegion.allCases) { region in
+                                VStack(spacing: 0) {
+                                    HStack(spacing: 0) {
+                                        Text(region.rawValue)
+                                            .font(.palatino(.caption, weight: .bold))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 88, alignment: .leading)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.6)
+                                        ForEach([MedalSlot.gold, .silver, .bronze], id: \.id) { medal in
+                                            let emoji = tableFlag(region: region, medal: medal)
+                                            Button {
+                                                editingSpot = TopSpot(region: region, medal: medal)
+                                            } label: {
+                                                ZStack {
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill(Color(.systemGray5))
+                                                        .frame(width: 52, height: 52)
+                                                    if let emoji {
+                                                        Text(emoji)
+                                                            .font(.system(size: 34))
+                                                    } else {
+                                                        Image(systemName: "plus")
+                                                            .font(.system(size: 16, weight: .light))
+                                                            .foregroundStyle(Color(.systemGray3))
+                                                    }
+                                                }
+                                            }
+                                            .buttonStyle(.plain)
+                                            .frame(maxWidth: .infinity)
+                                        }
+                                    }
+                                    .padding(.vertical, 6)
+                                    if region != TopRegion.allCases.last {
+                                        Divider().padding(.leading, 88)
+                                    }
+                                }
                             }
                         }
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 20)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 20))
                         .padding(.horizontal, 12)
                     }
@@ -955,13 +1064,18 @@ struct ProfileSheet: View {
         .sheet(isPresented: $showImagePicker) {
             ImagePickerView(image: $profileImage)
         }
-        .sheet(item: $editingMedal) { slot in
-            FlagPickerSheet(
-                slot: slot,
-                currentFlags: flags(for: slot),
-                availableFlags: visitedFlags,
-                usedInOthers: usedFlags(excluding: slot),
-                onSave: { setFlags($0, for: slot) }
+        .sheet(item: $editingSpot) { spot in
+            TableFlagPickerSheet(
+                spot: spot,
+                features: visitedFeaturesForRegion(spot.region),
+                currentEmoji: tableFlag(region: spot.region, medal: spot.medal),
+                usedEmojis: allUsedTableFlags(),
+                onSelect: { emoji in
+                    setTableFlag(emoji, region: spot.region, medal: spot.medal)
+                },
+                onClear: {
+                    setTableFlag(nil, region: spot.region, medal: spot.medal)
+                }
             )
         }
         .sheet(isPresented: $showSettings) {
@@ -1118,161 +1232,33 @@ struct SettingsSheet: View {
 }
 
 // MARK: - Fila de medalla con hasta 3 banderas y botón editar
-struct MedalRow: View {
-    let slot: ProfileSheet.MedalSlot
-    let flags: [String]        // hasta 3 emojis de bandera
-    let onEdit: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(slot.emoji)
-                .font(.title2)
-
-            // Hasta 3 slots de bandera
-            HStack(spacing: 4) {
-                ForEach(0..<3, id: \.self) { i in
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(.systemGray5))
-                            .frame(width: 36, height: 28)
-                        if i < flags.count {
-                            Text(flags[i])
-                                .font(.system(size: 20))
-                        } else {
-                            Image(systemName: "plus")
-                                .font(.caption)
-                                .foregroundStyle(Color(.systemGray3))
-                        }
-                    }
-                }
-            }
-
-            // Botón lápiz editar
-            Button(action: onEdit) {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.blue)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-    }
-}
-
-// MARK: - Picker de banderas emoji (hasta 3 por medalla)
-struct FlagPickerSheet: View {
-    let slot: ProfileSheet.MedalSlot
-    let currentFlags: [String]
-    let availableFlags: Set<String>   // solo banderas de países visitados/vividos
-    let usedInOthers: Set<String>
-    let onSave: ([String]) -> Void
+// MARK: - Picker de bandera para tabla top
+struct TableFlagPickerSheet: View {
+    let spot: ProfileSheet.TopSpot
+    let features: [CountryFeature]
+    let currentEmoji: String?
+    let usedEmojis: Set<String>
+    let onSelect: (String) -> Void
+    let onClear: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var selected: [String] = []  // selección actual (orden importa)
     @State private var searchText: String = ""
 
-    private static let allFlags: [(String, String)] = {
-        let codes = [
-            ("AD","Andorra"),("AE","Emiratos Árabes"),("AF","Afganistán"),("AG","Antigua y Barbuda"),
-            ("AL","Albania"),("AM","Armenia"),("AO","Angola"),("AR","Argentina"),("AT","Austria"),
-            ("AU","Australia"),("AZ","Azerbaiyán"),("BA","Bosnia y Herzegovina"),("BB","Barbados"),
-            ("BD","Bangladesh"),("BE","Bélgica"),("BF","Burkina Faso"),("BG","Bulgaria"),
-            ("BH","Baréin"),("BI","Burundi"),("BJ","Benín"),("BN","Brunéi"),("BO","Bolivia"),
-            ("BR","Brasil"),("BS","Bahamas"),("BT","Bután"),("BW","Botsuana"),("BY","Bielorrusia"),
-            ("BZ","Belice"),("CA","Canadá"),("CD","Congo (RDC)"),("CF","República Centroafricana"),
-            ("CG","Congo"),("CH","Suiza"),("CI","Costa de Marfil"),("CL","Chile"),("CM","Camerún"),
-            ("CN","China"),("CO","Colombia"),("CR","Costa Rica"),("CU","Cuba"),("CV","Cabo Verde"),
-            ("CY","Chipre"),("CZ","Chequia"),("DE","Alemania"),("DJ","Yibuti"),("DK","Dinamarca"),
-            ("DM","Dominica"),("DO","República Dominicana"),("DZ","Argelia"),("EC","Ecuador"),
-            ("EE","Estonia"),("EG","Egipto"),("ER","Eritrea"),("ES","España"),("ET","Etiopía"),
-            ("FI","Finlandia"),("FJ","Fiyi"),("FM","Micronesia"),("FR","Francia"),("GA","Gabón"),
-            ("GB","Reino Unido"),("GD","Granada"),("GE","Georgia"),("GH","Ghana"),("GM","Gambia"),
-            ("GN","Guinea"),("GQ","Guinea Ecuatorial"),("GR","Grecia"),("GT","Guatemala"),
-            ("GW","Guinea-Bisáu"),("GY","Guyana"),("HN","Honduras"),("HR","Croacia"),("HT","Haití"),
-            ("HU","Hungría"),("ID","Indonesia"),("IE","Irlanda"),("IL","Israel"),("IN","India"),
-            ("IQ","Irak"),("IR","Irán"),("IS","Islandia"),("IT","Italia"),("JM","Jamaica"),
-            ("JO","Jordania"),("JP","Japón"),("KE","Kenia"),("KG","Kirguistán"),("KH","Camboya"),
-            ("KI","Kiribati"),("KM","Comoras"),("KN","San Cristóbal y Nieves"),("KP","Corea del Norte"),
-            ("KR","Corea del Sur"),("KW","Kuwait"),("KZ","Kazajistán"),("LA","Laos"),("LB","Líbano"),
-            ("LC","Santa Lucía"),("LI","Liechtenstein"),("LK","Sri Lanka"),("LR","Liberia"),
-            ("LS","Lesoto"),("LT","Lituania"),("LU","Luxemburgo"),("LV","Letonia"),("LY","Libia"),
-            ("MA","Marruecos"),("MC","Mónaco"),("MD","Moldavia"),("ME","Montenegro"),
-            ("MG","Madagascar"),("MH","Islas Marshall"),("MK","Macedonia del Norte"),("ML","Malí"),
-            ("MM","Myanmar"),("MN","Mongolia"),("MR","Mauritania"),("MT","Malta"),("MU","Mauricio"),
-            ("MV","Maldivas"),("MW","Malaui"),("MX","México"),("MY","Malasia"),("MZ","Mozambique"),
-            ("NA","Namibia"),("NE","Níger"),("NG","Nigeria"),("NI","Nicaragua"),("NL","Países Bajos"),
-            ("NO","Noruega"),("NP","Nepal"),("NR","Nauru"),("NZ","Nueva Zelanda"),("OM","Omán"),
-            ("PA","Panamá"),("PE","Perú"),("PG","Papúa Nueva Guinea"),("PH","Filipinas"),
-            ("PK","Pakistán"),("PL","Polonia"),("PT","Portugal"),("PW","Palaos"),("PY","Paraguay"),
-            ("QA","Catar"),("RO","Rumanía"),("RS","Serbia"),("RU","Rusia"),("RW","Ruanda"),
-            ("SA","Arabia Saudí"),("SB","Islas Salomón"),("SC","Seychelles"),("SD","Sudán"),
-            ("SE","Suecia"),("SG","Singapur"),("SI","Eslovenia"),("SK","Eslovaquia"),
-            ("SL","Sierra Leona"),("SM","San Marino"),("SN","Senegal"),("SO","Somalia"),
-            ("SR","Surinam"),("SS","Sudán del Sur"),("ST","Santo Tomé y Príncipe"),("SV","El Salvador"),
-            ("SY","Siria"),("SZ","Suazilandia"),("TD","Chad"),("TG","Togo"),("TH","Tailandia"),
-            ("TJ","Tayikistán"),("TL","Timor Oriental"),("TM","Turkmenistán"),("TN","Túnez"),
-            ("TO","Tonga"),("TR","Turquía"),("TT","Trinidad y Tobago"),("TV","Tuvalu"),
-            ("TZ","Tanzania"),("UA","Ucrania"),("UG","Uganda"),("US","Estados Unidos"),
-            ("UY","Uruguay"),("UZ","Uzbekistán"),("VA","Ciudad del Vaticano"),
-            ("VC","San Vicente y las Granadinas"),("VE","Venezuela"),("VN","Vietnam"),
-            ("VU","Vanuatu"),("WS","Samoa"),("XK","Kosovo"),("YE","Yemen"),("ZA","Sudáfrica"),
-            ("ZM","Zambia"),("ZW","Zimbabue")
-        ]
-        return codes.map { (code, name) in
-            let base: UInt32 = 127397
-            let emoji = code.unicodeScalars.compactMap { Unicode.Scalar(base + $0.value) }
-                .map(String.init).joined()
-            return (emoji, name)
-        }
-    }()
-
-    // Solo muestra banderas de países visitados/vividos, excluyendo las de otras medallas
-    private var filtered: [(String, String)] {
-        let base = Self.allFlags.filter {
-            availableFlags.contains($0.0) && !usedInOthers.contains($0.0)
-        }
-        guard !searchText.isEmpty else { return base }
+    private var filtered: [CountryFeature] {
+        guard !searchText.isEmpty else { return features }
         let q = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-        return base.filter {
-            $0.1.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).contains(q)
+        return features.filter {
+            $0.localizedName
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .contains(q)
         }
     }
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-
-                // Selección actual: hasta 3 chips
-                if !selected.isEmpty {
-                    HStack(spacing: 8) {
-                        ForEach(selected, id: \.self) { flag in
-                            HStack(spacing: 4) {
-                                Text(flag).font(.title3)
-                                Button {
-                                    selected.removeAll { $0 == flag }
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(.systemGray5), in: Capsule())
-                        }
-                        Spacer()
-                        Text("\(selected.count)/3")
-                            .font(.palatino(.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    Divider()
-                }
-
-                // Buscador
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                     TextField("Buscar país…", text: $searchText).autocorrectionDisabled()
@@ -1280,8 +1266,7 @@ struct FlagPickerSheet: View {
                 .padding(10)
                 .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 10)
+                .padding(.vertical, 10)
 
                 Divider()
 
@@ -1291,7 +1276,7 @@ struct FlagPickerSheet: View {
                             Image(systemName: "airplane.circle")
                                 .font(.system(size: 48))
                                 .foregroundStyle(.secondary)
-                            Text("Aún no tienes países visitados o vividos.\nMarca países en el mapa para poder elegirlos aquí.")
+                            Text("No tienes países visitados en esta región.")
                                 .font(.palatino(.subheadline))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -1299,67 +1284,70 @@ struct FlagPickerSheet: View {
                         .padding(.top, 60)
                         .padding(.horizontal, 32)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 10) {
-                        ForEach(filtered, id: \.0) { emoji, name in
-                            let isChosen = selected.contains(emoji)
-                            let isFull   = selected.count >= 3 && !isChosen
-                            Button {
-                                if isChosen {
-                                    selected.removeAll { $0 == emoji }
-                                } else if !isFull {
-                                    selected.append(emoji)
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(filtered, id: \.isoCode) { feature in
+                                let emoji   = feature.flagEmoji ?? "🌐"
+                                let isChosen = emoji == currentEmoji
+                                let isUsed   = usedEmojis.contains(emoji) && !isChosen
+                                Button {
+                                    guard !isUsed else { return }
+                                    onSelect(emoji)
+                                    dismiss()
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(isChosen
+                                                      ? Color.blue.opacity(0.18)
+                                                      : isUsed ? Color(.systemGray6).opacity(0.4)
+                                                               : Color(.systemGray6))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .strokeBorder(isChosen ? Color.blue : Color.clear,
+                                                                      lineWidth: 2)
+                                                )
+                                                .frame(width: 60, height: 60)
+                                            Text(emoji)
+                                                .font(.system(size: 36))
+                                                .opacity(isUsed ? 0.3 : 1.0)
+                                        }
+                                        Text(feature.localizedName)
+                                            .font(.palatino(.caption2))
+                                            .foregroundStyle(isUsed ? .tertiary : .secondary)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.7)
+                                    }
                                 }
-                            } label: {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(isChosen
-                                              ? Color.blue.opacity(0.18)
-                                              : isFull
-                                                ? Color(.systemGray6).opacity(0.4)
-                                                : Color(.systemGray6))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .strokeBorder(isChosen ? Color.blue : Color.clear, lineWidth: 2)
-                                        )
-                                    Text(emoji)
-                                        .font(.system(size: 28))
-                                        .opacity(isFull ? 0.35 : 1.0)
-                                        .padding(6)
-                                }
+                                .buttonStyle(.plain)
+                                .disabled(isUsed)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(isFull)
                         }
-                        .padding(14)
-                        }  // LazyVGrid
+                        .padding(16)
                     }
                 }
 
-                Divider()
-
-                // Botón Aceptar
-                Button {
-                    onSave(selected)
-                    dismiss()
-                } label: {
-                    Text("Aceptar")
-                        .font(.palatino(.body, weight: .bold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
-                        .foregroundStyle(.white)
+                if currentEmoji != nil {
+                    Divider()
+                    Button(role: .destructive) {
+                        onClear()
+                        dismiss()
+                    } label: {
+                        Text("Eliminar selección")
+                            .font(.palatino(.body))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
             }
-            .navigationTitle("\(slot.emoji) Top \(slot.label)")
+            .navigationTitle("\(spot.medal.emoji) \(spot.region.rawValue)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
             }
-            .onAppear { selected = currentFlags }
         }
     }
 }

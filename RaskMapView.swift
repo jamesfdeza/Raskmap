@@ -19,6 +19,8 @@ struct RaskMapView: UIViewRepresentable {
         mapView.mapType = .standard
         mapView.showsUserLocation = false
         mapView.isRotateEnabled = false
+        mapView.pointOfInterestFilter = .excludingAll
+        mapView.showsTraffic = false
 
         mapView.setRegion(MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
