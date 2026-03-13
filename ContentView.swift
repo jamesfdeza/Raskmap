@@ -32,10 +32,17 @@ struct ContentView: View {
     @State private var pendingShowSheet: Bool = false
     @State private var showProfile: Bool = false
     @AppStorage("countingMode") private var countingModeRaw: String = CountingMode.all.rawValue
+    @AppStorage("menuPosition") private var menuPositionRaw: String = "bottom"
+    @AppStorage("topGold")   private var topGold:   String = "[]"
+    @AppStorage("topSilver") private var topSilver: String = "[]"
+    @AppStorage("topBronze") private var topBronze: String = "[]"
+    @State private var highlightedIsoCode: String? = nil
     @State private var profileImage: UIImage? = {
         guard let data = UserDefaults.standard.data(forKey: "profileImageData") else { return nil }
         return UIImage(data: data)
     }()
+
+    private var menuPositionIsTop: Bool { menuPositionRaw == "top" }
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
@@ -68,8 +75,10 @@ struct ContentView: View {
 
     private var searchResults: [CountryFeature] {
         guard !searchText.isEmpty else { return sortedFeatures }
+        let normalizedQuery = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
         return sortedFeatures.filter {
-            $0.localizedName.localizedCaseInsensitiveContains(searchText)
+            $0.localizedName.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .contains(normalizedQuery)
         }
     }
 
@@ -91,7 +100,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: menuPositionIsTop ? .top : .bottom) {
             
             // MARK: - Mapa
             RaskMapView(
@@ -100,85 +109,144 @@ struct ContentView: View {
                 onCountryTapped: { country in
                     handleCountryTap(country)
                 },
+                highlightedIsoCode: highlightedIsoCode,
                 onReady: { centerFn in
                     mapStore.centerOnCountry = centerFn
                 }
             )
             .ignoresSafeArea()
 
-            // MARK: - Header
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    // Avatar + título tappable → abre perfil
-                    Button { showProfile = true } label: {
-                        HStack(spacing: 8) {
-                            ProfileAvatarView(image: profileImage, size: 34)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Raskmap")
-                                    .font(.palatino(.headline, weight: .bold))
-                                    .foregroundStyle(.primary)
-                                if !username.isEmpty {
-                                    Text("@\(username)")
-                                        .font(.palatino(.caption))
-                                        .foregroundStyle(.secondary)
+            // MARK: - UI (posición arriba o abajo)
+            if menuPositionIsTop {
+                // ── ARRIBA ──
+                VStack(spacing: 0) {
+                    // Contenedor principal: avatar/título + badges
+                    HStack(spacing: 12) {
+                        Button { showProfile = true } label: {
+                            HStack(spacing: 8) {
+                                ProfileAvatarView(image: profileImage, size: 34)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Raskmap")
+                                        .font(.palatino(.headline, weight: .bold))
+                                        .foregroundStyle(.primary)
+                                    if !username.isEmpty {
+                                        Text("@\(username)")
+                                            .font(.palatino(.caption))
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
+                        .buttonStyle(.plain)
+                        Spacer()
+                        HStack(spacing: 8) {
+                            StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
+                                .onTapGesture { statusListFilter = .visited }
+                            StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
+                                .onTapGesture { statusListFilter = .wantToVisit }
+                            StatBadge(value: livedCount,   label: "Vivido",    color: colorTheme.livedColor)
+                                .onTapGesture { statusListFilter = .lived }
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
 
-                    Spacer()
-
-                    HStack(spacing: 8) {
-                        StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
-                            .onTapGesture { statusListFilter = .visited }
-                        StatBadge(value: wantCount,    label: "Próximo",   color: colorTheme.wantToVisitColor)
-                            .onTapGesture { statusListFilter = .wantToVisit }
-                        StatBadge(value: livedCount,   label: "Vivido", color: colorTheme.livedColor)
-                            .onTapGesture { statusListFilter = .lived }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                
-                // Contador + lupa
-                ZStack {
-                    Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
-                        .font(.palatino(.title3, weight: .bold))
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    
-                    HStack {
+                    // Fila: contador izquierda + lupa derecha
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
+                            .font(.palatino(.title3, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                         Spacer()
                         Button(action: { showSearch = true }) {
                             Image(systemName: "magnifyingglass")
                                 .font(.palatino(.title3))
-                                .padding(8)
-                                .background(Color(.systemGray5), in: Circle())
+                                .padding(10)
+                                .background(.regularMaterial, in: Circle())
                         }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 6)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 12)
-                .padding(.top, 6)
+            } else {
+                // ── ABAJO ──
+                VStack(spacing: 6) {
+                    // Fila intermedia: contador países (izq) + lupa (der)
+                    HStack(alignment: .bottom, spacing: 8) {
+                        Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
+                            .font(.palatino(.title3, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        Spacer()
+                        Button(action: { showSearch = true }) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.palatino(.title3))
+                                .padding(10)
+                                .background(.regularMaterial, in: Circle())
+                        }
+                    }
+                    .padding(.horizontal, 12)
+
+                    // Contenedor principal: avatar/título + badges
+                    HStack(spacing: 12) {
+                        Button { showProfile = true } label: {
+                            HStack(spacing: 8) {
+                                ProfileAvatarView(image: profileImage, size: 34)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Raskmap")
+                                        .font(.palatino(.headline, weight: .bold))
+                                        .foregroundStyle(.primary)
+                                    if !username.isEmpty {
+                                        Text("@\(username)")
+                                            .font(.palatino(.caption))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                        HStack(spacing: 8) {
+                            StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
+                                .onTapGesture { statusListFilter = .visited }
+                            StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
+                                .onTapGesture { statusListFilter = .wantToVisit }
+                            StatBadge(value: livedCount,   label: "Vivido",    color: colorTheme.livedColor)
+                                .onTapGesture { statusListFilter = .lived }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                }
             }
         }
         // MARK: - Sheet país
-        .sheet(item: $selectedCountry) { country in
+        .sheet(item: $selectedCountry, onDismiss: {
+            // Si se cierra sin asignar estado, quitar el borde negro
+            highlightedIsoCode = nil
+        }) { country in
             CountryBottomSheet(
                 country: country,
                 displayName: localizedName(for: country),
+                flagEmoji: flagEmoji(for: country),
                 onStatusChange: { newStatus in
                     updateCountryStatus(country: country, newStatus: newStatus)
                     selectedCountry = nil
                 },
-                onDismiss: { selectedCountry = nil }
+                onDismiss: {
+                    highlightedIsoCode = nil
+                    selectedCountry = nil
+                }
             )
             .presentationDetents([.fraction(0.40)])
             .presentationDragIndicator(.visible)
@@ -295,10 +363,22 @@ struct ContentView: View {
 
         // MARK: - Sheet perfil
         .sheet(isPresented: $showProfile) {
+            let visitedFlags: Set<String> = Set(
+                countries
+                    .filter { $0.status == .visited || $0.status == .lived }
+                    .compactMap { country in
+                        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
+                    }
+            )
             ProfileSheet(
                 username: $username,
                 profileImage: $profileImage,
-                countingModeRaw: $countingModeRaw
+                countingModeRaw: $countingModeRaw,
+                menuPositionRaw: $menuPositionRaw,
+                topGold: $topGold,
+                topSilver: $topSilver,
+                topBronze: $topBronze,
+                visitedFlags: visitedFlags
             )
         }
         .onChange(of: profileImage) {
@@ -346,6 +426,11 @@ struct ContentView: View {
         guard !isLoadingFeatures else { return }
         let isoCode = tapped.isoCode
 
+        // Centrar el mapa en el país tapeado
+        centerMap(on: isoCode)
+        // Resaltar con borde negro
+        highlightedIsoCode = isoCode
+
         // Caso normal: país ya en SwiftData (segunda apertura o ya visitado antes)
         if let existing = countries.first(where: { $0.isoCode == isoCode }) {
             selectedCountry = existing
@@ -356,8 +441,6 @@ struct ContentView: View {
         modelContext.insert(tapped)
         try? modelContext.save()
 
-        // @Query se actualiza en el próximo ciclo del RunLoop tras el save.
-        // DispatchQueue.main.async garantiza que esperamos ese ciclo completo.
         DispatchQueue.main.async {
             if let saved = self.countries.first(where: { $0.isoCode == isoCode }) {
                 self.selectedCountry = saved
@@ -368,9 +451,15 @@ struct ContentView: View {
     private func localizedName(for country: Country) -> String {
         features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
     }
+
+    private func flagEmoji(for country: Country) -> String? {
+        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
+    }
     
     private func updateCountryStatus(country: Country, newStatus: CountryStatus) {
         country.status = newStatus
+        // Quitar el borde negro al asignar estado
+        highlightedIsoCode = nil
         if newStatus != .none {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 centerMap(on: country.isoCode)
@@ -395,7 +484,7 @@ struct StatBadge: View {
                 .font(.palatino(.caption2))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10)
+        .frame(width: 72)
         .padding(.vertical, 6)
         .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
@@ -427,6 +516,7 @@ struct LegendItem: View {
 struct CountryBottomSheet: View {
     let country: Country
     let displayName: String
+    let flagEmoji: String?
     let onStatusChange: (CountryStatus) -> Void
     let onDismiss: () -> Void
 
@@ -435,9 +525,15 @@ struct CountryBottomSheet: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Text(displayName)
-                .font(.palatino(.title2, weight: .bold))
-                .padding(.top, 36)
+            Group {
+                if let flag = flagEmoji {
+                    Text("\(flag) \(displayName) \(flag)")
+                } else {
+                    Text(displayName)
+                }
+            }
+            .font(.palatino(.title2, weight: .bold))
+            .padding(.top, 36)
 
             VStack(spacing: 10) {
                 ActionButton(
@@ -469,13 +565,12 @@ struct CountryBottomSheet: View {
                 )
                 Divider()
                     .padding(.top, 14)
-                Button("✕  Desmarcar") {
-                    if country.status != .none { showRemoveConfirm = true }
+                Button("✕  Cerrar") {
+                    onDismiss()
                 }
                 .font(.palatino(.subheadline))
-                .foregroundStyle(country.status == .none ? .tertiary : .secondary)
+                .foregroundStyle(.secondary)
                 .padding(.top, 2)
-                .disabled(country.status == .none)
             }
             .padding(.horizontal, 24)
 
@@ -671,6 +766,11 @@ struct ProfileSheet: View {
     @Binding var username: String
     @Binding var profileImage: UIImage?
     @Binding var countingModeRaw: String
+    @Binding var menuPositionRaw: String
+    @Binding var topGold: String
+    @Binding var topSilver: String
+    @Binding var topBronze: String
+    let visitedFlags: Set<String>  // emojis disponibles (solo visitado/vivido)
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @Environment(\.dismiss) private var dismiss
@@ -680,14 +780,52 @@ struct ProfileSheet: View {
     @State private var showSavedToast: Bool = false
     @State private var showCountingToast: Bool = false
     @State private var showResetToast: Bool = false
+    @State private var editingMedal: MedalSlot? = nil
+    @State private var showSettings: Bool = false
+
+    enum MedalSlot: String, Identifiable {
+        case gold, silver, bronze
+        var id: String { rawValue }
+        var emoji: String {
+            switch self { case .gold: "🥇"; case .silver: "🥈"; case .bronze: "🥉" }
+        }
+        var label: String {
+            switch self { case .gold: "Oro"; case .silver: "Plata"; case .bronze: "Bronce" }
+        }
+    }
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    // Helpers para leer/escribir JSON arrays desde AppStorage String
+    private func flags(for slot: MedalSlot) -> [String] {
+        let raw = rawString(for: slot)
+        return (try? JSONDecoder().decode([String].self, from: Data(raw.utf8))) ?? []
+    }
+    private func setFlags(_ flags: [String], for slot: MedalSlot) {
+        let data = (try? JSONEncoder().encode(flags)) ?? Data()
+        let s = String(data: data, encoding: .utf8) ?? "[]"
+        switch slot {
+        case .gold:   topGold   = s
+        case .silver: topSilver = s
+        case .bronze: topBronze = s
+        }
+    }
+    private func rawString(for slot: MedalSlot) -> String {
+        switch slot { case .gold: topGold; case .silver: topSilver; case .bronze: topBronze }
+    }
+
+    // Todas las banderas ya usadas en las otras medallas (para excluirlas del picker)
+    private func usedFlags(excluding slot: MedalSlot) -> Set<String> {
+        let others: [MedalSlot] = [.gold, .silver, .bronze].filter { $0 != slot }
+        return Set(others.flatMap { flags(for: $0) })
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
-                    // Foto de perfil
+                VStack(spacing: 24) {
+
+                    // ── Avatar centrado ──
                     Button { showImagePicker = true } label: {
                         ZStack(alignment: .bottomTrailing) {
                             ProfileAvatarView(image: profileImage, size: 100)
@@ -697,9 +835,9 @@ struct ProfileSheet: View {
                                 .background(Color(.systemBackground), in: Circle())
                         }
                     }
-                    .padding(.top, 16)
+                    .padding(.top, 20)
 
-                    // Campo de nombre de usuario
+                    // ── Nombre de usuario ──
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Nombre de usuario")
                             .font(.palatino(.subheadline, weight: .bold))
@@ -735,7 +873,7 @@ struct ProfileSheet: View {
                                     username = clean
                                     showSavedToast = true
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                                        dismiss()
+                                        showSavedToast = false
                                     }
                                 }
                             } label: {
@@ -756,7 +894,104 @@ struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 24)
 
-                    // Sección de conteo
+                    // ── Mi top — grande y centrado ──
+                    VStack(spacing: 12) {
+                        Text("Mi top")
+                            .font(.palatino(.title2, weight: .bold))
+                            .frame(maxWidth: .infinity, alignment: .center)
+
+                        VStack(spacing: 16) {
+                            ForEach([MedalSlot.gold, .silver, .bronze], id: \.id) { slot in
+                                MedalRow(
+                                    slot: slot,
+                                    flags: flags(for: slot),
+                                    onEdit: { editingMedal = slot }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 20)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 20))
+                        .padding(.horizontal, 12)
+                    }
+
+                    Spacer(minLength: 32)
+                }
+            }
+            .navigationTitle("Perfil")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.body)
+                    }
+                }
+            }
+            .onAppear { usernameInput = username }
+            .overlay {
+                if showSavedToast {
+                    VStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 36))
+                            .foregroundStyle(.white)
+                        Text("Nombre actualizado")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 20)
+                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
+                    .transition(.opacity.combined(with: .scale))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: showSavedToast)
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePickerView(image: $profileImage)
+        }
+        .sheet(item: $editingMedal) { slot in
+            FlagPickerSheet(
+                slot: slot,
+                currentFlags: flags(for: slot),
+                availableFlags: visitedFlags,
+                usedInOthers: usedFlags(excluding: slot),
+                onSave: { setFlags($0, for: slot) }
+            )
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet(
+                countingModeRaw: $countingModeRaw,
+                menuPositionRaw: $menuPositionRaw
+            )
+            .environmentObject(colorTheme)
+        }
+    }
+}
+
+// MARK: - Pantalla de ajustes
+struct SettingsSheet: View {
+    @Binding var countingModeRaw: String
+    @Binding var menuPositionRaw: String
+
+    @EnvironmentObject private var colorTheme: ColorThemeManager
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var showCountingToast: Bool = false
+    @State private var showResetToast: Bool = false
+
+    private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 28) {
+
+                    // Conteo de territorios
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Conteo de territorios/países:")
                             .font(.palatino(.subheadline, weight: .bold))
@@ -767,7 +1002,7 @@ struct ProfileSheet: View {
                                 Button {
                                     countingModeRaw = mode.rawValue
                                     showCountingToast = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                                         showCountingToast = false
                                     }
                                 } label: {
@@ -776,9 +1011,7 @@ struct ProfileSheet: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
                                         .background(
-                                            countingMode == mode
-                                                ? Color.blue
-                                                : Color(.systemGray5),
+                                            countingMode == mode ? Color.blue : Color(.systemGray5),
                                             in: RoundedRectangle(cornerRadius: 10)
                                         )
                                         .foregroundStyle(countingMode == mode ? .white : .primary)
@@ -788,7 +1021,33 @@ struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 24)
 
-                    // Colores por categoría
+                    // Posición del menú
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Posición del menú:")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            ForEach([("top", "Arriba"), ("bottom", "Abajo")], id: \.0) { value, label in
+                                Button {
+                                    menuPositionRaw = value
+                                } label: {
+                                    Text(label)
+                                        .font(.palatino(.footnote, weight: menuPositionRaw == value ? .bold : .regular))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            menuPositionRaw == value ? Color.blue : Color(.systemGray5),
+                                            in: RoundedRectangle(cornerRadius: 10)
+                                        )
+                                        .foregroundStyle(menuPositionRaw == value ? .white : .primary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                    // Colores
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Colores")
                             .font(.palatino(.subheadline, weight: .bold))
@@ -796,7 +1055,7 @@ struct ProfileSheet: View {
                             .padding(.horizontal, 24)
 
                         VStack(spacing: 0) {
-                            ColorPickerRow(label: "Viajado",   color: $colorTheme.visitedColor)
+                            ColorPickerRow(label: "Visitado",  color: $colorTheme.visitedColor)
                             Divider().padding(.leading, 56)
                             ColorPickerRow(label: "Próximo",   color: $colorTheme.wantToVisitColor)
                             Divider().padding(.leading, 56)
@@ -808,7 +1067,7 @@ struct ProfileSheet: View {
                         Button {
                             colorTheme.resetToDefaults()
                             showResetToast = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                                 showResetToast = false
                             }
                         } label: {
@@ -820,13 +1079,14 @@ struct ProfileSheet: View {
                                 .background(Color.red, in: RoundedRectangle(cornerRadius: 12))
                         }
                         .padding(.horizontal, 24)
-                        .padding(.top, 12)
+                        .padding(.top, 4)
                     }
 
                     .padding(.bottom, 24)
                 }
+                .padding(.top, 20)
             }
-            .navigationTitle("Perfil")
+            .navigationTitle("Ajustes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -834,14 +1094,13 @@ struct ProfileSheet: View {
                         .font(.palatino(.body))
                 }
             }
-            .onAppear { usernameInput = username }
             .overlay {
-                if showSavedToast || showCountingToast || showResetToast {
+                if showCountingToast || showResetToast {
                     VStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 36))
                             .foregroundStyle(.white)
-                        Text(showSavedToast ? "Nombre actualizado" : (showCountingToast ? "Se ha actualizado el conteo" : "Colores restablecidos"))
+                        Text(showCountingToast ? "Conteo actualizado" : "Colores restablecidos")
                             .font(.palatino(.subheadline, weight: .bold))
                             .foregroundStyle(.white)
                     }
@@ -851,12 +1110,255 @@ struct ProfileSheet: View {
                     .transition(.opacity.combined(with: .scale))
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: showSavedToast)
             .animation(.easeInOut(duration: 0.2), value: showCountingToast)
             .animation(.easeInOut(duration: 0.2), value: showResetToast)
         }
-        .sheet(isPresented: $showImagePicker) {
-            ImagePickerView(image: $profileImage)
+    }
+}
+
+// MARK: - Fila de medalla con hasta 3 banderas y botón editar
+struct MedalRow: View {
+    let slot: ProfileSheet.MedalSlot
+    let flags: [String]        // hasta 3 emojis de bandera
+    let onEdit: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(slot.emoji)
+                .font(.title2)
+
+            // Hasta 3 slots de bandera
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(.systemGray5))
+                            .frame(width: 36, height: 28)
+                        if i < flags.count {
+                            Text(flags[i])
+                                .font(.system(size: 20))
+                        } else {
+                            Image(systemName: "plus")
+                                .font(.caption)
+                                .foregroundStyle(Color(.systemGray3))
+                        }
+                    }
+                }
+            }
+
+            // Botón lápiz editar
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+// MARK: - Picker de banderas emoji (hasta 3 por medalla)
+struct FlagPickerSheet: View {
+    let slot: ProfileSheet.MedalSlot
+    let currentFlags: [String]
+    let availableFlags: Set<String>   // solo banderas de países visitados/vividos
+    let usedInOthers: Set<String>
+    let onSave: ([String]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: [String] = []  // selección actual (orden importa)
+    @State private var searchText: String = ""
+
+    private static let allFlags: [(String, String)] = {
+        let codes = [
+            ("AD","Andorra"),("AE","Emiratos Árabes"),("AF","Afganistán"),("AG","Antigua y Barbuda"),
+            ("AL","Albania"),("AM","Armenia"),("AO","Angola"),("AR","Argentina"),("AT","Austria"),
+            ("AU","Australia"),("AZ","Azerbaiyán"),("BA","Bosnia y Herzegovina"),("BB","Barbados"),
+            ("BD","Bangladesh"),("BE","Bélgica"),("BF","Burkina Faso"),("BG","Bulgaria"),
+            ("BH","Baréin"),("BI","Burundi"),("BJ","Benín"),("BN","Brunéi"),("BO","Bolivia"),
+            ("BR","Brasil"),("BS","Bahamas"),("BT","Bután"),("BW","Botsuana"),("BY","Bielorrusia"),
+            ("BZ","Belice"),("CA","Canadá"),("CD","Congo (RDC)"),("CF","República Centroafricana"),
+            ("CG","Congo"),("CH","Suiza"),("CI","Costa de Marfil"),("CL","Chile"),("CM","Camerún"),
+            ("CN","China"),("CO","Colombia"),("CR","Costa Rica"),("CU","Cuba"),("CV","Cabo Verde"),
+            ("CY","Chipre"),("CZ","Chequia"),("DE","Alemania"),("DJ","Yibuti"),("DK","Dinamarca"),
+            ("DM","Dominica"),("DO","República Dominicana"),("DZ","Argelia"),("EC","Ecuador"),
+            ("EE","Estonia"),("EG","Egipto"),("ER","Eritrea"),("ES","España"),("ET","Etiopía"),
+            ("FI","Finlandia"),("FJ","Fiyi"),("FM","Micronesia"),("FR","Francia"),("GA","Gabón"),
+            ("GB","Reino Unido"),("GD","Granada"),("GE","Georgia"),("GH","Ghana"),("GM","Gambia"),
+            ("GN","Guinea"),("GQ","Guinea Ecuatorial"),("GR","Grecia"),("GT","Guatemala"),
+            ("GW","Guinea-Bisáu"),("GY","Guyana"),("HN","Honduras"),("HR","Croacia"),("HT","Haití"),
+            ("HU","Hungría"),("ID","Indonesia"),("IE","Irlanda"),("IL","Israel"),("IN","India"),
+            ("IQ","Irak"),("IR","Irán"),("IS","Islandia"),("IT","Italia"),("JM","Jamaica"),
+            ("JO","Jordania"),("JP","Japón"),("KE","Kenia"),("KG","Kirguistán"),("KH","Camboya"),
+            ("KI","Kiribati"),("KM","Comoras"),("KN","San Cristóbal y Nieves"),("KP","Corea del Norte"),
+            ("KR","Corea del Sur"),("KW","Kuwait"),("KZ","Kazajistán"),("LA","Laos"),("LB","Líbano"),
+            ("LC","Santa Lucía"),("LI","Liechtenstein"),("LK","Sri Lanka"),("LR","Liberia"),
+            ("LS","Lesoto"),("LT","Lituania"),("LU","Luxemburgo"),("LV","Letonia"),("LY","Libia"),
+            ("MA","Marruecos"),("MC","Mónaco"),("MD","Moldavia"),("ME","Montenegro"),
+            ("MG","Madagascar"),("MH","Islas Marshall"),("MK","Macedonia del Norte"),("ML","Malí"),
+            ("MM","Myanmar"),("MN","Mongolia"),("MR","Mauritania"),("MT","Malta"),("MU","Mauricio"),
+            ("MV","Maldivas"),("MW","Malaui"),("MX","México"),("MY","Malasia"),("MZ","Mozambique"),
+            ("NA","Namibia"),("NE","Níger"),("NG","Nigeria"),("NI","Nicaragua"),("NL","Países Bajos"),
+            ("NO","Noruega"),("NP","Nepal"),("NR","Nauru"),("NZ","Nueva Zelanda"),("OM","Omán"),
+            ("PA","Panamá"),("PE","Perú"),("PG","Papúa Nueva Guinea"),("PH","Filipinas"),
+            ("PK","Pakistán"),("PL","Polonia"),("PT","Portugal"),("PW","Palaos"),("PY","Paraguay"),
+            ("QA","Catar"),("RO","Rumanía"),("RS","Serbia"),("RU","Rusia"),("RW","Ruanda"),
+            ("SA","Arabia Saudí"),("SB","Islas Salomón"),("SC","Seychelles"),("SD","Sudán"),
+            ("SE","Suecia"),("SG","Singapur"),("SI","Eslovenia"),("SK","Eslovaquia"),
+            ("SL","Sierra Leona"),("SM","San Marino"),("SN","Senegal"),("SO","Somalia"),
+            ("SR","Surinam"),("SS","Sudán del Sur"),("ST","Santo Tomé y Príncipe"),("SV","El Salvador"),
+            ("SY","Siria"),("SZ","Suazilandia"),("TD","Chad"),("TG","Togo"),("TH","Tailandia"),
+            ("TJ","Tayikistán"),("TL","Timor Oriental"),("TM","Turkmenistán"),("TN","Túnez"),
+            ("TO","Tonga"),("TR","Turquía"),("TT","Trinidad y Tobago"),("TV","Tuvalu"),
+            ("TZ","Tanzania"),("UA","Ucrania"),("UG","Uganda"),("US","Estados Unidos"),
+            ("UY","Uruguay"),("UZ","Uzbekistán"),("VA","Ciudad del Vaticano"),
+            ("VC","San Vicente y las Granadinas"),("VE","Venezuela"),("VN","Vietnam"),
+            ("VU","Vanuatu"),("WS","Samoa"),("XK","Kosovo"),("YE","Yemen"),("ZA","Sudáfrica"),
+            ("ZM","Zambia"),("ZW","Zimbabue")
+        ]
+        return codes.map { (code, name) in
+            let base: UInt32 = 127397
+            let emoji = code.unicodeScalars.compactMap { Unicode.Scalar(base + $0.value) }
+                .map(String.init).joined()
+            return (emoji, name)
+        }
+    }()
+
+    // Solo muestra banderas de países visitados/vividos, excluyendo las de otras medallas
+    private var filtered: [(String, String)] {
+        let base = Self.allFlags.filter {
+            availableFlags.contains($0.0) && !usedInOthers.contains($0.0)
+        }
+        guard !searchText.isEmpty else { return base }
+        let q = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        return base.filter {
+            $0.1.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).contains(q)
+        }
+    }
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+
+                // Selección actual: hasta 3 chips
+                if !selected.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(selected, id: \.self) { flag in
+                            HStack(spacing: 4) {
+                                Text(flag).font(.title3)
+                                Button {
+                                    selected.removeAll { $0 == flag }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(.systemGray5), in: Capsule())
+                        }
+                        Spacer()
+                        Text("\(selected.count)/3")
+                            .font(.palatino(.caption))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    Divider()
+                }
+
+                // Buscador
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Buscar país…", text: $searchText).autocorrectionDisabled()
+                }
+                .padding(10)
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 10)
+
+                Divider()
+
+                ScrollView {
+                    if filtered.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "airplane.circle")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                            Text("Aún no tienes países visitados o vividos.\nMarca países en el mapa para poder elegirlos aquí.")
+                                .font(.palatino(.subheadline))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.top, 60)
+                        .padding(.horizontal, 32)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(filtered, id: \.0) { emoji, name in
+                            let isChosen = selected.contains(emoji)
+                            let isFull   = selected.count >= 3 && !isChosen
+                            Button {
+                                if isChosen {
+                                    selected.removeAll { $0 == emoji }
+                                } else if !isFull {
+                                    selected.append(emoji)
+                                }
+                            } label: {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(isChosen
+                                              ? Color.blue.opacity(0.18)
+                                              : isFull
+                                                ? Color(.systemGray6).opacity(0.4)
+                                                : Color(.systemGray6))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .strokeBorder(isChosen ? Color.blue : Color.clear, lineWidth: 2)
+                                        )
+                                    Text(emoji)
+                                        .font(.system(size: 28))
+                                        .opacity(isFull ? 0.35 : 1.0)
+                                        .padding(6)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isFull)
+                        }
+                        .padding(14)
+                        }  // LazyVGrid
+                    }
+                }
+
+                Divider()
+
+                // Botón Aceptar
+                Button {
+                    onSave(selected)
+                    dismiss()
+                } label: {
+                    Text("Aceptar")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .navigationTitle("\(slot.emoji) Top \(slot.label)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+            .onAppear { selected = currentFlags }
         }
     }
 }

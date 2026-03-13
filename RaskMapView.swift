@@ -7,6 +7,7 @@ struct RaskMapView: UIViewRepresentable {
     var countries: [Country]
     var features: [CountryFeature]
     var onCountryTapped: (Country) -> Void
+    var highlightedIsoCode: String? = nil
     var onReady: ((_ center: @escaping (String) -> Void) -> Void)? = nil
 
     func makeUIView(context: Context) -> MKMapView {
@@ -23,7 +24,7 @@ struct RaskMapView: UIViewRepresentable {
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
             span: MKCoordinateSpan(latitudeDelta: 140, longitudeDelta: 180)
         ), animated: false)
-        let maxZoom: CLLocationDistance = 20_000_000   // ~20,000 km (impide ver demasiado “mundo” por rendimiento ya se verá)
+        let maxZoom: CLLocationDistance = 25_000_000   // ~20,000 km (impide ver demasiado “mundo” por rendimiento ya se verá)
           mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: maxZoom)
         
         let tap = InstantTapGestureRecognizer(target: context.coordinator,
@@ -59,23 +60,23 @@ struct RaskMapView: UIViewRepresentable {
 
         // ── 1. Añadir overlays la primera vez que llegan los features ──
         if mapView.overlays.isEmpty, !features.isEmpty {
-            // Poblar lastKnownStatus ANTES de addOverlays para que rendererFor
-            // tenga los colores correctos cuando MapKit llame al delegate
             context.coordinator.lastKnownStatus =
                 Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+            context.coordinator.lastHighlighted = highlightedIsoCode
             let allPolygons = features.flatMap { $0.polygons }
             mapView.addOverlays(allPolygons, level: .aboveRoads)
 
-            // Pre-calentar paths en background para el primer scroll
             let statusSnap = context.coordinator.lastKnownStatus
+            let highlightSnap = highlightedIsoCode
             DispatchQueue.global(qos: .utility).async { [weak coordinator = context.coordinator] in
                 var built: [(ObjectIdentifier, MKPolygonRenderer)] = []
                 for polygon in allPolygons {
                     let pid = ObjectIdentifier(polygon)
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnap[polygon.isoCode] ?? .none
-                    RaskMapView.applyStyle(status: status, to: renderer)
-                    _ = renderer.path  // forzar CGPath fuera del hilo principal
+                    let isHighlighted = polygon.isoCode == highlightSnap
+                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
+                    _ = renderer.path
                     built.append((pid, renderer))
                 }
                 DispatchQueue.main.async {
@@ -87,7 +88,38 @@ struct RaskMapView: UIViewRepresentable {
             }
         }
 
-        // ── 2. Actualizaciones de status ──
+        // ── 2. Actualizar highlight ──
+        let newHighlight = highlightedIsoCode
+        let oldHighlight = context.coordinator.lastHighlighted
+        if newHighlight != oldHighlight {
+            context.coordinator.lastHighlighted = newHighlight
+            // Quitar highlight del anterior
+            if let old = oldHighlight,
+               let feature = features.first(where: { $0.isoCode == old }) {
+                let status = context.coordinator.lastKnownStatus[old] ?? .none
+                for polygon in feature.polygons {
+                    let pid = ObjectIdentifier(polygon)
+                    if let renderer = context.coordinator.rendererCache[pid] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: false)
+                        renderer.setNeedsDisplay()
+                    }
+                }
+            }
+            // Aplicar highlight al nuevo
+            if let new = newHighlight,
+               let feature = features.first(where: { $0.isoCode == new }) {
+                let status = context.coordinator.lastKnownStatus[new] ?? .none
+                for polygon in feature.polygons {
+                    let pid = ObjectIdentifier(polygon)
+                    if let renderer = context.coordinator.rendererCache[pid] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: true)
+                        renderer.setNeedsDisplay()
+                    }
+                }
+            }
+        }
+
+        // ── 3. Actualizaciones de status ──
         let newMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
         let oldMap = context.coordinator.lastKnownStatus
         guard newMap != oldMap else { return }
@@ -100,10 +132,11 @@ struct RaskMapView: UIViewRepresentable {
         for isoCode in changed {
             guard let feature = features.first(where: { $0.isoCode == isoCode }) else { continue }
             let status = newMap[isoCode] ?? .none
+            let isHighlighted = isoCode == context.coordinator.lastHighlighted
             for polygon in feature.polygons {
                 let pid = ObjectIdentifier(polygon)
                 if let renderer = context.coordinator.rendererCache[pid] {
-                    Self.applyStyle(status: status, to: renderer)
+                    Self.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
                     renderer.setNeedsDisplay()
                 } else {
                     mapView.removeOverlay(polygon)
@@ -113,15 +146,15 @@ struct RaskMapView: UIViewRepresentable {
         }
     }
 
-    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer) {
+    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer, highlighted: Bool = false) {
         if status == .none {
-            renderer.fillColor   = UIColor.systemGray.withAlphaComponent(0.08)
-            renderer.strokeColor = UIColor.systemGray.withAlphaComponent(0.3)
-            renderer.lineWidth   = 0.5
+            renderer.fillColor   = UIColor.clear
+            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
+            renderer.lineWidth   = highlighted ? 2.5 : 0
         } else {
             renderer.fillColor   = status.overlayColor
-            renderer.strokeColor = nil
-            renderer.lineWidth   = 0
+            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : nil
+            renderer.lineWidth   = highlighted ? 2.5 : 0
         }
     }
 
@@ -132,6 +165,7 @@ struct RaskMapView: UIViewRepresentable {
         var parent: RaskMapView
         var rendererCache: [ObjectIdentifier: MKPolygonRenderer] = [:]
         var lastKnownStatus: [String: CountryStatus] = [:]
+        var lastHighlighted: String? = nil
         private var colorCancellables = Set<AnyCancellable>()
         private var scrollWorkItem: DispatchWorkItem?
         weak var mapView: MKMapView?
@@ -157,7 +191,15 @@ struct RaskMapView: UIViewRepresentable {
                       let renderer = rendererCache[ObjectIdentifier(polygon)] else { continue }
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
                 guard status != .none else { continue }
+                let isHighlighted = polygon.isoCode == lastHighlighted
                 renderer.fillColor = status.overlayColor
+                if isHighlighted {
+                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.85)
+                    renderer.lineWidth = 2.5
+                } else {
+                    renderer.strokeColor = nil
+                    renderer.lineWidth = 0
+                }
                 renderer.setNeedsDisplay()
             }
         }
@@ -178,7 +220,8 @@ struct RaskMapView: UIViewRepresentable {
             let status = lastKnownStatus[polygon.isoCode]
                       ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status
                       ?? .none
-            RaskMapView.applyStyle(status: status, to: renderer)
+            let isHighlighted = polygon.isoCode == lastHighlighted
+            RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
             rendererCache[pid] = renderer
             return renderer
         }
@@ -231,6 +274,7 @@ struct RaskMapView: UIViewRepresentable {
             // Pre-crear renderers y forzar el CGPath en background
             // para que cuando MapKit los pida en el render loop ya estén listos
             let statusSnapshot = lastKnownStatus
+            let highlightSnapshot = lastHighlighted
             let cache = rendererCache
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 var newRenderers: [(ObjectIdentifier, MKPolygonRenderer)] = []
@@ -239,8 +283,8 @@ struct RaskMapView: UIViewRepresentable {
                     guard cache[pid] == nil else { continue }
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnapshot[polygon.isoCode] ?? .none
-                    RaskMapView.applyStyle(status: status, to: renderer)
-                    // Forzar CGPath — trabajo costoso que hacemos fuera del hilo principal
+                    let isHighlighted = polygon.isoCode == highlightSnapshot
+                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
                     _ = renderer.path
                     newRenderers.append((pid, renderer))
                 }
