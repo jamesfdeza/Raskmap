@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var showSheet: Bool = false
     @State private var features: [CountryFeature] = []
     @State private var showSearch: Bool = false
+    @State private var showAllCountries: Bool = false
     @State private var searchText: String = ""
     @StateObject private var mapStore = MapStore()
     @EnvironmentObject private var colorTheme: ColorThemeManager
@@ -142,7 +143,7 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         
                         HStack(spacing: 4) {
-                            StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
+                            StatBadge(value: visitedCount, label: "Visitados",  color: colorTheme.visitedColor)
                                 .onTapGesture { statusListFilter = .visited }
                             StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
                                 .onTapGesture { statusListFilter = .wantToVisit }
@@ -164,6 +165,7 @@ struct ContentView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .onTapGesture { showAllCountries = true }
                         Spacer()
                         Button(action: { showSearch = true }) {
                             Image(systemName: "magnifyingglass")
@@ -186,6 +188,7 @@ struct ContentView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .onTapGesture { showAllCountries = true }
                         Spacer()
                         Button(action: { showSearch = true }) {
                             Image(systemName: "magnifyingglass")
@@ -216,7 +219,7 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         Spacer()
                         HStack(spacing: 4) {
-                            StatBadge(value: visitedCount, label: "Visitado",  color: colorTheme.visitedColor)
+                            StatBadge(value: visitedCount, label: "Visitados",  color: colorTheme.visitedColor)
                                 .onTapGesture { statusListFilter = .visited }
                             StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
                                 .onTapGesture { statusListFilter = .wantToVisit }
@@ -225,10 +228,10 @@ struct ContentView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 16)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 32)
                 }
             }
         }
@@ -288,6 +291,8 @@ struct ContentView: View {
                                         modelContext.insert(newCountry)
                                         selectedCountry = newCountry
                                     }
+                                    highlightedIsoCode = isoCode
+                                    centerMap(on: isoCode)
                                     pendingShowSheet = true
                                     showSearch = false
                                 }
@@ -348,6 +353,11 @@ struct ContentView: View {
                 Spacer()
             }
             .interactiveDismissDisabled(true)
+        }
+
+        // MARK: - Sheet todos los territorios
+        .sheet(isPresented: $showAllCountries) {
+            AllCountriesSheet(features: features, mode: countingMode)
         }
 
         // MARK: - Sheet lista por estado
@@ -542,7 +552,7 @@ struct CountryBottomSheet: View {
 
             VStack(spacing: 10) {
                 ActionButton(
-                    label: "✅ Visitado",
+                    label: "✅ Visitados",
                     color: colorTheme.visitedColor,
                     isSelected: country.status == .visited,
                     action: {
@@ -902,62 +912,8 @@ struct ProfileSheet: View {
                     }
                     .padding(.top, 20)
 
-                    // ── Nombre de usuario ──
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Nombre de usuario")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 8) {
-                            HStack {
-                                Text("@")
-                                    .font(.palatino(.body))
-                                    .foregroundStyle(.secondary)
-                                TextField("usuario", text: $usernameInput)
-                                    .font(.palatino(.body))
-                                    .autocorrectionDisabled()
-                                    .textInputAutocapitalization(.never)
-                                    .onChange(of: usernameInput) {
-                                        usernameInput = String(
-                                            usernameInput
-                                                .lowercased()
-                                                .filter { $0.isLetter || $0.isNumber || $0 == "_" }
-                                                .prefix(15)
-                                        )
-                                        usernameError = nil
-                                    }
-                            }
-                            .padding(12)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
-
-                            Button {
-                                let clean = usernameInput.trimmingCharacters(in: .whitespaces)
-                                if clean.isEmpty {
-                                    usernameError = "El nombre no puede estar vacío."
-                                } else {
-                                    username = clean
-                                    showSavedToast = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                                        showSavedToast = false
-                                    }
-                                }
-                            } label: {
-                                Text("Guardar")
-                                    .font(.palatino(.footnote, weight: .bold))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 12)
-                                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
-                                    .foregroundStyle(.white)
-                            }
-                        }
-
-                        if let err = usernameError {
-                            Text(err)
-                                .font(.palatino(.caption))
-                                .foregroundStyle(.red)
-                        }
-                    }
-                    .padding(.horizontal, 24)
+                    // ── Nombre de usuario inline ──
+                    UsernameEditView(username: $username)
 
                     // ── Mi top — tabla región × medalla ──
                     VStack(spacing: 12) {
@@ -1197,7 +1153,7 @@ struct SettingsSheet: View {
                         .padding(.top, 4)
                     }
 
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 32)
                 }
                 .padding(.top, 20)
             }
@@ -1349,6 +1305,141 @@ struct TableFlagPickerSheet: View {
                 }
             }
         }
+    }
+}
+
+
+// MARK: - Lista de todos los territorios (solo lectura)
+struct AllCountriesSheet: View {
+    let features: [CountryFeature]
+    let mode: CountingMode
+    @Environment(\.dismiss) private var dismiss
+
+    private var filtered: [CountryFeature] {
+        switch mode {
+        case .all:    return features
+        case .un:     return features.filter { CountingMode.unMembers.contains($0.isoCode) }
+        case .unPlus: return features.filter { CountingMode.unMembers.contains($0.isoCode) || CountingMode.unObservers.contains($0.isoCode) }
+        }
+    }
+
+    private var grouped: [(letter: String, items: [CountryFeature])] {
+        let sorted = filtered.sorted { $0.localizedName < $1.localizedName }
+        var result: [(letter: String, items: [CountryFeature])] = []
+        for feature in sorted {
+            let letter = String(
+                feature.localizedName
+                    .folding(options: .diacriticInsensitive, locale: .current)
+                    .prefix(1).uppercased()
+            )
+            if let idx = result.firstIndex(where: { $0.letter == letter }) {
+                result[idx].items.append(feature)
+            } else {
+                result.append((letter: letter, items: [feature]))
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(grouped, id: \.letter) { section in
+                    Section(header: Text(section.letter)
+                        .font(.palatino(.caption, weight: .bold))) {
+                        ForEach(section.items, id: \.isoCode) { feature in
+                            HStack(spacing: 10) {
+                                Text(feature.flagEmoji ?? "🌐")
+                                    .font(.title3)
+                                Text(feature.localizedName)
+                                    .font(.palatino(.body))
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .navigationTitle("\(mode.label) (\(filtered.count))")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Edición de nombre inline en perfil
+struct UsernameEditView: View {
+    @Binding var username: String
+    @State private var isEditing: Bool = false
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if isEditing {
+                // Fila centrada: @ + campo + ✓
+                HStack(spacing: 0) {
+                    Text("@")
+                        .font(.palatino(.title3))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 12)
+                    TextField("usuario", text: $draft)
+                        .font(.palatino(.title3))
+                        .multilineTextAlignment(.leading)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .focused($focused)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 6)
+                        .onChange(of: draft) {
+                            draft = String(
+                                draft.lowercased()
+                                    .filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                                    .prefix(15)
+                            )
+                        }
+                    Button {
+                        let clean = draft.trimmingCharacters(in: .whitespaces)
+                        if !clean.isEmpty { username = clean }
+                        isEditing = false
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
+                            .padding(.trailing, 12)
+                    }
+                }
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .frame(maxWidth: 240)
+            } else {
+                // Modo lectura: @nombre + lápiz estilo igual que el del avatar
+                HStack(spacing: 6) {
+                    Text(username.isEmpty ? "usuario" : "@ \(username)")
+                        .font(.palatino(.title3))
+                        .foregroundStyle(username.isEmpty ? .secondary : .primary)
+                    ZStack {
+                        Circle()
+                            .fill(Color(.systemBackground))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
+                    }
+                    .onTapGesture {
+                        draft = username
+                        isEditing = true
+                        focused = true
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 4)
     }
 }
 

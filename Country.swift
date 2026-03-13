@@ -32,7 +32,7 @@ enum CountryStatus: String, Codable, Identifiable {
     var label: String {
         switch self {
         case .none:        return "Sin marcar"
-        case .visited:     return "✅ Visitado"
+        case .visited:     return "✅ Visitados"
         case .wantToVisit: return "🔜 Próximos"
         case .lived:       return "🏠 Vivido"
         }
