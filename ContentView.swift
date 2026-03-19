@@ -6,6 +6,8 @@
 import SwiftUI
 import SwiftData
 import Combine
+import MapKit
+import Photos
 
 class MapStore: ObservableObject {
     var centerOnCountry: ((String) -> Void)?
@@ -912,6 +914,7 @@ struct ProfileSheet: View {
     @State private var editingMedal: MedalSlot? = nil
     @State private var editingSpot: TopSpot? = nil
     @State private var showSettings: Bool = false
+    @State private var showMapExport: Bool = false
 
     enum MedalSlot: String, Identifiable {
         case gold, silver, bronze
@@ -1119,7 +1122,11 @@ struct ProfileSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape.fill")
-                            .font(.body)
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showMapExport = true } label: {
+                        Image(systemName: "chart.bar.xaxis.ascending")
                     }
                 }
             }
@@ -1157,6 +1164,15 @@ struct ProfileSheet: View {
                 onClear: {
                     setTableFlag(nil, region: spot.region, medal: spot.medal)
                 }
+            )
+        }
+        .sheet(isPresented: $showMapExport) {
+            MapExportSheet(
+                visitedCountries: countries.filter { $0.status == .visited || $0.status == .lived },
+                features: allFeatures,
+                counter: "\(countries.filter { $0.status == .visited || $0.status == .lived }.count)/\(CountingMode(rawValue: countingModeRaw)?.denominator ?? 244)",
+                visitedColor: colorTheme.visitedColor,
+                countingModeRaw: countingModeRaw
             )
         }
         .sheet(isPresented: $showSettings) {
@@ -1631,66 +1647,62 @@ struct UsernameEditView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 10) {
-            if isEditing {
-                // Fila centrada: @ + campo + ✓
-                HStack(spacing: 0) {
-                    Text("@")
-                        .font(.palatino(.title3))
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 12)
-                    TextField("usuario", text: $draft)
-                        .font(.palatino(.title3))
-                        .multilineTextAlignment(.leading)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .focused($focused)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 6)
-                        .onChange(of: draft) {
-                            draft = String(
-                                draft.lowercased()
-                                    .filter { $0.isLetter || $0.isNumber || $0 == "_" }
-                                    .prefix(15)
-                            )
-                        }
-                    Button {
-                        let clean = draft.trimmingCharacters(in: .whitespaces)
-                        if !clean.isEmpty { username = clean }
-                        isEditing = false
-                    } label: {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                            .padding(.trailing, 12)
+        if isEditing {
+            // Modo edición: campo centrado con ✓ a la derecha
+            HStack(spacing: 0) {
+                Text("@")
+                    .font(.palatino(.title3))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 12)
+                TextField("usuario", text: $draft)
+                    .font(.palatino(.title3))
+                    .multilineTextAlignment(.leading)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .focused($focused)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 6)
+                    .onChange(of: draft) {
+                        draft = String(
+                            draft.lowercased()
+                                .filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                                .prefix(15)
+                        )
                     }
-                }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-                .frame(maxWidth: 240)
-            } else {
-                // Modo lectura: @nombre + lápiz estilo igual que el del avatar
-                HStack(spacing: 6) {
-                    Text(username.isEmpty ? "usuario" : "@ \(username)")
-                        .font(.palatino(.title3))
-                        .foregroundStyle(username.isEmpty ? .secondary : .primary)
-                    ZStack {
-                        Circle()
-                            .fill(Color(.systemBackground))
-                            .frame(width: 30, height: 30)
-                        Image(systemName: "pencil.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                    }
-                    .onTapGesture {
-                        draft = username
-                        isEditing = true
-                        focused = true
-                    }
+                Button {
+                    let clean = draft.trimmingCharacters(in: .whitespaces)
+                    if !clean.isEmpty { username = clean }
+                    isEditing = false
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                        .padding(.trailing, 12)
                 }
             }
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: 240)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 4)
+        } else {
+            // Modo lectura: @nombre centrado + lápiz justo a su derecha
+            HStack(spacing: 6) {
+                Text(username.isEmpty ? "usuario" : "@ \(username)")
+                    .font(.palatino(.title3))
+                    .foregroundStyle(username.isEmpty ? .secondary : .primary)
+                Button {
+                    draft = username
+                    isEditing = true
+                    focused = true
+                } label: {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.blue)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 4)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.top, 4)
     }
 }
 
@@ -1885,6 +1897,865 @@ struct VisitCountPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancelar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+
+// MARK: - Exportar mapa como imagen
+struct MapExportSheet: View {
+    let visitedCountries: [Country]
+    let features: [CountryFeature]
+    let counter: String
+    let visitedColor: Color
+    let countingModeRaw: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var renderedImage: UIImage? = nil
+    @State private var isRendering: Bool = true
+    @State private var isSaving: Bool = false
+    @State private var savedToast: Bool = false
+    @State private var selectedZone: ExportZone = .europa
+    @State private var selectedSubgroup: SubgroupInfo? = nil
+
+    enum ExportZone: String, CaseIterable, Identifiable {
+        case europa      = "Europa"
+        case asia        = "Asia"
+        case medioOriente = "M. Oriente"
+        case africa      = "África"
+        case america     = "América"
+        case oceania     = "Oceanía"
+        var id: String { rawValue }
+
+        func denominator(mode: CountingMode) -> Int {
+            let codes = isoCodes
+            switch mode {
+            case .all:    return codes.count
+            case .un:     return codes.filter { CountingMode.unMembers.contains($0) }.count
+            case .unPlus: return codes.filter { CountingMode.unMembers.contains($0) || CountingMode.unObservers.contains($0) }.count
+            }
+        }
+
+        var region: MKCoordinateRegion {
+            switch self {
+            case .europa:
+                return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 54, longitude: 15),
+                                          span: MKCoordinateSpan(latitudeDelta: 36, longitudeDelta: 50))
+            case .asia:
+                return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 35, longitude: 95),
+                                          span: MKCoordinateSpan(latitudeDelta: 60, longitudeDelta: 90))
+            case .medioOriente:
+                return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 27, longitude: 42),
+                                          span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 36))
+            case .africa:
+                return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 2, longitude: 20),
+                                          span: MKCoordinateSpan(latitudeDelta: 72, longitudeDelta: 60))
+            case .america:
+                return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 15, longitude: -80),
+                                          span: MKCoordinateSpan(latitudeDelta: 100, longitudeDelta: 100))
+            case .oceania:
+                return MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: -20, longitude: 150),
+                                          span: MKCoordinateSpan(latitudeDelta: 60, longitudeDelta: 70))
+            }
+        }
+
+        var isoCodes: Set<String> {
+            switch self {
+            case .europa:
+                return ["ALB","AND","AUT","BLR","BEL","BIH","BGR","HRV","CYP","CZE","DNK","EST","FIN","FRA","DEU",
+                        "GRC","HUN","ISL","IRL","ITA","LVA","LIE","LTU","LUX","MLT","MDA","MCO","MNE","NLD","MKD",
+                        "NOR","POL","PRT","ROU","RUS","SMR","SRB","SVK","SVN","ESP","SWE","CHE","UKR","GBR","VAT",
+                        "KOS","XKX","ALD","FRO","GIB","GGY","IMN","JEY"]
+            case .asia:
+                return ["AFG","ARM","AZE","BGD","BTN","BRN","KHM","CHN","GEO","IND","IDN","JPN","KAZ","PRK","KOR",
+                        "KGZ","LAO","MYS","MDV","MNG","MMR","NPL","PAK","PHL","SGP","LKA","TWN","TJK","THA","TLS",
+                        "TKM","UZB","VNM","HKG","MAC","IOT"]
+            case .medioOriente:
+                return ["BHR","IRN","IRQ","ISR","JOR","KWT","LBN","OMN","PSE","PSX","QAT","SAU","SYR","TUR","ARE","YEM"]
+            case .africa:
+                return ["DZA","AGO","BEN","BWA","BFA","BDI","CPV","CMR","CAF","TCD","COM","COD","COG","CIV","DJI",
+                        "EGY","GNQ","ERI","ETH","GAB","GMB","GHA","GIN","GNB","KEN","LSO","LBR","LBY","MDG","MWI",
+                        "MLI","MRT","MUS","MAR","MOZ","NAM","NER","NGA","RWA","STP","SEN","SYC","SLE","SOM","ZAF",
+                        "SSD","SDS","SDN","SWZ","TZA","TGO","TUN","UGA","ZMB","ZWE","SAH","SHN"]
+            case .america:
+                return ["ATG","ARG","BHS","BRB","BLZ","BOL","BRA","CAN","CHL","COL","CRI","CUB","DMA","DOM","ECU",
+                        "SLV","GRD","GTM","GUY","HTI","HND","JAM","MEX","NIC","PAN","PRY","PER","KNA","LCA","VCT",
+                        "SUR","TTO","USA","URY","VEN","ABW","AIA","BMU","VGB","CYM","CUW","FLK","GRL","MSR","PRI",
+                        "BLM","MAF","SPM","SXM","TCA","VIR"]
+            case .oceania:
+                return ["AUS","FJI","KIR","MHL","FSM","NRU","NZL","PLW","PNG","WSM","SLB","TON","TUV","VUT",
+                        "ASM","COK","PYF","GUM","NCL","NIU","NFK","MNP","PCN","WLF"]
+            }
+        }
+    }
+
+    private var filteredCountries: [Country] {
+        let codes = selectedZone.isoCodes
+        return visitedCountries.filter { codes.contains($0.isoCode) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                // Selector de zona
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ExportZone.allCases) { zone in
+                            Button {
+                                selectedZone = zone
+                                renderedImage = nil
+                                isRendering = true
+                            } label: {
+                                Text(zone.rawValue)
+                                    .font(.palatino(.footnote, weight: selectedZone == zone ? .bold : .regular))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(selectedZone == zone ? Color.blue : Color(.systemGray5),
+                                                in: Capsule())
+                                    .foregroundStyle(selectedZone == zone ? .white : .primary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                // Imagen generada
+                ZStack {
+                    if let img = renderedImage {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .shadow(radius: 6)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemGray6))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay {
+                                VStack(spacing: 12) {
+                                    ProgressView()
+                                    Text("Generando mapa…")
+                                        .font(.palatino(.caption))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .id(selectedZone)
+                .onAppear { renderMap() }
+                .onChange(of: selectedZone) { _, _ in renderMap() }
+
+                // Estadísticas por subregión
+                if selectedZone == .europa {
+                    europaStatsView()
+                } else if selectedZone == .asia {
+                    asiaStatsView()
+                } else if selectedZone == .america {
+                    americaStatsView()
+                } else if selectedZone == .medioOriente {
+                    medioOrienteStatsView()
+                } else if selectedZone == .africa {
+                    africaStatsView()
+                } else if selectedZone == .oceania {
+                    oceaniaStatsView()
+                }
+
+                Spacer()
+
+                Button {
+                    guard let img = renderedImage else { return }
+                    isSaving = true
+                    PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                        DispatchQueue.main.async {
+                            guard status == .authorized || status == .limited else {
+                                isSaving = false
+                                return
+                            }
+                            PHPhotoLibrary.shared().performChanges({
+                                PHAssetChangeRequest.creationRequestForAsset(from: img)
+                            }) { success, _ in
+                                DispatchQueue.main.async {
+                                    isSaving = false
+                                    if success {
+                                        savedToast = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                            savedToast = false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if isSaving { ProgressView().tint(.white) }
+                        else { Image(systemName: "square.and.arrow.down") }
+                        Text(savedToast ? "¡Guardada!" : "Guardar en galería")
+                    }
+                    .font(.palatino(.body, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(savedToast ? Color.green : Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+                .disabled(renderedImage == nil)
+                .animation(.easeInOut(duration: 0.2), value: savedToast)
+            }
+            .padding(.top, 8)
+            .navigationTitle("Mi mapa")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+            .sheet(item: $selectedSubgroup) { info in
+                SubgroupListSheet(
+                    title: info.title,
+                    emoji: info.emoji,
+                    isoCodes: info.isoCodes,
+                    visitedCountries: visitedCountries,
+                    features: features,
+                    countingModeRaw: countingModeRaw
+                )
+            }
+        }
+    }
+
+    // Capital coordinates by ISO A3
+    private static let capitals: [String: CLLocationCoordinate2D] = [
+        "AFG": CLLocationCoordinate2D(latitude: 34.52, longitude: 69.17),
+        "ALB": CLLocationCoordinate2D(latitude: 40.46, longitude: 19.49),
+        "DZA": CLLocationCoordinate2D(latitude: 36.74, longitude: 3.06),
+        "AND": CLLocationCoordinate2D(latitude: 42.51, longitude: 1.52),
+        "AGO": CLLocationCoordinate2D(latitude: -8.84, longitude: 13.23),
+        "ARG": CLLocationCoordinate2D(latitude: -34.60, longitude: -58.38),
+        "ARM": CLLocationCoordinate2D(latitude: 40.18, longitude: 44.51),
+        "AUS": CLLocationCoordinate2D(latitude: -35.28, longitude: 149.13),
+        "AUT": CLLocationCoordinate2D(latitude: 47.27, longitude: 11.40),
+        "AZE": CLLocationCoordinate2D(latitude: 40.41, longitude: 49.87),
+        "BHS": CLLocationCoordinate2D(latitude: 25.05, longitude: -77.35),
+        "BHR": CLLocationCoordinate2D(latitude: 26.21, longitude: 50.59),
+        "BGD": CLLocationCoordinate2D(latitude: 23.72, longitude: 90.41),
+        "BRB": CLLocationCoordinate2D(latitude: 13.10, longitude: -59.62),
+        "BLR": CLLocationCoordinate2D(latitude: 53.90, longitude: 27.57),
+        "BEL": CLLocationCoordinate2D(latitude: 50.85, longitude: 4.35),
+        "BLZ": CLLocationCoordinate2D(latitude: 17.25, longitude: -88.77),
+        "BEN": CLLocationCoordinate2D(latitude: 6.37, longitude: 2.43),
+        "BTN": CLLocationCoordinate2D(latitude: 27.47, longitude: 89.64),
+        "BOL": CLLocationCoordinate2D(latitude: -16.50, longitude: -68.15),
+        "BIH": CLLocationCoordinate2D(latitude: 43.85, longitude: 18.36),
+        "BWA": CLLocationCoordinate2D(latitude: -24.63, longitude: 25.91),
+        "BRA": CLLocationCoordinate2D(latitude: -15.78, longitude: -47.93),
+        "BRN": CLLocationCoordinate2D(latitude: 4.94, longitude: 114.95),
+        "BGR": CLLocationCoordinate2D(latitude: 42.15, longitude: 24.75),
+        "BFA": CLLocationCoordinate2D(latitude: 12.37, longitude: -1.53),
+        "BDI": CLLocationCoordinate2D(latitude: -3.38, longitude: 29.36),
+        "CPV": CLLocationCoordinate2D(latitude: 14.93, longitude: -23.51),
+        "KHM": CLLocationCoordinate2D(latitude: 11.57, longitude: 104.92),
+        "CMR": CLLocationCoordinate2D(latitude: 3.87, longitude: 11.52),
+        "CAN": CLLocationCoordinate2D(latitude: 45.42, longitude: -75.70),
+        "CAF": CLLocationCoordinate2D(latitude: 4.36, longitude: 18.56),
+        "TCD": CLLocationCoordinate2D(latitude: 12.11, longitude: 15.05),
+        "CHL": CLLocationCoordinate2D(latitude: -33.46, longitude: -70.65),
+        "CHN": CLLocationCoordinate2D(latitude: 39.92, longitude: 116.38),
+        "COL": CLLocationCoordinate2D(latitude: 4.71, longitude: -74.07),
+        "COM": CLLocationCoordinate2D(latitude: -11.70, longitude: 43.26),
+        "COD": CLLocationCoordinate2D(latitude: -4.32, longitude: 15.32),
+        "COG": CLLocationCoordinate2D(latitude: -4.27, longitude: 15.28),
+        "CRI": CLLocationCoordinate2D(latitude: 9.93, longitude: -84.08),
+        "CIV": CLLocationCoordinate2D(latitude: 6.82, longitude: -5.28),
+        "HRV": CLLocationCoordinate2D(latitude: 43.51, longitude: 16.44),
+        "CUB": CLLocationCoordinate2D(latitude: 23.13, longitude: -82.38),
+        "CYP": CLLocationCoordinate2D(latitude: 35.17, longitude: 33.37),
+        "CZE": CLLocationCoordinate2D(latitude: 50.08, longitude: 14.47),
+        "DNK": CLLocationCoordinate2D(latitude: 55.73, longitude: 9.12),
+        "DJI": CLLocationCoordinate2D(latitude: 11.59, longitude: 43.15),
+        "DMA": CLLocationCoordinate2D(latitude: 15.30, longitude: -61.39),
+        "DOM": CLLocationCoordinate2D(latitude: 18.48, longitude: -69.89),
+        "ECU": CLLocationCoordinate2D(latitude: -0.22, longitude: -78.52),
+        "EGY": CLLocationCoordinate2D(latitude: 30.06, longitude: 31.25),
+        "SLV": CLLocationCoordinate2D(latitude: 13.70, longitude: -89.21),
+        "GNQ": CLLocationCoordinate2D(latitude: 3.75, longitude: 8.78),
+        "ERI": CLLocationCoordinate2D(latitude: 15.33, longitude: 38.93),
+        "EST": CLLocationCoordinate2D(latitude: 59.44, longitude: 24.75),
+        "ETH": CLLocationCoordinate2D(latitude: 9.03, longitude: 38.74),
+        "FJI": CLLocationCoordinate2D(latitude: -18.14, longitude: 178.44),
+        "FIN": CLLocationCoordinate2D(latitude: 61.50, longitude: 23.77),
+        "FRA": CLLocationCoordinate2D(latitude: 48.85, longitude: 2.35),
+        "GAB": CLLocationCoordinate2D(latitude: 0.39, longitude: 9.45),
+        "GMB": CLLocationCoordinate2D(latitude: 13.45, longitude: -16.58),
+        "GEO": CLLocationCoordinate2D(latitude: 41.69, longitude: 44.83),
+        "DEU": CLLocationCoordinate2D(latitude: 52.52, longitude: 13.40),
+        "GHA": CLLocationCoordinate2D(latitude: 5.56, longitude: -0.20),
+        "GRC": CLLocationCoordinate2D(latitude: 37.98, longitude: 23.73),
+        "GRD": CLLocationCoordinate2D(latitude: 12.05, longitude: -61.75),
+        "GTM": CLLocationCoordinate2D(latitude: 14.64, longitude: -90.51),
+        "GIN": CLLocationCoordinate2D(latitude: 9.54, longitude: -13.68),
+        "GNB": CLLocationCoordinate2D(latitude: 11.86, longitude: -15.60),
+        "GUY": CLLocationCoordinate2D(latitude: 6.80, longitude: -58.16),
+        "HTI": CLLocationCoordinate2D(latitude: 18.54, longitude: -72.34),
+        "HND": CLLocationCoordinate2D(latitude: 14.10, longitude: -87.22),
+        "HUN": CLLocationCoordinate2D(latitude: 47.50, longitude: 19.04),
+        "ISL": CLLocationCoordinate2D(latitude: 64.66, longitude: -14.28),
+        "IND": CLLocationCoordinate2D(latitude: 28.61, longitude: 77.21),
+        "IDN": CLLocationCoordinate2D(latitude: -6.21, longitude: 106.85),
+        "IRN": CLLocationCoordinate2D(latitude: 35.69, longitude: 51.42),
+        "IRQ": CLLocationCoordinate2D(latitude: 33.34, longitude: 44.40),
+        "IRL": CLLocationCoordinate2D(latitude: 53.33, longitude: -6.25),
+        "ISR": CLLocationCoordinate2D(latitude: 31.77, longitude: 35.22),
+        "ITA": CLLocationCoordinate2D(latitude: 40.85, longitude: 14.27),
+        "JAM": CLLocationCoordinate2D(latitude: 17.99, longitude: -76.79),
+        "JPN": CLLocationCoordinate2D(latitude: 35.69, longitude: 139.69),
+        "JOR": CLLocationCoordinate2D(latitude: 31.95, longitude: 35.93),
+        "KAZ": CLLocationCoordinate2D(latitude: 51.18, longitude: 71.45),
+        "KEN": CLLocationCoordinate2D(latitude: -1.28, longitude: 36.82),
+        "KIR": CLLocationCoordinate2D(latitude: 1.33, longitude: 173.02),
+        "PRK": CLLocationCoordinate2D(latitude: 39.03, longitude: 125.75),
+        "KOR": CLLocationCoordinate2D(latitude: 37.55, longitude: 126.99),
+        "KWT": CLLocationCoordinate2D(latitude: 29.37, longitude: 47.98),
+        "KGZ": CLLocationCoordinate2D(latitude: 42.87, longitude: 74.59),
+        "LAO": CLLocationCoordinate2D(latitude: 17.97, longitude: 102.60),
+        "LVA": CLLocationCoordinate2D(latitude: 56.95, longitude: 24.11),
+        "LBN": CLLocationCoordinate2D(latitude: 33.89, longitude: 35.50),
+        "LSO": CLLocationCoordinate2D(latitude: -29.32, longitude: 27.48),
+        "LBR": CLLocationCoordinate2D(latitude: 6.30, longitude: -10.80),
+        "LBY": CLLocationCoordinate2D(latitude: 32.90, longitude: 13.18),
+        "LIE": CLLocationCoordinate2D(latitude: 47.14, longitude: 9.52),
+        "LTU": CLLocationCoordinate2D(latitude: 54.69, longitude: 25.28),
+        "LUX": CLLocationCoordinate2D(latitude: 49.61, longitude: 6.13),
+        "MDG": CLLocationCoordinate2D(latitude: -18.91, longitude: 47.54),
+        "MWI": CLLocationCoordinate2D(latitude: -13.97, longitude: 33.79),
+        "MYS": CLLocationCoordinate2D(latitude: 3.15, longitude: 101.69),
+        "MDV": CLLocationCoordinate2D(latitude: 4.17, longitude: 73.51),
+        "MLI": CLLocationCoordinate2D(latitude: 12.65, longitude: -8.00),
+        "MLT": CLLocationCoordinate2D(latitude: 35.90, longitude: 14.51),
+        "MHL": CLLocationCoordinate2D(latitude: 7.10, longitude: 171.38),
+        "MRT": CLLocationCoordinate2D(latitude: 18.08, longitude: -15.97),
+        "MUS": CLLocationCoordinate2D(latitude: -20.16, longitude: 57.49),
+        "MEX": CLLocationCoordinate2D(latitude: 19.43, longitude: -99.13),
+        "FSM": CLLocationCoordinate2D(latitude: 6.92, longitude: 158.16),
+        "MDA": CLLocationCoordinate2D(latitude: 47.01, longitude: 28.86),
+        "MCO": CLLocationCoordinate2D(latitude: 43.74, longitude: 7.41),
+        "MNG": CLLocationCoordinate2D(latitude: 47.91, longitude: 106.92),
+        "MNE": CLLocationCoordinate2D(latitude: 42.49, longitude: 18.70),
+        "MAR": CLLocationCoordinate2D(latitude: 33.99, longitude: -6.85),
+        "MOZ": CLLocationCoordinate2D(latitude: -25.97, longitude: 32.59),
+        "MMR": CLLocationCoordinate2D(latitude: 16.80, longitude: 96.16),
+        "NAM": CLLocationCoordinate2D(latitude: -22.56, longitude: 17.08),
+        "NRU": CLLocationCoordinate2D(latitude: -0.55, longitude: 166.92),
+        "NPL": CLLocationCoordinate2D(latitude: 27.70, longitude: 85.32),
+        "NLD": CLLocationCoordinate2D(latitude: 52.38, longitude: 4.90),
+        "NZL": CLLocationCoordinate2D(latitude: -41.29, longitude: 174.78),
+        "NIC": CLLocationCoordinate2D(latitude: 12.13, longitude: -86.28),
+        "NER": CLLocationCoordinate2D(latitude: 13.51, longitude: 2.12),
+        "NGA": CLLocationCoordinate2D(latitude: 9.07, longitude: 7.40),
+        "MKD": CLLocationCoordinate2D(latitude: 41.65, longitude: 22.47),
+        "NOR": CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+        "OMN": CLLocationCoordinate2D(latitude: 23.61, longitude: 58.59),
+        "PAK": CLLocationCoordinate2D(latitude: 33.72, longitude: 73.06),
+        "PLW": CLLocationCoordinate2D(latitude: 7.34, longitude: 134.48),
+        "PSE": CLLocationCoordinate2D(latitude: 31.90, longitude: 35.20),
+        "PAN": CLLocationCoordinate2D(latitude: 8.99, longitude: -79.52),
+        "PNG": CLLocationCoordinate2D(latitude: -9.44, longitude: 147.18),
+        "PRY": CLLocationCoordinate2D(latitude: -25.29, longitude: -57.65),
+        "PER": CLLocationCoordinate2D(latitude: -12.05, longitude: -77.04),
+        "PHL": CLLocationCoordinate2D(latitude: 14.60, longitude: 120.98),
+        "POL": CLLocationCoordinate2D(latitude: 52.23, longitude: 21.01),
+        "PRT": CLLocationCoordinate2D(latitude: 38.72, longitude: -9.14),
+        "QAT": CLLocationCoordinate2D(latitude: 25.29, longitude: 51.53),
+        "ROU": CLLocationCoordinate2D(latitude: 44.44, longitude: 26.10),
+        "RUS": CLLocationCoordinate2D(latitude: 55.75, longitude: 37.62),
+        "RWA": CLLocationCoordinate2D(latitude: -1.95, longitude: 30.06),
+        "KNA": CLLocationCoordinate2D(latitude: 17.30, longitude: -62.72),
+        "LCA": CLLocationCoordinate2D(latitude: 13.99, longitude: -61.01),
+        "VCT": CLLocationCoordinate2D(latitude: 13.16, longitude: -61.22),
+        "WSM": CLLocationCoordinate2D(latitude: -13.82, longitude: -171.77),
+        "STP": CLLocationCoordinate2D(latitude: 0.34, longitude: 6.73),
+        "SAU": CLLocationCoordinate2D(latitude: 24.69, longitude: 46.72),
+        "SEN": CLLocationCoordinate2D(latitude: 14.69, longitude: -17.44),
+        "SRB": CLLocationCoordinate2D(latitude: 44.80, longitude: 20.46),
+        "SYC": CLLocationCoordinate2D(latitude: -4.62, longitude: 55.46),
+        "SLE": CLLocationCoordinate2D(latitude: 8.49, longitude: -13.23),
+        "SGP": CLLocationCoordinate2D(latitude: 1.28, longitude: 103.85),
+        "SVK": CLLocationCoordinate2D(latitude: 48.15, longitude: 17.12),
+        "SVN": CLLocationCoordinate2D(latitude: 46.05, longitude: 14.51),
+        "SLB": CLLocationCoordinate2D(latitude: -9.43, longitude: 160.03),
+        "SOM": CLLocationCoordinate2D(latitude: 2.05, longitude: 45.34),
+        "ZAF": CLLocationCoordinate2D(latitude: -25.74, longitude: 28.19),
+        "SSD": CLLocationCoordinate2D(latitude: 4.85, longitude: 31.57),
+        "ESP": CLLocationCoordinate2D(latitude: 40.42, longitude: -3.70),
+        "LKA": CLLocationCoordinate2D(latitude: 6.92, longitude: 79.86),
+        "SDN": CLLocationCoordinate2D(latitude: 15.55, longitude: 32.53),
+        "SUR": CLLocationCoordinate2D(latitude: 5.87, longitude: -55.17),
+        "SWZ": CLLocationCoordinate2D(latitude: -26.32, longitude: 31.14),
+        "SWE": CLLocationCoordinate2D(latitude: 59.33, longitude: 18.07),
+        "CHE": CLLocationCoordinate2D(latitude: 46.95, longitude: 7.45),
+        "SYR": CLLocationCoordinate2D(latitude: 33.51, longitude: 36.29),
+        "TWN": CLLocationCoordinate2D(latitude: 25.05, longitude: 121.56),
+        "TJK": CLLocationCoordinate2D(latitude: 38.56, longitude: 68.77),
+        "TZA": CLLocationCoordinate2D(latitude: -6.18, longitude: 35.74),
+        "THA": CLLocationCoordinate2D(latitude: 13.75, longitude: 100.52),
+        "TLS": CLLocationCoordinate2D(latitude: -8.56, longitude: 125.58),
+        "TGO": CLLocationCoordinate2D(latitude: 6.14, longitude: 1.22),
+        "TON": CLLocationCoordinate2D(latitude: -21.13, longitude: -175.20),
+        "TTO": CLLocationCoordinate2D(latitude: 10.65, longitude: -61.52),
+        "TUN": CLLocationCoordinate2D(latitude: 36.82, longitude: 10.18),
+        "TUR": CLLocationCoordinate2D(latitude: 39.92, longitude: 32.86),
+        "TKM": CLLocationCoordinate2D(latitude: 37.95, longitude: 58.38),
+        "TUV": CLLocationCoordinate2D(latitude: -8.52, longitude: 179.20),
+        "UGA": CLLocationCoordinate2D(latitude: 0.32, longitude: 32.58),
+        "UKR": CLLocationCoordinate2D(latitude: 50.45, longitude: 30.52),
+        "ARE": CLLocationCoordinate2D(latitude: 24.47, longitude: 54.37),
+        "GBR": CLLocationCoordinate2D(latitude: 51.51, longitude: -0.13),
+        "USA": CLLocationCoordinate2D(latitude: 38.90, longitude: -77.04),
+        "URY": CLLocationCoordinate2D(latitude: -34.86, longitude: -56.17),
+        "UZB": CLLocationCoordinate2D(latitude: 41.30, longitude: 69.27),
+        "VUT": CLLocationCoordinate2D(latitude: -17.73, longitude: 168.32),
+        "VAT": CLLocationCoordinate2D(latitude: 41.90, longitude: 12.45),
+        "VEN": CLLocationCoordinate2D(latitude: 10.48, longitude: -66.90),
+        "VNM": CLLocationCoordinate2D(latitude: 21.03, longitude: 105.85),
+        "YEM": CLLocationCoordinate2D(latitude: 15.35, longitude: 44.21),
+        "ZMB": CLLocationCoordinate2D(latitude: -15.42, longitude: 28.28),
+        "ZWE": CLLocationCoordinate2D(latitude: -17.83, longitude: 31.05),
+        "XKX": CLLocationCoordinate2D(latitude: 42.67, longitude: 21.17),
+        "KOS": CLLocationCoordinate2D(latitude: 42.67, longitude: 21.17),
+        "HKG": CLLocationCoordinate2D(latitude: 22.32, longitude: 114.17),
+        "MAC": CLLocationCoordinate2D(latitude: 22.20, longitude: 113.54),
+        "PSX": CLLocationCoordinate2D(latitude: 31.90, longitude: 35.20),
+        "GRL": CLLocationCoordinate2D(latitude: 64.18, longitude: -51.74),
+        "PRI": CLLocationCoordinate2D(latitude: 18.47, longitude: -66.11),
+        "GIB": CLLocationCoordinate2D(latitude: 36.14, longitude: -5.35),
+        "FRO": CLLocationCoordinate2D(latitude: 62.01, longitude: -6.77),
+        "SDS": CLLocationCoordinate2D(latitude: 4.85, longitude: 31.57),
+    ]
+
+    private func capitalCoord(for isoCode: String, feature: CountryFeature) -> CLLocationCoordinate2D {
+        if let cap = Self.capitals[isoCode] { return cap }
+        return MKCoordinateRegion(feature.boundingMapRect).center
+    }
+
+        private static let sudEsteAsiatico: Set<String> = [
+        "BRN","KHM","IDN","LAO","MYS","MMR","PHL","SGP","THA","TLS","VNM"
+    ]
+    private static let asiaCentral: Set<String> = [
+        "KAZ","KGZ","TJK","TKM","UZB","MNG","AFG"
+    ]
+    private static let asiaSur: Set<String> = [
+        "BGD","BTN","IND","MDV","NPL","PAK","LKA"
+    ]
+    private static let asiaEste: Set<String> = ["CHN","JPN","KOR","PRK","TWN","HKG","MAC","MNG"]
+
+    @ViewBuilder
+    private func asiaStatsView() -> some View {
+        let sudeste = visitedCount(in: Self.sudEsteAsiatico)
+        let central = visitedCount(in: Self.asiaCentral)
+        let sur     = visitedCount(in: Self.asiaSur)
+        let este    = visitedCount(in: Self.asiaEste)
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statTile(title: "Asia sudeste", visited: sudeste.visited, total: sudeste.total, emoji: "🌴", group: Self.sudEsteAsiatico)
+            statTile(title: "Asia central",     visited: central.visited, total: central.total, emoji: "🏔️", group: Self.asiaCentral)
+            statTile(title: "Asia sur",         visited: sur.visited,     total: sur.total,     emoji: "🕌", group: Self.asiaSur)
+            statTile(title: "Asia este",        visited: este.visited,    total: este.total,    emoji: "🗾", group: Self.asiaEste)
+        }
+        .padding(.horizontal, 16)
+    }
+
+        // América subregions
+    private static let norteamerica: Set<String> = ["USA","CAN","MEX"]
+    private static let centroamerica: Set<String> = ["GTM","BLZ","HND","SLV","NIC","CRI","PAN"]
+    private static let sudamerica: Set<String> = [
+        "COL","VEN","GUY","SUR","BRA","ECU","PER","BOL","CHL","ARG","URY","PRY","FLK"
+    ]
+    private static let caribe: Set<String> = [
+        "CUB","JAM","HTI","DOM","PRI","TTO","BRB","LCA","VCT","GRD","ATG","DMA","KNA",
+        "ABW","AIA","BMU","VGB","CYM","CUW","MSR","BLM","MAF","SPM","SXM","TCA","VIR"
+    ]
+
+    // África subregions
+    private static let sahel: Set<String> = [
+        "MRT","MLI","NER","TCD","SDN","BFA","SEN","GMB","GNB","ERI","ETH","SOM","DJI"
+    ]
+    private static let norteafrica: Set<String> = [
+        "MAR","DZA","TUN","LBY","EGY","SDN","SAH"
+    ]
+    private static let safaris: Set<String> = [
+        "KEN","TZA","ZAF","BWA","ZWE","ZMB","UGA","RWA","NAM","MOZ","ETH","TGO"
+    ]
+    private static let insularesAfrica: Set<String> = [
+        "CPV","COM","MDG","MUS","SYC","STP"
+    ]
+
+    // Oceanía subregions
+    // Solo una isla (o isla principal única): Nauru, Niue
+    private static let soloUnaIsla: Set<String> = ["NRU","NIU"]
+
+        // Medio Oriente subregions
+    private static let paisesArabesMO: Set<String> = [
+        "SAU","YEM","IRQ","SYR","JOR","LBN","KWT","BHR","QAT","ARE","OMN","PSE","PSX"
+    ]
+    private static let petrolerosMO: Set<String> = [
+        "SAU","IRQ","IRN","KWT","ARE","QAT","BHR","OMN"
+    ]
+    private static let historicosMO: Set<String> = [
+        "IRQ","IRN","TUR","PSE","PSX","JOR","SYR","LBN","YEM","OMN"
+    ]
+    // F1 actuales Medio Oriente (Bahréin, Arabia Saudí, Abu Dhabi, Qatar)
+    private static let f1MO: Set<String> = ["BHR","SAU","ARE","QAT"]
+
+        private static let ue: Set<String> = [
+        "DEU","FRA","ITA","ESP","PRT","NLD","BEL","LUX","AUT","FIN","SWE","IRL",
+        "GRC","CYP","MLT","EST","LVA","LTU","POL","CZE","SVK","HUN","ROU","BGR",
+        "HRV","SVN","DNK"
+    ]
+    private static let nordicos: Set<String> = ["NOR","SWE","FIN","DNK","ISL"]
+    private static let microestados: Set<String> = ["AND","MCO","SMR","VAT","LIE","MLT"]
+    private static let balcanes: Set<String> = [
+        "SRB","BIH","MNE","ALB","MKD","KOS","SVN","HRV","GRC","BGR","ROU"
+    ]
+
+    private func visitedCount(in group: Set<String>) -> (visited: Int, total: Int) {
+        let mode = CountingMode(rawValue: countingModeRaw) ?? .all
+        let validCodes = group.filter { mode.counts($0) }
+        let visited = visitedCountries.filter { validCodes.contains($0.isoCode) }.count
+        return (visited, validCodes.count)
+    }
+
+    @ViewBuilder
+    private func africaStatsView() -> some View {
+        let sahel     = visitedCount(in: Self.sahel)
+        let norte     = visitedCount(in: Self.norteafrica)
+        let safaris   = visitedCount(in: Self.safaris)
+        let insulares = visitedCount(in: Self.insularesAfrica)
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statTile(title: "Sahel",          visited: sahel.visited,     total: sahel.total,     emoji: "🏜️", group: Self.sahel)
+            statTile(title: "Norte de África",visited: norte.visited,     total: norte.total,     emoji: "🐪", group: Self.norteafrica)
+            statTile(title: "Safaris",        visited: safaris.visited,   total: safaris.total,   emoji: "🦁", group: Self.safaris)
+            statTile(title: "Insulares",      visited: insulares.visited, total: insulares.total, emoji: "🌊", group: Self.insularesAfrica)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func oceaniaStatsView() -> some View {
+        let unaIsla = visitedCount(in: Self.soloUnaIsla)
+        VStack(spacing: 6) {
+            statTile(title: "Solo una isla", visited: unaIsla.visited, total: unaIsla.total, emoji: "🏝️", group: Self.soloUnaIsla)
+                .frame(maxWidth: 180)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func americaStatsView() -> some View {
+        let norte  = visitedCount(in: Self.norteamerica)
+        let centro = visitedCount(in: Self.centroamerica)
+        let sur    = visitedCount(in: Self.sudamerica)
+        let caribe = visitedCount(in: Self.caribe)
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statTile(title: "Norteamérica",   visited: norte.visited,  total: norte.total,  emoji: "🦅", group: Self.norteamerica)
+            statTile(title: "Centroamérica",  visited: centro.visited, total: centro.total, emoji: "🌋", group: Self.centroamerica)
+            statTile(title: "Sudamérica",     visited: sur.visited,    total: sur.total,    emoji: "🌿", group: Self.sudamerica)
+            statTile(title: "Caribe",         visited: caribe.visited, total: caribe.total, emoji: "🏖️", group: Self.caribe)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func medioOrienteStatsView() -> some View {
+        let arabes    = visitedCount(in: Self.paisesArabesMO)
+        let petroleo  = visitedCount(in: Self.petrolerosMO)
+        let historicos = visitedCount(in: Self.historicosMO)
+        let f1        = visitedCount(in: Self.f1MO)
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statTile(title: "Países árabes",  visited: arabes.visited,     total: arabes.total,     emoji: "🕌", group: Self.paisesArabesMO)
+            statTile(title: "Petroleros",     visited: petroleo.visited,   total: petroleo.total,   emoji: "🛢️", group: Self.petrolerosMO)
+            statTile(title: "Históricos",     visited: historicos.visited, total: historicos.total, emoji: "🏛️", group: Self.historicosMO)
+            statTile(title: "F1",             visited: f1.visited,         total: f1.total,         emoji: "🏎️", group: Self.f1MO)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func europaStatsView() -> some View {
+        let ue = visitedCount(in: Self.ue)
+        let nord = visitedCount(in: Self.nordicos)
+        let micro = visitedCount(in: Self.microestados)
+        let balc = visitedCount(in: Self.balcanes)
+
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            statTile(title: "Unión Europea", visited: ue.visited, total: ue.total, emoji: "🇪🇺", group: Self.ue)
+            statTile(title: "Países nórdicos", visited: nord.visited, total: nord.total, emoji: "❄️", group: Self.nordicos)
+            statTile(title: "Microestados", visited: micro.visited, total: micro.total, emoji: "🏰", group: Self.microestados)
+            statTile(title: "Balcanes", visited: balc.visited, total: balc.total, emoji: "⛰️", group: Self.balcanes)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func statTile(title: String, visited: Int, total: Int, emoji: String,
+                           group: Set<String> = []) -> some View {
+        Button {
+            if !group.isEmpty {
+                selectedSubgroup = SubgroupInfo(title: title, emoji: emoji, isoCodes: group)
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Text(emoji)
+                    .font(.title2)
+                Text("\(visited)/\(total)")
+                    .font(.palatino(.title3, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(title)
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Subgroup sheet model
+    struct SubgroupInfo: Identifiable {
+        let id = UUID()
+        let title: String
+        let emoji: String
+        let isoCodes: Set<String>
+    }
+
+            private func renderMap() {
+        isRendering = true
+        let size = CGSize(width: 800, height: 800)
+        let region = selectedZone.region
+
+        let options = MKMapSnapshotter.Options()
+        options.region = region
+        options.size = size
+        options.scale = 2.0
+        options.mapType = .standard
+        options.pointOfInterestFilter = .excludingAll
+        options.showsBuildings = false
+
+        let snapshotter = MKMapSnapshotter(options: options)
+        snapshotter.start { snapshot, error in
+            guard let snapshot else { return }
+
+            let countingMode = CountingMode(rawValue: countingModeRaw) ?? .all
+            let zoneDenominator = selectedZone.denominator(mode: countingMode)
+            // Numerator: only countries that pass the countingMode filter
+            let zoneVisited = filteredCountries.filter { countingMode.counts($0.isoCode) }.count
+            let zoneCounter = "\(zoneVisited)/\(zoneDenominator)"
+
+            let annotations: [(coord: CLLocationCoordinate2D, emoji: String)] = filteredCountries.compactMap { country in
+                guard countingMode.counts(country.isoCode),
+                      let feature = features.first(where: { $0.isoCode == country.isoCode }),
+                      let emoji = feature.flagEmoji else { return nil }
+                let coord = capitalCoord(for: country.isoCode, feature: feature)
+                return (coord, emoji)
+            }
+
+            let renderer = UIGraphicsImageRenderer(size: size)
+            let image = renderer.image { ctx in
+                snapshot.image.draw(at: .zero)
+
+                for ann in annotations {
+                    let point = snapshot.point(for: ann.coord)
+                    guard point.x >= 0 && point.x <= size.width &&
+                          point.y >= 0 && point.y <= size.height else { continue }
+                    drawBalloon(emoji: ann.emoji, at: point, in: ctx.cgContext, imageSize: size)
+                }
+
+                // Contador centrado abajo
+                let text = zoneCounter as NSString
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont(name: "Palatino-Bold", size: 22) ?? .boldSystemFont(ofSize: 22),
+                    .foregroundColor: UIColor.white
+                ]
+                let textSize = text.size(withAttributes: attrs)
+                let pad: CGFloat = 12
+                let bgW = textSize.width + pad * 2
+                let bgX = (size.width - bgW) / 2
+                let bgRect = CGRect(x: bgX, y: size.height - textSize.height - pad * 2 - 16,
+                                    width: bgW, height: textSize.height + pad * 2)
+                let path = UIBezierPath(roundedRect: bgRect, cornerRadius: 10)
+                UIColor.black.withAlphaComponent(0.55).setFill()
+                path.fill()
+                text.draw(at: CGPoint(x: bgRect.minX + pad, y: bgRect.minY + pad), withAttributes: attrs)
+            }
+
+            DispatchQueue.main.async {
+                renderedImage = image
+                isRendering = false
+            }
+        }
+    }
+
+    private func drawBalloon(emoji: String, at point: CGPoint, in ctx: CGContext, imageSize: CGSize) {
+        let label = UILabel()
+        label.text = emoji
+        label.font = .systemFont(ofSize: 20)
+        label.sizeToFit()
+
+        let pad: CGFloat = 5
+        let cornerRadius: CGFloat = 8
+        let tailH: CGFloat = 8
+        let boxW = label.frame.width + pad * 2
+        let boxH = label.frame.height + pad * 2
+        let totalH = boxH + tailH
+
+        // Position: center box above the point
+        let boxX = point.x - boxW / 2
+        let boxY = point.y - totalH
+
+        // Clamp to image bounds
+        let clampedX = min(max(boxX, 2), imageSize.width - boxW - 2)
+        let clampedY = max(boxY, 2)
+
+        // Draw balloon path
+        let rect = CGRect(x: clampedX, y: clampedY, width: boxW, height: boxH)
+        let path = UIBezierPath()
+        // Top-left → top-right (top edge)
+        path.move(to: CGPoint(x: rect.minX + cornerRadius, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: rect.minY))
+        // Top-right corner
+        path.addArc(withCenter: CGPoint(x: rect.maxX - cornerRadius, y: rect.minY + cornerRadius),
+                    radius: cornerRadius, startAngle: -.pi/2, endAngle: 0, clockwise: true)
+        // Right edge down to bottom-right corner start
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        // Bottom-right corner
+        path.addArc(withCenter: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY - cornerRadius),
+                    radius: cornerRadius, startAngle: 0, endAngle: .pi/2, clockwise: true)
+
+        // Bottom edge with tail
+        let tailTipX = min(max(point.x, clampedX + cornerRadius), clampedX + boxW - cornerRadius)
+        path.addLine(to: CGPoint(x: tailTipX + 5, y: rect.maxY))
+        path.addLine(to: CGPoint(x: tailTipX, y: rect.maxY + tailH))
+        path.addLine(to: CGPoint(x: tailTipX - 5, y: rect.maxY))
+
+        // Continue bottom edge to bottom-left corner start
+        path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
+        // Bottom-left corner
+        path.addArc(withCenter: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
+                    radius: cornerRadius, startAngle: .pi/2, endAngle: .pi, clockwise: true)
+        // Left edge up to top-left corner start
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cornerRadius))
+        // Top-left corner
+        path.addArc(withCenter: CGPoint(x: rect.minX + cornerRadius, y: rect.minY + cornerRadius),
+                    radius: cornerRadius, startAngle: .pi, endAngle: -.pi/2, clockwise: true)
+        path.close()
+
+        UIColor.white.setFill()
+        path.fill()
+        UIColor.lightGray.withAlphaComponent(0.5).setStroke()
+        path.lineWidth = 0.8
+        path.stroke()
+
+        // Draw emoji
+        let emojiRect = CGRect(x: clampedX + pad, y: clampedY + pad,
+                               width: label.frame.width, height: label.frame.height)
+        (emoji as NSString).draw(in: emojiRect, withAttributes: [
+            .font: UIFont.systemFont(ofSize: 20)
+        ])
+    }
+}
+
+
+// MARK: - Lista de subgrupo (visitados arriba, pendientes abajo en gris)
+struct SubgroupListSheet: View {
+    let title: String
+    let emoji: String
+    let isoCodes: Set<String>
+    let visitedCountries: [Country]
+    let features: [CountryFeature]
+    let countingModeRaw: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var mode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    private var validCodes: Set<String> {
+        isoCodes.filter { mode.counts($0) }
+    }
+
+    private var visitedIsoCodes: Set<String> {
+        Set(visitedCountries.map { $0.isoCode })
+    }
+
+    private func flagEmoji(for isoCode: String) -> String {
+        features.first(where: { $0.isoCode == isoCode })?.flagEmoji ?? "🌐"
+    }
+
+    private func name(for isoCode: String) -> String {
+        features.first(where: { $0.isoCode == isoCode })?.localizedName ?? isoCode
+    }
+
+    private var visited: [String] {
+        validCodes.filter { visitedIsoCodes.contains($0) }
+            .sorted { name(for: $0) < name(for: $1) }
+    }
+
+    private var pending: [String] {
+        validCodes.filter { !visitedIsoCodes.contains($0) }
+            .sorted { name(for: $0) < name(for: $1) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !visited.isEmpty {
+                    Section(header: Text("Visitados (\(visited.count))")
+                        .font(.palatino(.caption, weight: .bold))) {
+                        ForEach(visited, id: \.self) { iso in
+                            HStack(spacing: 10) {
+                                Text(flagEmoji(for: iso))
+                                    .font(.title3)
+                                Text(name(for: iso))
+                                    .font(.palatino(.body))
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+                if !pending.isEmpty {
+                    Section(header: Text("Pendientes (\(pending.count))")
+                        .font(.palatino(.caption, weight: .bold))
+                        .foregroundStyle(.secondary)) {
+                        ForEach(pending, id: \.self) { iso in
+                            HStack(spacing: 10) {
+                                Text(flagEmoji(for: iso))
+                                    .font(.title3)
+                                    .opacity(0.4)
+                                Text(name(for: iso))
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .navigationTitle("\(emoji) \(title)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
                         .font(.palatino(.body))
                 }
             }
