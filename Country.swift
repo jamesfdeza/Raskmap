@@ -17,6 +17,7 @@ enum CountryStatus: String, Codable, Identifiable {
     case visited     = "visited"     // Rojo
     case wantToVisit = "wantToVisit" // Azul
     case lived       = "lived"       // Verde
+    case bucketList  = "bucketList"  // Naranja
 
     var overlayColor: UIColor {
         ColorThemeManager.shared.uiColor(for: self)
@@ -35,6 +36,7 @@ enum CountryStatus: String, Codable, Identifiable {
         case .visited:     return "✅ Visitados"
         case .wantToVisit: return "🔜 Próximos"
         case .lived:       return "🏠 Vivido"
+        case .bucketList:  return "🧡 Bucket List"
         }
     }
 }
@@ -64,7 +66,8 @@ class Country {
         case .none:        status = .visited
         case .visited:     status = .wantToVisit
         case .wantToVisit: status = .lived
-        case .lived:       status = .none
+        case .lived:       status = .bucketList
+        case .bucketList:  status = .none
         }
     }
 }

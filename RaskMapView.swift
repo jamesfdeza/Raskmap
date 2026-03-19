@@ -8,6 +8,8 @@ struct RaskMapView: UIViewRepresentable {
     var features: [CountryFeature]
     var onCountryTapped: (Country) -> Void
     var highlightedIsoCode: String? = nil
+    var showLived: Bool = true
+    var showBucketList: Bool = true
     var onReady: ((_ center: @escaping (String) -> Void) -> Void)? = nil
 
     func makeUIView(context: Context) -> MKMapView {
@@ -70,6 +72,8 @@ struct RaskMapView: UIViewRepresentable {
 
             let statusSnap = context.coordinator.lastKnownStatus
             let highlightSnap = highlightedIsoCode
+            let showLivedSnap = showLived
+            let showBucketSnap = showBucketList
             DispatchQueue.global(qos: .utility).async { [weak coordinator = context.coordinator] in
                 var built: [(ObjectIdentifier, MKPolygonRenderer)] = []
                 for polygon in allPolygons {
@@ -77,7 +81,7 @@ struct RaskMapView: UIViewRepresentable {
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnap[polygon.isoCode] ?? .none
                     let isHighlighted = polygon.isoCode == highlightSnap
-                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
+                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: showLivedSnap, showBucketList: showBucketSnap)
                     _ = renderer.path
                     built.append((pid, renderer))
                 }
@@ -102,7 +106,7 @@ struct RaskMapView: UIViewRepresentable {
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
                     if let renderer = context.coordinator.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: false)
+                        Self.applyStyle(status: status, to: renderer, highlighted: false, showLived: showLived, showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
                     }
                 }
@@ -114,7 +118,7 @@ struct RaskMapView: UIViewRepresentable {
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
                     if let renderer = context.coordinator.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: true)
+                        Self.applyStyle(status: status, to: renderer, highlighted: true, showLived: showLived, showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
                     }
                 }
@@ -138,7 +142,7 @@ struct RaskMapView: UIViewRepresentable {
             for polygon in feature.polygons {
                 let pid = ObjectIdentifier(polygon)
                 if let renderer = context.coordinator.rendererCache[pid] {
-                    Self.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
+                    Self.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: showLived, showBucketList: showBucketList)
                     renderer.setNeedsDisplay()
                 } else {
                     mapView.removeOverlay(polygon)
@@ -148,13 +152,19 @@ struct RaskMapView: UIViewRepresentable {
         }
     }
 
-    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer, highlighted: Bool = false) {
-        if status == .none {
+    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer, highlighted: Bool = false,
+                            showLived: Bool = true, showBucketList: Bool = true) {
+        let effective: CountryStatus = {
+            if status == .lived      && !showLived      { return .none }
+            if status == .bucketList && !showBucketList { return .none }
+            return status
+        }()
+        if effective == .none {
             renderer.fillColor   = UIColor.clear
             renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
             renderer.lineWidth   = highlighted ? 1.0 : 0
         } else {
-            renderer.fillColor   = status.overlayColor
+            renderer.fillColor   = effective.overlayColor
             renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.black.withAlphaComponent(0.35)
             renderer.lineWidth   = highlighted ? 1.5 : 0.5
         }
@@ -179,7 +189,8 @@ struct RaskMapView: UIViewRepresentable {
             Publishers.MergeMany(
                 theme.$visitedColor.dropFirst().map { _ in () },
                 theme.$wantToVisitColor.dropFirst().map { _ in () },
-                theme.$livedColor.dropFirst().map { _ in () }
+                theme.$livedColor.dropFirst().map { _ in () },
+                theme.$bucketListColor.dropFirst().map { _ in () }
             )
             .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshRendererColors() }
@@ -223,7 +234,7 @@ struct RaskMapView: UIViewRepresentable {
                       ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status
                       ?? .none
             let isHighlighted = polygon.isoCode == lastHighlighted
-            RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
+            RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: parent.showLived, showBucketList: parent.showBucketList)
             rendererCache[pid] = renderer
             return renderer
         }
@@ -278,6 +289,8 @@ struct RaskMapView: UIViewRepresentable {
             let statusSnapshot = lastKnownStatus
             let highlightSnapshot = lastHighlighted
             let cache = rendererCache
+            let showLivedSnap = parent.showLived
+            let showBucketSnap = parent.showBucketList
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 var newRenderers: [(ObjectIdentifier, MKPolygonRenderer)] = []
                 for polygon in toAddPolygons {
@@ -286,7 +299,7 @@ struct RaskMapView: UIViewRepresentable {
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnapshot[polygon.isoCode] ?? .none
                     let isHighlighted = polygon.isoCode == highlightSnapshot
-                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted)
+                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: showLivedSnap, showBucketList: showBucketSnap)
                     _ = renderer.path
                     newRenderers.append((pid, renderer))
                 }

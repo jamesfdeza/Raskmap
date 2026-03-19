@@ -236,10 +236,13 @@ class GeoJSONLoader {
             return MKPolygon(coordinates: simplified, count: simplified.count)
         }
 
+        // Interior polygons (lakes/enclaves) are intentionally omitted:
+        // MKPolygon hole rendering is unreliable and causes visual artefacts
+        // on countries with large interior water bodies (Kazakhstan, etc.)
         let polygon = CountryPolygon(
             coordinates: simplifiedOuter,
             count: simplifiedOuter.count,
-            interiorPolygons: interiorPolygons.isEmpty ? nil : interiorPolygons
+            interiorPolygons: nil
         )
         polygon.countryName = name
         polygon.isoCode = iso

@@ -33,7 +33,9 @@ struct ContentView: View {
     @State private var pendingShowSheet: Bool = false
     @State private var showProfile: Bool = false
     @AppStorage("countingMode") private var countingModeRaw: String = CountingMode.all.rawValue
-    @AppStorage("menuPosition") private var menuPositionRaw: String = "bottom"
+    @AppStorage("menuPosition")    private var menuPositionRaw: String = "bottom"
+    @AppStorage("showLived")      private var showLived: Bool = true
+    @AppStorage("showBucketList") private var showBucketList: Bool = true
     @AppStorage("topGold")   private var topGold:   String = "[]"
     @AppStorage("topSilver") private var topSilver: String = "[]"
     @AppStorage("topBronze") private var topBronze: String = "[]"
@@ -51,7 +53,8 @@ struct ContentView: View {
     // Conteos totales reales (para listas)
     private var visitedCountAll: Int { countries.filter { $0.status == .visited }.count }
     private var wantCountAll: Int    { countries.filter { $0.status == .wantToVisit }.count }
-    private var livedCountAll: Int   { countries.filter { $0.status == .lived }.count }
+    private var livedCountAll: Int      { countries.filter { $0.status == .lived }.count }
+    private var bucketListCountAll: Int { countries.filter { $0.status == .bucketList }.count }
 
     // Conteos filtrados según modo activo (para badges y contador)
     private var visitedCount: Int {
@@ -65,6 +68,10 @@ struct ContentView: View {
     private var livedCount: Int {
         countingMode == .all ? livedCountAll :
         countries.filter { $0.status == .lived && countingMode.counts($0.isoCode) }.count
+    }
+    private var bucketListCount: Int {
+        countingMode == .all ? bucketListCountAll :
+        countries.filter { $0.status == .bucketList && countingMode.counts($0.isoCode) }.count
     }
 
     private var sortedFeatures: [CountryFeature] {
@@ -112,6 +119,8 @@ struct ContentView: View {
                     handleCountryTap(country)
                 },
                 highlightedIsoCode: highlightedIsoCode,
+                showLived: showLived,
+                showBucketList: showBucketList,
                 onReady: { centerFn in
                     mapStore.centerOnCountry = centerFn
                 }
@@ -143,12 +152,18 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         
                         HStack(spacing: 4) {
-                            StatBadge(value: visitedCount, label: "Visitados",  color: colorTheme.visitedColor)
+                            StatBadge(value: visitedCount, label: "Visitados", color: colorTheme.visitedColor)
                                 .onTapGesture { statusListFilter = .visited }
-                            StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
+                            if showBucketList {
+                                StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
+                                    .onTapGesture { statusListFilter = .bucketList }
+                            }
+                            StatBadge(value: wantCount, label: "Próximos", color: colorTheme.wantToVisitColor)
                                 .onTapGesture { statusListFilter = .wantToVisit }
-                            StatBadge(value: livedCount,   label: "Vivido",    color: colorTheme.livedColor)
-                                .onTapGesture { statusListFilter = .lived }
+                            if showLived {
+                                StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
+                                    .onTapGesture { statusListFilter = .lived }
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -159,7 +174,7 @@ struct ContentView: View {
 
                     // Fila: contador izquierda + lupa derecha
                     HStack(alignment: .top, spacing: 8) {
-                        Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
+                        Text("\(visitedCount + (showLived ? livedCount : 0)) / \(countingMode.denominator)")
                             .font(.palatino(.title3, weight: .bold))
                             .foregroundStyle(.primary)
                             .padding(.horizontal, 14)
@@ -182,7 +197,7 @@ struct ContentView: View {
                 VStack(spacing: 6) {
                     // Fila intermedia: contador países (izq) + lupa (der)
                     HStack(alignment: .bottom, spacing: 8) {
-                        Text("\(visitedCount + livedCount) / \(countingMode.denominator)")
+                        Text("\(visitedCount + (showLived ? livedCount : 0)) / \(countingMode.denominator)")
                             .font(.palatino(.title3, weight: .bold))
                             .foregroundStyle(.primary)
                             .padding(.horizontal, 14)
@@ -219,12 +234,18 @@ struct ContentView: View {
                         .buttonStyle(.plain)
                         Spacer()
                         HStack(spacing: 4) {
-                            StatBadge(value: visitedCount, label: "Visitados",  color: colorTheme.visitedColor)
+                            StatBadge(value: visitedCount, label: "Visitados", color: colorTheme.visitedColor)
                                 .onTapGesture { statusListFilter = .visited }
-                            StatBadge(value: wantCount,    label: "Próximos",  color: colorTheme.wantToVisitColor)
+                            if showBucketList {
+                                StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
+                                    .onTapGesture { statusListFilter = .bucketList }
+                            }
+                            StatBadge(value: wantCount, label: "Próximos", color: colorTheme.wantToVisitColor)
                                 .onTapGesture { statusListFilter = .wantToVisit }
-                            StatBadge(value: livedCount,   label: "Vivido",    color: colorTheme.livedColor)
-                                .onTapGesture { statusListFilter = .lived }
+                            if showLived {
+                                StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
+                                    .onTapGesture { statusListFilter = .lived }
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -251,7 +272,9 @@ struct ContentView: View {
                 onDismiss: {
                     highlightedIsoCode = nil
                     selectedCountry = nil
-                }
+                },
+                showLived: showLived,
+                showBucketList: showBucketList
             )
             .presentationDetents([.fraction(0.40)])
             .presentationDragIndicator(.visible)
@@ -377,7 +400,7 @@ struct ContentView: View {
         .sheet(isPresented: $showProfile) {
             let visitedFlags: Set<String> = Set(
                 countries
-                    .filter { $0.status == .visited || $0.status == .lived }
+                    .filter { [.visited, .lived, .bucketList].contains($0.status) }
                     .compactMap { country in
                         features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
                     }
@@ -387,13 +410,21 @@ struct ContentView: View {
                 profileImage: $profileImage,
                 countingModeRaw: $countingModeRaw,
                 menuPositionRaw: $menuPositionRaw,
+                showLived: $showLived,
+                showBucketList: $showBucketList,
+                onClearStatus: { status in
+                    for country in countries where country.status == status {
+                        country.status = .none
+                    }
+                    try? modelContext.save()
+                },
                 topGold: $topGold,
                 topSilver: $topSilver,
                 topBronze: $topBronze,
                 topTable: $topTable,
                 visitedFlags: visitedFlags,
                 allFeatures: features,
-                visitedIsoCodes: Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
+                visitedIsoCodes: Set(countries.filter { [.visited, .lived, .bucketList].contains($0.status) }.map { $0.isoCode })
             )
         }
         .onChange(of: profileImage) {
@@ -534,6 +565,8 @@ struct CountryBottomSheet: View {
     let flagEmoji: String?
     let onStatusChange: (CountryStatus) -> Void
     let onDismiss: () -> Void
+    var showLived: Bool = true
+    var showBucketList: Bool = true
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @State private var showRemoveConfirm = false
@@ -548,7 +581,7 @@ struct CountryBottomSheet: View {
                 }
             }
             .font(.palatino(.title2, weight: .bold))
-            .padding(.top, 36)
+            .padding(.top, 72)
 
             VStack(spacing: 10) {
                 ActionButton(
@@ -569,15 +602,28 @@ struct CountryBottomSheet: View {
                         else { onStatusChange(.wantToVisit) }
                     }
                 )
-                ActionButton(
-                    label: "🏠 He vivido aquí",
-                    color: colorTheme.livedColor,
-                    isSelected: country.status == .lived,
-                    action: {
-                        if country.status == .lived { showRemoveConfirm = true }
-                        else { onStatusChange(.lived) }
-                    }
-                )
+                if showBucketList {
+                    ActionButton(
+                        label: "🧡 Bucket List",
+                        color: colorTheme.bucketListColor,
+                        isSelected: country.status == .bucketList,
+                        action: {
+                            if country.status == .bucketList { showRemoveConfirm = true }
+                            else { onStatusChange(.bucketList) }
+                        }
+                    )
+                }
+                if showLived {
+                    ActionButton(
+                        label: "🏠 He vivido aquí",
+                        color: colorTheme.livedColor,
+                        isSelected: country.status == .lived,
+                        action: {
+                            if country.status == .lived { showRemoveConfirm = true }
+                            else { onStatusChange(.lived) }
+                        }
+                    )
+                }
                 Divider()
                     .padding(.top, 14)
                 Button("✕  Cerrar") {
@@ -782,6 +828,9 @@ struct ProfileSheet: View {
     @Binding var profileImage: UIImage?
     @Binding var countingModeRaw: String
     @Binding var menuPositionRaw: String
+    @Binding var showLived: Bool
+    @Binding var showBucketList: Bool
+    var onClearStatus: (CountryStatus) -> Void = { _ in }
     @Binding var topGold: String
     @Binding var topSilver: String
     @Binding var topBronze: String
@@ -1037,7 +1086,10 @@ struct ProfileSheet: View {
         .sheet(isPresented: $showSettings) {
             SettingsSheet(
                 countingModeRaw: $countingModeRaw,
-                menuPositionRaw: $menuPositionRaw
+                menuPositionRaw: $menuPositionRaw,
+                showLived: $showLived,
+                showBucketList: $showBucketList,
+                onClearStatus: onClearStatus
             )
             .environmentObject(colorTheme)
         }
@@ -1048,6 +1100,12 @@ struct ProfileSheet: View {
 struct SettingsSheet: View {
     @Binding var countingModeRaw: String
     @Binding var menuPositionRaw: String
+    @Binding var showLived: Bool
+    @Binding var showBucketList: Bool
+    var onClearStatus: (CountryStatus) -> Void = { _ in }
+
+    @State private var pendingClear: CountryStatus? = nil
+    @State private var isConfirming: Bool = false
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @Environment(\.dismiss) private var dismiss
@@ -1118,6 +1176,63 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
 
+                    // Visibilidad de categorías
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Mostrar categorías:")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+
+                        VStack(spacing: 0) {
+                            // Bucket List toggle manual (sin onChange para evitar bucles)
+                            Button {
+                                if showBucketList { pendingClear = .bucketList }
+                                else { showBucketList = true }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Circle()
+                                        .fill(colorTheme.bucketListColor)
+                                        .frame(width: 14, height: 14)
+                                    Text("Bucket List")
+                                        .font(.palatino(.body))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Toggle("", isOn: .constant(showBucketList))
+                                        .labelsHidden()
+                                        .tint(.blue)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+
+                            Divider().padding(.leading, 16)
+
+                            // Vivido toggle manual
+                            Button {
+                                if showLived { pendingClear = .lived }
+                                else { showLived = true }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Circle()
+                                        .fill(colorTheme.livedColor)
+                                        .frame(width: 14, height: 14)
+                                    Text("Vivido")
+                                        .font(.palatino(.body))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Toggle("", isOn: .constant(showLived))
+                                        .labelsHidden()
+                                        .tint(.blue)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                        }
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.horizontal, 24)
+
                     // Colores
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Colores")
@@ -1126,11 +1241,13 @@ struct SettingsSheet: View {
                             .padding(.horizontal, 24)
 
                         VStack(spacing: 0) {
-                            ColorPickerRow(label: "Visitado",  color: $colorTheme.visitedColor)
+                            ColorPickerRow(label: "Visitado",    color: $colorTheme.visitedColor)
                             Divider().padding(.leading, 56)
-                            ColorPickerRow(label: "Próximo",   color: $colorTheme.wantToVisitColor)
+                            ColorPickerRow(label: "Bucket List", color: $colorTheme.bucketListColor)
                             Divider().padding(.leading, 56)
-                            ColorPickerRow(label: "He vivido", color: $colorTheme.livedColor)
+                            ColorPickerRow(label: "Próximo",     color: $colorTheme.wantToVisitColor)
+                            Divider().padding(.leading, 56)
+                            ColorPickerRow(label: "Vivido",      color: $colorTheme.livedColor)
                         }
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 24)
@@ -1163,6 +1280,30 @@ struct SettingsSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }
                         .font(.palatino(.body))
+                }
+            }
+            .confirmationDialog(
+                "¿Eliminar datos?",
+                isPresented: Binding(
+                    get: { pendingClear != nil },
+                    set: { if !$0 { pendingClear = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Eliminar", role: .destructive) {
+                    if let status = pendingClear {
+                        if status == .lived { showLived = false }
+                        if status == .bucketList { showBucketList = false }
+                        onClearStatus(status)
+                    }
+                    pendingClear = nil
+                }
+                Button("Cancelar", role: .cancel) {
+                    pendingClear = nil
+                }
+            } message: {
+                if let status = pendingClear {
+                    Text("Se eliminarán todos los países de \(status == .lived ? "Vivido" : "Bucket List"). Esta acción no se puede deshacer.")
                 }
             }
             .overlay {
