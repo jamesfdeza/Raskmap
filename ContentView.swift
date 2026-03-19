@@ -400,7 +400,7 @@ struct ContentView: View {
         .sheet(isPresented: $showProfile) {
             let visitedFlags: Set<String> = Set(
                 countries
-                    .filter { [.visited, .lived, .bucketList].contains($0.status) }
+                    .filter { $0.status == .visited || $0.status == .lived }
                     .compactMap { country in
                         features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
                     }
@@ -424,7 +424,7 @@ struct ContentView: View {
                 topTable: $topTable,
                 visitedFlags: visitedFlags,
                 allFeatures: features,
-                visitedIsoCodes: Set(countries.filter { [.visited, .lived, .bucketList].contains($0.status) }.map { $0.isoCode })
+                visitedIsoCodes: Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
             )
         }
         .onChange(of: profileImage) {
