@@ -33,7 +33,7 @@ struct RaskmapApp: App {
     @State private var contentReady: Bool = false
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Country.self])
+        let schema = Schema([Country.self, Trip.self])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false

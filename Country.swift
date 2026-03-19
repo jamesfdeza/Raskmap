@@ -48,7 +48,9 @@ class Country {
     var name: String        // Nombre del país (ej: "Spain")
     var isoCode: String     // Código ISO A3 (ej: "ESP")
     var statusRaw: String   // Guardamos el rawValue del enum como String
-    var plannedDate: Date?  // Fecha planificada para próximos
+    var plannedDate: Date?     // Fecha desde (inicio del viaje)
+    var plannedDateTo: Date?   // Fecha hasta (fin del viaje)
+    var transport: String?     // Medio de transporte
     var visitCount: Int = 0   // Número de veces visitado
 
     // Propiedad calculada para trabajar con el enum (como un getter/setter en Java)
@@ -57,11 +59,15 @@ class Country {
         set { statusRaw = newValue.rawValue }
     }
 
-    init(name: String, isoCode: String, status: CountryStatus = .none, plannedDate: Date? = nil, visitCount: Int = 0) {
+    init(name: String, isoCode: String, status: CountryStatus = .none,
+         plannedDate: Date? = nil, plannedDateTo: Date? = nil,
+         transport: String? = nil, visitCount: Int = 0) {
         self.name = name
         self.isoCode = isoCode
         self.statusRaw = status.rawValue
         self.plannedDate = plannedDate
+        self.plannedDateTo = plannedDateTo
+        self.transport = transport
         self.visitCount = visitCount
     }
     

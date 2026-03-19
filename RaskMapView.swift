@@ -45,15 +45,27 @@ struct RaskMapView: UIViewRepresentable {
         onReady?({ [weak mapView, weak coordinator] isoCode in
             guard let mapView, let coordinator,
                   let feature = coordinator.parent.features.first(where: { $0.isoCode == isoCode }) else { return }
+
+            // For very large countries, cap zoom and use custom center if available
             let rect = feature.boundingMapRect
-            let padded = rect.insetBy(dx: -rect.size.width * 0.5, dy: -rect.size.height * 0.5)
-            let minSize = MKMapSize(width: 13_000_000, height: 13_000_000)
-            let finalRect = MKMapRect(
-                x: padded.midX - max(padded.size.width,  minSize.width)  / 2,
-                y: padded.midY - max(padded.size.height, minSize.height) / 2,
-                width:  max(padded.size.width,  minSize.width),
-                height: max(padded.size.height, minSize.height))
-            mapView.setRegion(MKCoordinateRegion(finalRect), animated: true)
+            let maxSpanDegrees = 40.0
+            let region = MKCoordinateRegion(rect)
+            let cappedSpan = MKCoordinateSpan(
+                latitudeDelta:  min(region.span.latitudeDelta  * 1.5, maxSpanDegrees),
+                longitudeDelta: min(region.span.longitudeDelta * 1.5, maxSpanDegrees)
+            )
+            // Use custom center for oversized countries
+            let customCenters: [String: CLLocationCoordinate2D] = [
+                "RUS": CLLocationCoordinate2D(latitude: 55.75, longitude: 37.62), // Moscow
+                "CAN": CLLocationCoordinate2D(latitude: 56.13, longitude: -106.35),
+                "USA": CLLocationCoordinate2D(latitude: 38.90, longitude: -97.00),
+                "BRA": CLLocationCoordinate2D(latitude: -14.24, longitude: -51.93),
+                "AUS": CLLocationCoordinate2D(latitude: -25.27, longitude: 133.78),
+                "CHN": CLLocationCoordinate2D(latitude: 35.86, longitude: 104.19),
+                "GRL": CLLocationCoordinate2D(latitude: 71.71, longitude: -42.60),
+            ]
+            let center = customCenters[isoCode] ?? region.center
+            mapView.setRegion(MKCoordinateRegion(center: center, span: cappedSpan), animated: true)
         })
 
         return mapView
@@ -390,14 +402,20 @@ struct RaskMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {}
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            if annotation is MKUserLocation {
-                // Use default Apple Maps user location appearance (with accuracy ring)
-                return nil
-            }
-            return nil
+            guard let userLoc = annotation as? MKUserLocation else { return nil }
+            userLoc.title = ""
+            userLoc.subtitle = ""
+            let id = "userLocationView"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKUserLocationView
+                ?? MKUserLocationView(annotation: userLoc, reuseIdentifier: id)
+            view.canShowCallout = false
+            return view
         }
 
-        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {}
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            userLocation.title = ""
+            userLocation.subtitle = ""
+        }
 
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
