@@ -36,7 +36,7 @@ enum CountryStatus: String, Codable, Identifiable {
         case .visited:     return "✅ Visitados"
         case .wantToVisit: return "🔜 Próximos"
         case .lived:       return "🏠 Vivido"
-        case .bucketList:  return "🧡 Bucket List"
+        case .bucketList:  return "📝 Bucket List"
         }
     }
 }

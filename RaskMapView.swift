@@ -21,6 +21,7 @@ struct RaskMapView: UIViewRepresentable {
         mapView.mapType = .standard
         mapView.showsUserLocation = false
         mapView.isRotateEnabled = false
+        mapView.isPitchEnabled = false
         mapView.pointOfInterestFilter = .excludingAll
         mapView.showsTraffic = false
 
@@ -28,9 +29,8 @@ struct RaskMapView: UIViewRepresentable {
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
             span: MKCoordinateSpan(latitudeDelta: 140, longitudeDelta: 180)
         ), animated: false)
-        let maxZoom: CLLocationDistance = 25_000_000   // ~20,000 km (impide ver demasiado “mundo” por rendimiento ya se verá)
-          mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: maxZoom)
-        
+        mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: 25_000_000)
+
         let tap = InstantTapGestureRecognizer(target: context.coordinator,
                                               action: #selector(Coordinator.handleTap(_:)))
         tap.delegate = context.coordinator
@@ -43,7 +43,6 @@ struct RaskMapView: UIViewRepresentable {
         onReady?({ [weak mapView, weak coordinator] isoCode in
             guard let mapView, let coordinator,
                   let feature = coordinator.parent.features.first(where: { $0.isoCode == isoCode }) else { return }
-            // Ajustar la región para encajar TODO el país (no solo el primer polígono)
             let rect = feature.boundingMapRect
             let padded = rect.insetBy(dx: -rect.size.width * 0.5, dy: -rect.size.height * 0.5)
             let minSize = MKMapSize(width: 13_000_000, height: 13_000_000)
@@ -59,100 +58,174 @@ struct RaskMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
-        // Siempre actualizar parent para que el coordinator tenga datos frescos
-        context.coordinator.parent = self
+        let coord = context.coordinator
+        coord.parent = self
 
-        // ── 1. Añadir overlays la primera vez que llegan los features ──
-        if mapView.overlays.isEmpty, !features.isEmpty {
-            context.coordinator.lastKnownStatus =
-                Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
-            context.coordinator.lastHighlighted = highlightedIsoCode
+        guard !features.isEmpty else { return }
+
+        // ── 1. Primera carga ──
+        if !coord.initialLoadDone {
+            coord.initialLoadDone = true
+            let statusMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+            coord.lastKnownStatus = statusMap
+            coord.lastHighlighted = highlightedIsoCode
+
             let allPolygons = features.flatMap { $0.polygons }
-            mapView.addOverlays(allPolygons, level: .aboveRoads)
-
-            let statusSnap = context.coordinator.lastKnownStatus
+            let statusSnap = statusMap
             let highlightSnap = highlightedIsoCode
             let showLivedSnap = showLived
             let showBucketSnap = showBucketList
-            DispatchQueue.global(qos: .utility).async { [weak coordinator = context.coordinator] in
+
+            // Precalentar CGPaths en background — solo para países con color (los .none no necesitan path)
+            let coloredIsoCodes = Self.coloredIsoCodes(from: statusMap,
+                                                        showLived: showLivedSnap,
+                                                        showBucketList: showBucketSnap)
+            let coloredPolygons = allPolygons.filter { coloredIsoCodes.contains($0.isoCode) }
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak coordinator = coord] in
                 var built: [(ObjectIdentifier, MKPolygonRenderer)] = []
-                for polygon in allPolygons {
+                for polygon in coloredPolygons {
                     let pid = ObjectIdentifier(polygon)
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnap[polygon.isoCode] ?? .none
-                    let isHighlighted = polygon.isoCode == highlightSnap
-                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: showLivedSnap, showBucketList: showBucketSnap)
+                    RaskMapView.applyStyle(status: status, to: renderer,
+                                          highlighted: polygon.isoCode == highlightSnap,
+                                          showLived: showLivedSnap, showBucketList: showBucketSnap)
                     _ = renderer.path
                     built.append((pid, renderer))
                 }
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak coordinator] in
                     guard let coordinator else { return }
                     for (pid, r) in built where coordinator.rendererCache[pid] == nil {
                         coordinator.rendererCache[pid] = r
                     }
                 }
             }
+
+            // Añadir TODOS los overlays — necesario para tap y highlight en países .none
+            mapView.addOverlays(allPolygons, level: .aboveRoads)
+            return
         }
 
         // ── 2. Actualizar highlight ──
         let newHighlight = highlightedIsoCode
-        let oldHighlight = context.coordinator.lastHighlighted
+        let oldHighlight = coord.lastHighlighted
         if newHighlight != oldHighlight {
-            context.coordinator.lastHighlighted = newHighlight
-            // Quitar highlight del anterior
+            coord.lastHighlighted = newHighlight
             if let old = oldHighlight,
                let feature = features.first(where: { $0.isoCode == old }) {
-                let status = context.coordinator.lastKnownStatus[old] ?? .none
+                let status = coord.lastKnownStatus[old] ?? .none
                 for polygon in feature.polygons {
-                    let pid = ObjectIdentifier(polygon)
-                    if let renderer = context.coordinator.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: false, showLived: showLived, showBucketList: showBucketList)
+                    if let renderer = coord.rendererCache[ObjectIdentifier(polygon)] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: false,
+                                        showLived: showLived, showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
                     }
                 }
+                // País .none — el overlay sigue en el mapa, solo actualizar renderer
+                if status == .none {
+                    for polygon in feature.polygons {
+                        coord.rendererCache.removeValue(forKey: ObjectIdentifier(polygon))
+                    }
+                }
             }
-            // Aplicar highlight al nuevo
             if let new = newHighlight,
                let feature = features.first(where: { $0.isoCode == new }) {
-                let status = context.coordinator.lastKnownStatus[new] ?? .none
+                let status = coord.lastKnownStatus[new] ?? .none
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
-                    if let renderer = context.coordinator.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: true, showLived: showLived, showBucketList: showBucketList)
+                    // Si es .none, añadir temporalmente para mostrar el borde
+                    if coord.rendererCache[pid] == nil {
+                        let renderer = MKPolygonRenderer(polygon: polygon)
+                        Self.applyStyle(status: status, to: renderer, highlighted: true,
+                                        showLived: showLived, showBucketList: showBucketList)
+                        _ = renderer.path
+                        coord.rendererCache[pid] = renderer
+                        // Overlay ya existe — solo invalidar para que MapKit pida el renderer
+                        mapView.removeOverlay(polygon)
+                        mapView.addOverlay(polygon, level: .aboveRoads)
+                    } else if let renderer = coord.rendererCache[pid] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: true,
+                                        showLived: showLived, showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
                     }
                 }
             }
         }
 
-        // ── 3. Actualizaciones de status ──
+        // ── 3. Actualizaciones de status — solo diff ──
         let newMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
-        let oldMap = context.coordinator.lastKnownStatus
+        let oldMap = coord.lastKnownStatus
         guard newMap != oldMap else { return }
-        context.coordinator.lastKnownStatus = newMap
+        coord.lastKnownStatus = newMap
 
         var changed = Set<String>()
         for (iso, s) in newMap where oldMap[iso] != s { changed.insert(iso) }
         for iso in oldMap.keys where newMap[iso] == nil { changed.insert(iso) }
 
+        let showLivedSnap = showLived
+        let showBucketSnap = showBucketList
+
         for isoCode in changed {
             guard let feature = features.first(where: { $0.isoCode == isoCode }) else { continue }
-            let status = newMap[isoCode] ?? .none
-            let isHighlighted = isoCode == context.coordinator.lastHighlighted
+            let newStatus = newMap[isoCode] ?? .none
+            let oldStatus = oldMap[isoCode] ?? .none
+            let isHighlighted = isoCode == coord.lastHighlighted
+            let isNowColored = Self.isColored(newStatus, showLived: showLivedSnap, showBucketList: showBucketSnap)
+            let wasColored   = Self.isColored(oldStatus, showLived: showLivedSnap, showBucketList: showBucketSnap)
+
             for polygon in feature.polygons {
                 let pid = ObjectIdentifier(polygon)
-                if let renderer = context.coordinator.rendererCache[pid] {
-                    Self.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: showLived, showBucketList: showBucketList)
-                    renderer.setNeedsDisplay()
-                } else {
+                if isNowColored {
+                    if let renderer = coord.rendererCache[pid] {
+                        // Ya existe — solo actualizar color
+                        Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
+                                        showLived: showLivedSnap, showBucketList: showBucketSnap)
+                        renderer.setNeedsDisplay()
+                    } else {
+                        // Añadir nuevo overlay para este país
+                        let renderer = MKPolygonRenderer(polygon: polygon)
+                        Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
+                                        showLived: showLivedSnap, showBucketList: showBucketSnap)
+                        coord.rendererCache[pid] = renderer
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            _ = renderer.path
+                            DispatchQueue.main.async { mapView.addOverlay(polygon, level: .aboveRoads) }
+                        }
+                    }
+                } else if wasColored && !isHighlighted {
+                    // Pasó a .none — quitar del cache para que MapKit pida renderer limpio
+                    coord.rendererCache.removeValue(forKey: pid)
                     mapView.removeOverlay(polygon)
                     mapView.addOverlay(polygon, level: .aboveRoads)
+                } else if let renderer = coord.rendererCache[pid] {
+                    Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
+                                    showLived: showLivedSnap, showBucketList: showBucketSnap)
+                    renderer.setNeedsDisplay()
                 }
             }
         }
     }
 
-    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer, highlighted: Bool = false,
+    // ── Helpers ──
+
+    private static func isColored(_ status: CountryStatus, showLived: Bool, showBucketList: Bool) -> Bool {
+        switch status {
+        case .none:        return false
+        case .visited:     return true
+        case .wantToVisit: return true
+        case .lived:       return showLived
+        case .bucketList:  return showBucketList
+        }
+    }
+
+    private static func coloredIsoCodes(from statusMap: [String: CountryStatus],
+                                         showLived: Bool, showBucketList: Bool) -> Set<String> {
+        Set(statusMap.filter { isColored($0.value, showLived: showLived, showBucketList: showBucketList) }.keys)
+    }
+
+    static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer,
+                            highlighted: Bool = false,
                             showLived: Bool = true, showBucketList: Bool = true) {
         let effective: CountryStatus = {
             if status == .lived      && !showLived      { return .none }
@@ -165,7 +238,9 @@ struct RaskMapView: UIViewRepresentable {
             renderer.lineWidth   = highlighted ? 1.0 : 0
         } else {
             renderer.fillColor   = effective.overlayColor
-            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.black.withAlphaComponent(0.35)
+            renderer.strokeColor = highlighted
+                ? UIColor.black.withAlphaComponent(0.85)
+                : UIColor.black.withAlphaComponent(0.35)
             renderer.lineWidth   = highlighted ? 1.5 : 0.5
         }
     }
@@ -178,8 +253,8 @@ struct RaskMapView: UIViewRepresentable {
         var rendererCache: [ObjectIdentifier: MKPolygonRenderer] = [:]
         var lastKnownStatus: [String: CountryStatus] = [:]
         var lastHighlighted: String? = nil
+        var initialLoadDone = false
         private var colorCancellables = Set<AnyCancellable>()
-        private var scrollWorkItem: DispatchWorkItem?
         weak var mapView: MKMapView?
 
         init(parent: RaskMapView) { self.parent = parent }
@@ -198,21 +273,16 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         func refreshRendererColors() {
-            guard let mapView else { return }
-            for overlay in mapView.overlays {
-                guard let polygon = overlay as? CountryPolygon,
-                      let renderer = rendererCache[ObjectIdentifier(polygon)] else { continue }
+            for (_, renderer) in rendererCache {
+                guard let polygon = renderer.polygon as? CountryPolygon else { continue }
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
                 guard status != .none else { continue }
                 let isHighlighted = polygon.isoCode == lastHighlighted
                 renderer.fillColor = status.overlayColor
-                if isHighlighted {
-                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.85)
-                    renderer.lineWidth = 1.5
-                } else {
-                    renderer.strokeColor = UIColor.black.withAlphaComponent(0.35)
-                    renderer.lineWidth = 0.5
-                }
+                renderer.strokeColor = isHighlighted
+                    ? UIColor.black.withAlphaComponent(0.85)
+                    : UIColor.black.withAlphaComponent(0.35)
+                renderer.lineWidth = isHighlighted ? 1.5 : 0.5
                 renderer.setNeedsDisplay()
             }
         }
@@ -228,90 +298,21 @@ struct RaskMapView: UIViewRepresentable {
             }
             let pid = ObjectIdentifier(polygon)
             if let cached = rendererCache[pid] { return cached }
-
+            // Fallback — debería estar en cache desde el precalentado
             let renderer = MKPolygonRenderer(polygon: polygon)
             let status = lastKnownStatus[polygon.isoCode]
                       ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status
                       ?? .none
-            let isHighlighted = polygon.isoCode == lastHighlighted
-            RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: parent.showLived, showBucketList: parent.showBucketList)
+            RaskMapView.applyStyle(status: status, to: renderer,
+                                   highlighted: polygon.isoCode == lastHighlighted,
+                                   showLived: parent.showLived,
+                                   showBucketList: parent.showBucketList)
             rendererCache[pid] = renderer
             return renderer
         }
 
-        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            scrollWorkItem?.cancel()
-        }
-
-        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            scrollWorkItem?.cancel()
-            let item = DispatchWorkItem { [weak self, weak mapView] in
-                guard let self, let mapView else { return }
-                self.updateVisibleOverlays(in: mapView)
-            }
-            scrollWorkItem = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
-        }
-
-        func updateVisibleOverlays(in mapView: MKMapView) {
-            let visibleRect = mapView.visibleMapRect
-            // Expandir ligeramente el rect para pre-cargar polígonos cercanos
-            let expandedRect = visibleRect.insetBy(dx: -visibleRect.size.width * 0.3,
-                                                   dy: -visibleRect.size.height * 0.3)
-            let markedIsoCodes = Set(lastKnownStatus.filter { $0.value != .none }.keys)
-
-            var target = Set<ObjectIdentifier>()
-            var toAddPolygons: [CountryPolygon] = []
-            for feature in parent.features {
-                if markedIsoCodes.contains(feature.isoCode) ||
-                   feature.boundingMapRect.intersects(expandedRect) {
-                    for p in feature.polygons { target.insert(ObjectIdentifier(p)) }
-                }
-            }
-
-            let current = mapView.overlays.compactMap { $0 as? CountryPolygon }
-            let currentIDs = Set(current.map { ObjectIdentifier($0) })
-
-            let toRemove = current.filter { !target.contains(ObjectIdentifier($0)) }
-            if !toRemove.isEmpty { mapView.removeOverlays(toRemove) }
-
-            let toAddIDs = target.subtracting(currentIDs)
-            guard !toAddIDs.isEmpty else { return }
-
-            for feature in parent.features {
-                for p in feature.polygons where toAddIDs.contains(ObjectIdentifier(p)) {
-                    toAddPolygons.append(p)
-                }
-            }
-
-            // Pre-crear renderers y forzar el CGPath en background
-            // para que cuando MapKit los pida en el render loop ya estén listos
-            let statusSnapshot = lastKnownStatus
-            let highlightSnapshot = lastHighlighted
-            let cache = rendererCache
-            let showLivedSnap = parent.showLived
-            let showBucketSnap = parent.showBucketList
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                var newRenderers: [(ObjectIdentifier, MKPolygonRenderer)] = []
-                for polygon in toAddPolygons {
-                    let pid = ObjectIdentifier(polygon)
-                    guard cache[pid] == nil else { continue }
-                    let renderer = MKPolygonRenderer(polygon: polygon)
-                    let status = statusSnapshot[polygon.isoCode] ?? .none
-                    let isHighlighted = polygon.isoCode == highlightSnapshot
-                    RaskMapView.applyStyle(status: status, to: renderer, highlighted: isHighlighted, showLived: showLivedSnap, showBucketList: showBucketSnap)
-                    _ = renderer.path
-                    newRenderers.append((pid, renderer))
-                }
-                DispatchQueue.main.async { [weak self, weak mapView] in
-                    guard let self, let mapView else { return }
-                    for (pid, renderer) in newRenderers {
-                        self.rendererCache[pid] = renderer
-                    }
-                    mapView.addOverlays(toAddPolygons, level: .aboveRoads)
-                }
-            }
-        }
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {}
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {}
 
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
@@ -331,9 +332,17 @@ struct RaskMapView: UIViewRepresentable {
 
             for country in candidates {
                 for polygon in country.polygons {
-                    guard let r = mapView.renderer(for: polygon) as? MKPolygonRenderer,
-                          r.path?.contains(r.point(for: tapPoint)) == true else { continue }
-                    // Buscar en parent.countries (siempre fresco)
+                    // Use cached renderer if available, otherwise create a temporary one for hit-test
+                    let pid = ObjectIdentifier(polygon)
+                    let renderer: MKPolygonRenderer
+                    if let cached = rendererCache[pid] {
+                        renderer = cached
+                    } else {
+                        renderer = MKPolygonRenderer(polygon: polygon)
+                        // Force path computation synchronously for hit-test
+                        renderer.invalidatePath()
+                    }
+                    guard renderer.path?.contains(renderer.point(for: tapPoint)) == true else { continue }
                     let result = parent.countries.first { $0.isoCode == polygon.isoCode }
                               ?? Country(name: polygon.countryName, isoCode: polygon.isoCode)
                     parent.onCountryTapped(result)

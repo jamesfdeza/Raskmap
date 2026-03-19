@@ -604,7 +604,7 @@ struct CountryBottomSheet: View {
                 )
                 if showBucketList {
                     ActionButton(
-                        label: "🧡 Bucket List",
+                        label: "📝 Bucket List",
                         color: colorTheme.bucketListColor,
                         isSelected: country.status == .bucketList,
                         action: {
@@ -881,30 +881,41 @@ struct ProfileSheet: View {
                         "DNK","EST","FIN","FRA","DEU","GRC","HUN","ISL","IRL","ITA",
                         "LVA","LIE","LTU","LUX","MLT","MDA","MCO","MNE","NLD","MKD",
                         "NOR","POL","PRT","ROU","RUS","SMR","SRB","SVK","SVN","ESP",
-                        "SWE","CHE","UKR","GBR","VAT","KOS","XKX"]
+                        "SWE","CHE","UKR","GBR","VAT","KOS","XKX",
+                        // Territorios con bandera
+                        "ALD","FRO","GIB","GGY","IMN","JEY"]
             case .asia:
                 return ["AFG","ARM","AZE","BGD","BTN","BRN","KHM","CHN","GEO","IND",
                         "IDN","JPN","KAZ","PRK","KOR","KGZ","LAO","MYS","MDV","MNG",
                         "MMR","NPL","PAK","PHL","SGP","LKA","TWN","TJK","THA","TLS",
-                        "TKM","UZB","VNM"]
+                        "TKM","UZB","VNM",
+                        // Territorios con bandera
+                        "HKG","MAC","IOT"]
             case .medioOriente:
-                return ["BHR","IRN","IRQ","ISR","JOR","KWT","LBN","OMN","PSE",
+                return ["BHR","IRN","IRQ","ISR","JOR","KWT","LBN","OMN","PSE","PSX",
                         "QAT","SAU","SYR","TUR","ARE","YEM"]
             case .africa:
                 return ["DZA","AGO","BEN","BWA","BFA","BDI","CPV","CMR","CAF","TCD",
                         "COM","COD","COG","CIV","DJI","EGY","GNQ","ERI","ETH","GAB",
                         "GMB","GHA","GIN","GNB","KEN","LSO","LBR","LBY","MDG","MWI",
                         "MLI","MRT","MUS","MAR","MOZ","NAM","NER","NGA","RWA","STP",
-                        "SEN","SYC","SLE","SOM","ZAF","SSD","SDN","SWZ","TZA","TGO",
-                        "TUN","UGA","ZMB","ZWE"]
+                        "SEN","SYC","SLE","SOM","ZAF","SSD","SDS","SDN","SWZ","TZA",
+                        "TGO","TUN","UGA","ZMB","ZWE",
+                        // Territorios con bandera
+                        "SAH","SHN"]
             case .america:
                 return ["ATG","ARG","BHS","BRB","BLZ","BOL","BRA","CAN","CHL","COL",
                         "CRI","CUB","DMA","DOM","ECU","SLV","GRD","GTM","GUY","HTI",
                         "HND","JAM","MEX","NIC","PAN","PRY","PER","KNA","LCA","VCT",
-                        "SUR","TTO","USA","URY","VEN"]
+                        "SUR","TTO","USA","URY","VEN",
+                        // Territorios con bandera
+                        "ABW","AIA","BMU","VGB","CYM","CUW","FLK","GRL","MSR",
+                        "PRI","BLM","MAF","SPM","SXM","TCA","VIR"]
             case .oceania:
                 return ["AUS","FJI","KIR","MHL","FSM","NRU","NZL","PLW","PNG","WSM",
-                        "SLB","TON","TUV","VUT"]
+                        "SLB","TON","TUV","VUT",
+                        // Territorios con bandera
+                        "ASM","COK","PYF","GUM","NCL","NIU","NFK","MNP","PCN","WLF"]
             }
         }
     }

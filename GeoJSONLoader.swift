@@ -223,7 +223,7 @@ class GeoJSONLoader {
         guard simplifiedOuter.count >= 3 else { return nil }
 
         // Polígonos interiores = "huecos" — usan la misma tolerancia que su padre
-        let interiorPolygons: [MKPolygon] = rings.dropFirst().compactMap { ring in
+        let _: [MKPolygon] = rings.dropFirst().compactMap { ring in
             let holeCoords: [CLLocationCoordinate2D] = ring.compactMap { point in
                 guard point.count >= 2 else { return nil }
                 return CLLocationCoordinate2D(latitude: point[1], longitude: point[0])
@@ -236,9 +236,6 @@ class GeoJSONLoader {
             return MKPolygon(coordinates: simplified, count: simplified.count)
         }
 
-        // Interior polygons (lakes/enclaves) are intentionally omitted:
-        // MKPolygon hole rendering is unreliable and causes visual artefacts
-        // on countries with large interior water bodies (Kazakhstan, etc.)
         let polygon = CountryPolygon(
             coordinates: simplifiedOuter,
             count: simplifiedOuter.count,
