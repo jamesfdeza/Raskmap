@@ -1063,7 +1063,7 @@ struct ProfileSheet: View {
                         "DNK","EST","FIN","FRA","DEU","GRC","HUN","ISL","IRL","ITA",
                         "LVA","LIE","LTU","LUX","MLT","MDA","MCO","MNE","NLD","MKD",
                         "NOR","POL","PRT","ROU","RUS","SMR","SRB","SVK","SVN","ESP",
-                        "SWE","CHE","UKR","GBR","VAT","KOS","XKX",
+                        "SWE","CHE","UKR","GBR","VAT","KOS",
                         // Territorios con bandera
                         "ALD","FRO","GIB","GGY","IMN","JEY"]
             case .asia:
@@ -2086,7 +2086,7 @@ struct MapExportSheet: View {
                 return ["ALB","AND","AUT","BLR","BEL","BIH","BGR","HRV","CYP","CZE","DNK","EST","FIN","FRA","DEU",
                         "GRC","HUN","ISL","IRL","ITA","LVA","LIE","LTU","LUX","MLT","MDA","MCO","MNE","NLD","MKD",
                         "NOR","POL","PRT","ROU","RUS","SMR","SRB","SVK","SVN","ESP","SWE","CHE","UKR","GBR","VAT",
-                        "KOS","XKX","ALD","FRO","GIB","GGY","IMN","JEY"]
+                        "KOS","ALD","FRO","GIB","GGY","IMN","JEY"]
             case .asia:
                 return ["AFG","ARM","AZE","BGD","BTN","BRN","KHM","CHN","GEO","IND","IDN","JPN","KAZ","PRK","KOR",
                         "KGZ","LAO","MYS","MDV","MNG","MMR","NPL","PAK","PHL","SGP","LKA","TWN","TJK","THA","TLS",
@@ -2363,7 +2363,7 @@ struct MapExportSheet: View {
         "MCO": CLLocationCoordinate2D(latitude: 43.74, longitude: 7.41),
         "MNG": CLLocationCoordinate2D(latitude: 47.91, longitude: 106.92),
         "MNE": CLLocationCoordinate2D(latitude: 42.49, longitude: 18.70),
-        "MAR": CLLocationCoordinate2D(latitude: 33.99, longitude: -6.85),
+        "MAR": CLLocationCoordinate2D(latitude: 31.63, longitude: -8.00),
         "MOZ": CLLocationCoordinate2D(latitude: -25.97, longitude: 32.59),
         "MMR": CLLocationCoordinate2D(latitude: 16.80, longitude: 96.16),
         "NAM": CLLocationCoordinate2D(latitude: -22.56, longitude: 17.08),
@@ -2424,7 +2424,7 @@ struct MapExportSheet: View {
         "TGO": CLLocationCoordinate2D(latitude: 6.14, longitude: 1.22),
         "TON": CLLocationCoordinate2D(latitude: -21.13, longitude: -175.20),
         "TTO": CLLocationCoordinate2D(latitude: 10.65, longitude: -61.52),
-        "TUN": CLLocationCoordinate2D(latitude: 36.82, longitude: 10.18),
+        "TUN": CLLocationCoordinate2D(latitude: 34.41, longitude: 8.81),
         "TUR": CLLocationCoordinate2D(latitude: 39.92, longitude: 32.86),
         "TKM": CLLocationCoordinate2D(latitude: 37.95, longitude: 58.38),
         "TUV": CLLocationCoordinate2D(latitude: -8.52, longitude: 179.20),
@@ -2432,7 +2432,7 @@ struct MapExportSheet: View {
         "UKR": CLLocationCoordinate2D(latitude: 50.45, longitude: 30.52),
         "ARE": CLLocationCoordinate2D(latitude: 24.47, longitude: 54.37),
         "GBR": CLLocationCoordinate2D(latitude: 51.51, longitude: -0.13),
-        "USA": CLLocationCoordinate2D(latitude: 38.90, longitude: -77.04),
+        "USA": CLLocationCoordinate2D(latitude: 37.68, longitude: -97.33),
         "URY": CLLocationCoordinate2D(latitude: -34.86, longitude: -56.17),
         "UZB": CLLocationCoordinate2D(latitude: 41.30, longitude: 69.27),
         "VUT": CLLocationCoordinate2D(latitude: -17.73, longitude: 168.32),

@@ -31,7 +31,7 @@ struct RaskMapView: UIViewRepresentable {
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
             span: MKCoordinateSpan(latitudeDelta: 140, longitudeDelta: 180)
         ), animated: false)
-        mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: 25_000_000)
+        mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: 30_000_000)
 
         let tap = InstantTapGestureRecognizer(target: context.coordinator,
                                               action: #selector(Coordinator.handleTap(_:)))
