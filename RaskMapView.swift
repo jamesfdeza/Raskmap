@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import Combine
+import CoreLocation
 
 struct RaskMapView: UIViewRepresentable {
 
@@ -10,6 +11,7 @@ struct RaskMapView: UIViewRepresentable {
     var highlightedIsoCode: String? = nil
     var showLived: Bool = true
     var showBucketList: Bool = true
+    var locationIsoCode: String? = nil  // country where user currently is
     var onReady: ((_ center: @escaping (String) -> Void) -> Void)? = nil
 
     func makeUIView(context: Context) -> MKMapView {
@@ -19,7 +21,7 @@ struct RaskMapView: UIViewRepresentable {
         context.coordinator.subscribeToColorChanges()
 
         mapView.mapType = .standard
-        mapView.showsUserLocation = false
+        mapView.showsUserLocation = true
         mapView.isRotateEnabled = false
         mapView.isPitchEnabled = false
         mapView.pointOfInterestFilter = .excludingAll
@@ -107,6 +109,48 @@ struct RaskMapView: UIViewRepresentable {
             return
         }
 
+        // ── 1b. Actualizar location iso ──
+        let newLocationIso = locationIsoCode
+        let oldLocationIso = coord.lastLocationIso
+        if newLocationIso != oldLocationIso {
+            coord.lastLocationIso = newLocationIso
+            // Refresh old location country
+            if let old = oldLocationIso, let feature = features.first(where: { $0.isoCode == old }) {
+                let status = coord.lastKnownStatus[old] ?? .none
+                let isHL = old == coord.lastHighlighted
+                for polygon in feature.polygons {
+                    if let renderer = coord.rendererCache[ObjectIdentifier(polygon)] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: isHL,
+                                        showLived: showLived, showBucketList: showBucketList,
+                                        isUserHere: false)
+                        renderer.setNeedsDisplay()
+                    }
+                }
+            }
+            // Refresh new location country
+            if let new = newLocationIso, let feature = features.first(where: { $0.isoCode == new }) {
+                let status = coord.lastKnownStatus[new] ?? .none
+                let isHL = new == coord.lastHighlighted
+                for polygon in feature.polygons {
+                    let pid = ObjectIdentifier(polygon)
+                    if coord.rendererCache[pid] == nil {
+                        let renderer = MKPolygonRenderer(polygon: polygon)
+                        Self.applyStyle(status: status, to: renderer, highlighted: isHL,
+                                        showLived: showLived, showBucketList: showBucketList,
+                                        isUserHere: true)
+                        coord.rendererCache[pid] = renderer
+                        mapView.removeOverlay(polygon)
+                        mapView.addOverlay(polygon, level: .aboveRoads)
+                    } else if let renderer = coord.rendererCache[pid] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: isHL,
+                                        showLived: showLived, showBucketList: showBucketList,
+                                        isUserHere: true)
+                        renderer.setNeedsDisplay()
+                    }
+                }
+            }
+        }
+
         // ── 2. Actualizar highlight ──
         let newHighlight = highlightedIsoCode
         let oldHighlight = coord.lastHighlighted
@@ -148,6 +192,27 @@ struct RaskMapView: UIViewRepresentable {
                         Self.applyStyle(status: status, to: renderer, highlighted: true,
                                         showLived: showLived, showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
+                    }
+                }
+            }
+            else if newHighlight == nil, let locIso = coord.lastLocationIso,
+                      let feature = features.first(where: { $0.isoCode == locIso }) {
+                let status = coord.lastKnownStatus[locIso] ?? .none
+                for polygon in feature.polygons {
+                    let pid = ObjectIdentifier(polygon)
+                    if let renderer = coord.rendererCache[pid] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: false,
+                                        showLived: showLived, showBucketList: showBucketList,
+                                        isUserHere: true)
+                        renderer.setNeedsDisplay()
+                    } else {
+                        let renderer = MKPolygonRenderer(polygon: polygon)
+                        Self.applyStyle(status: status, to: renderer, highlighted: false,
+                                        showLived: showLived, showBucketList: showBucketList,
+                                        isUserHere: true)
+                        coord.rendererCache[pid] = renderer
+                        mapView.removeOverlay(polygon)
+                        mapView.addOverlay(polygon, level: .aboveRoads)
                     }
                 }
             }
@@ -226,16 +291,23 @@ struct RaskMapView: UIViewRepresentable {
 
     static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer,
                             highlighted: Bool = false,
-                            showLived: Bool = true, showBucketList: Bool = true) {
+                            showLived: Bool = true, showBucketList: Bool = true,
+                            isUserHere: Bool = false) {
         let effective: CountryStatus = {
             if status == .lived      && !showLived      { return .none }
             if status == .bucketList && !showBucketList { return .none }
             return status
         }()
-        if effective == .none {
+        if effective == .none && !isUserHere {
             renderer.fillColor   = UIColor.clear
             renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
             renderer.lineWidth   = highlighted ? 1.0 : 0
+        } else if isUserHere {
+            // User is physically in this country — translucent fill, colored border
+            let base = effective != .none ? effective.overlayColor : CountryStatus.visited.overlayColor
+            renderer.fillColor   = base.withAlphaComponent(0.45)
+            renderer.strokeColor = base
+            renderer.lineWidth   = 2.5
         } else {
             renderer.fillColor   = effective.overlayColor
             renderer.strokeColor = highlighted
@@ -253,6 +325,7 @@ struct RaskMapView: UIViewRepresentable {
         var rendererCache: [ObjectIdentifier: MKPolygonRenderer] = [:]
         var lastKnownStatus: [String: CountryStatus] = [:]
         var lastHighlighted: String? = nil
+        var lastLocationIso: String? = nil
         var initialLoadDone = false
         private var colorCancellables = Set<AnyCancellable>()
         weak var mapView: MKMapView?
@@ -278,11 +351,12 @@ struct RaskMapView: UIViewRepresentable {
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
                 guard status != .none else { continue }
                 let isHighlighted = polygon.isoCode == lastHighlighted
-                renderer.fillColor = status.overlayColor
-                renderer.strokeColor = isHighlighted
-                    ? UIColor.black.withAlphaComponent(0.85)
-                    : UIColor.black.withAlphaComponent(0.35)
-                renderer.lineWidth = isHighlighted ? 1.5 : 0.5
+                let isUserHere = polygon.isoCode == parent.locationIsoCode
+                RaskMapView.applyStyle(status: status, to: renderer,
+                                       highlighted: isHighlighted,
+                                       showLived: parent.showLived,
+                                       showBucketList: parent.showBucketList,
+                                       isUserHere: isUserHere)
                 renderer.setNeedsDisplay()
             }
         }
@@ -306,13 +380,24 @@ struct RaskMapView: UIViewRepresentable {
             RaskMapView.applyStyle(status: status, to: renderer,
                                    highlighted: polygon.isoCode == lastHighlighted,
                                    showLived: parent.showLived,
-                                   showBucketList: parent.showBucketList)
+                                   showBucketList: parent.showBucketList,
+                                   isUserHere: polygon.isoCode == parent.locationIsoCode)
             rendererCache[pid] = renderer
             return renderer
         }
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {}
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {}
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is MKUserLocation {
+                // Use default Apple Maps user location appearance (with accuracy ring)
+                return nil
+            }
+            return nil
+        }
+
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {}
 
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
@@ -364,3 +449,4 @@ private class InstantTapGestureRecognizer: UITapGestureRecognizer {
         if hypot(c.x - start.x, c.y - start.y) > 10 { state = .failed }
     }
 }
+

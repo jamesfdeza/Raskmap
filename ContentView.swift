@@ -8,6 +8,7 @@ import SwiftData
 import Combine
 import MapKit
 import Photos
+import CoreLocation
 
 class MapStore: ObservableObject {
     var centerOnCountry: ((String) -> Void)?
@@ -26,6 +27,8 @@ struct ContentView: View {
     @State private var showSearch: Bool = false
     @State private var showAllCountries: Bool = false
     @State private var pendingDateCountry: Country? = nil
+    @State private var locationIsoCode: String? = nil
+    @StateObject private var locationManager = LocationManager.shared
     @State private var pendingDateStatus: CountryStatus = .none
     @State private var deferredDateCountry: Country? = nil
     @State private var searchText: String = ""
@@ -222,6 +225,11 @@ struct ContentView: View {
 
     var body: some View {
         mapWithSheets()
+            .onChange(of: locationManager.currentLocation) { old, location in
+                guard let location else { locationIsoCode = nil; return }
+                // Immediate on first fix, debounced after
+                checkLocationCountry(location, immediate: old == nil)
+            }
             .onChange(of: profileImage) {
                 if let img = profileImage, let data = img.jpegData(compressionQuality: 0.8) {
                     UserDefaults.standard.set(data, forKey: "profileImageData")
@@ -240,19 +248,51 @@ struct ContentView: View {
                         }
                         self.isLoadingFeatures = false
                         self.onContentReady?()
+                        // Detect country once features are loaded
+                        if let loc = self.locationManager.currentLocation {
+                            self.checkLocationCountry(loc, immediate: true)
+                        }
                     }
                 } else {
                     isLoadingFeatures = false
                     onContentReady?()
+                    // Detect country with existing features
+                    if let loc = locationManager.currentLocation {
+                        checkLocationCountry(loc, immediate: true)
+                    }
                 }
                 if username.isEmpty { showOnboarding = true }
+
+                // Request location
+                locationManager.requestAndStart()
+
+                // Auto-marcar como visitado los Próximos cuya fecha ya pasó
+                let today = Calendar.current.startOfDay(for: Date())
+                var changed = false
+                for country in countries {
+                    guard country.status == .wantToVisit,
+                          let planned = country.plannedDate else { continue }
+                    let plannedDay = Calendar.current.startOfDay(for: planned)
+                    if plannedDay < today {
+                        country.status = .visited
+                        country.plannedDate = nil
+                        changed = true
+                    }
+                }
+                if changed { try? modelContext.save() }
             }
     }
 
     @ViewBuilder
     private func mapWithSheets() -> some View {
         mapCore()
-            .sheet(item: $selectedCountry, onDismiss: { highlightedIsoCode = nil }) { country in
+            .sheet(item: $selectedCountry, onDismiss: {
+                highlightedIsoCode = nil
+                // Re-apply translucent style if user is physically in this country
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    recheckLocationIfNeeded()
+                }
+            }) { country in
                 CountryBottomSheet(
                     country: country,
                     displayName: localizedName(for: country),
@@ -261,7 +301,13 @@ struct ContentView: View {
                         updateCountryStatus(country: country, newStatus: newStatus)
                         selectedCountry = nil
                     },
-                    onDismiss: { highlightedIsoCode = nil; selectedCountry = nil },
+                    onDismiss: {
+                        highlightedIsoCode = nil
+                        selectedCountry = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            recheckLocationIfNeeded()
+                        }
+                    },
                     showLived: showLived,
                     showBucketList: showBucketList
                 )
@@ -313,6 +359,7 @@ struct ContentView: View {
                 onCountryTapped: { handleCountryTap($0) },
                 highlightedIsoCode: highlightedIsoCode,
                 showLived: showLived, showBucketList: showBucketList,
+                locationIsoCode: locationIsoCode,
                 onReady: { mapStore.centerOnCountry = $0 }
             )
             .ignoresSafeArea()
@@ -431,6 +478,9 @@ struct ContentView: View {
                 try? modelContext.save()
                 highlightedIsoCode = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { centerMap(on: country.isoCode) }
+                if country.isoCode == locationIsoCode {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { recheckLocationIfNeeded() }
+                }
             }
         )
     }
@@ -461,6 +511,67 @@ struct ContentView: View {
 
     private func centerMap(on isoCode: String) {
         mapStore.centerOnCountry?(isoCode)
+    }
+
+    @State private var locationCheckTask: Task<Void, Never>? = nil
+
+    private func checkLocationCountry(_ location: CLLocation, immediate: Bool = false) {
+        locationCheckTask?.cancel()
+        locationCheckTask = Task {
+            if !immediate {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 sec debounce
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                detectCountry(for: location)
+            }
+        }
+    }
+
+    private func detectCountry(for location: CLLocation) {
+        let point = MKMapPoint(location.coordinate)
+        // Find matching country via point-in-polygon
+        for feature in features {
+            guard feature.boundingMapRect.contains(point) else { continue }
+            for polygon in feature.polygons {
+                let renderer = MKPolygonRenderer(polygon: polygon)
+                renderer.invalidatePath()
+                if renderer.path?.contains(renderer.point(for: point)) == true {
+                    let iso = feature.isoCode
+                    autoMarkIfNeeded(isoCode: iso)
+                    // Force visual refresh: clear then set so RaskMapView re-applies isUserHere style
+                    locationIsoCode = nil
+                    DispatchQueue.main.async {
+                        locationIsoCode = iso
+                    }
+                    return
+                }
+            }
+        }
+        locationIsoCode = nil
+    }
+
+    private func recheckLocationIfNeeded() {
+        guard let location = locationManager.currentLocation else { return }
+        // Re-detect from scratch to update visual and auto-mark
+        checkLocationCountry(location, immediate: true)
+    }
+
+    private func autoMarkIfNeeded(isoCode: String) {
+        guard let country = countries.first(where: { $0.isoCode == isoCode }) else { return }
+        switch country.status {
+        case .none, .wantToVisit, .bucketList:
+            country.status = .visited
+            country.plannedDate = nil
+            try? modelContext.save()
+        case .lived:
+            if !showLived {
+                country.status = .visited
+                try? modelContext.save()
+            }
+        case .visited:
+            break // already visited, nothing to do
+        }
     }
 
     private func handleCountryTap(_ tapped: Country) {
@@ -509,6 +620,12 @@ struct ContentView: View {
             if newStatus != .none {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     centerMap(on: country.isoCode)
+                }
+            }
+            // If user is in this country, re-evaluate location effect
+            if country.isoCode == locationIsoCode {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    recheckLocationIfNeeded()
                 }
             }
         }
@@ -2109,7 +2226,7 @@ struct MapExportSheet: View {
                 .animation(.easeInOut(duration: 0.2), value: savedToast)
             }
             .padding(.top, 8)
-            .navigationTitle("Mi mapa")
+            .navigationTitle("Estadísticas")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
