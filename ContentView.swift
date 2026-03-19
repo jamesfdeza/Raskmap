@@ -23,6 +23,9 @@ struct ContentView: View {
     @State private var features: [CountryFeature] = []
     @State private var showSearch: Bool = false
     @State private var showAllCountries: Bool = false
+    @State private var pendingDateCountry: Country? = nil
+    @State private var pendingDateStatus: CountryStatus = .none
+    @State private var deferredDateCountry: Country? = nil
     @State private var searchText: String = ""
     @StateObject private var mapStore = MapStore()
     @EnvironmentObject private var colorTheme: ColorThemeManager
@@ -108,153 +111,210 @@ struct ContentView: View {
         }
     }
 
-    var body: some View {
-        ZStack(alignment: menuPositionIsTop ? .top : .bottom) {
-            
-            // MARK: - Mapa
-            RaskMapView(
-                countries: countries,
-                features: features,
-                onCountryTapped: { country in
-                    handleCountryTap(country)
-                },
-                highlightedIsoCode: highlightedIsoCode,
-                showLived: showLived,
-                showBucketList: showBucketList,
-                onReady: { centerFn in
-                    mapStore.centerOnCountry = centerFn
-                }
-            )
-            .ignoresSafeArea()
 
-            // MARK: - UI (posición arriba o abajo)
-            if menuPositionIsTop {
-                // ── ARRIBA ──
-                VStack(spacing: 0) {
-                    // Contenedor principal: avatar/título + badges
-                    HStack(spacing: 12) {
-                        Button { showProfile = true } label: {
-                            HStack(spacing: 8) {
-                                ProfileAvatarView(image: profileImage, size: 34)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text("Raskmap")
-                                        .font(.palatino(.headline, weight: .bold))
-                                        .foregroundStyle(.primary)
-                                    if !username.isEmpty {
-                                        Text("@\(username)")
-                                            .font(.palatino(.caption))
-                                            .foregroundStyle(.secondary)
-                                    }
+    @ViewBuilder
+    private func badgesRow() -> some View {
+        HStack(spacing: 4) {
+            StatBadge(value: visitedCount, label: "Visitados", color: colorTheme.visitedColor)
+                .onTapGesture { statusListFilter = .visited }
+            if showBucketList {
+                StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
+                    .onTapGesture { statusListFilter = .bucketList }
+            }
+            StatBadge(value: wantCount, label: "Próximos", color: colorTheme.wantToVisitColor)
+                .onTapGesture { statusListFilter = .wantToVisit }
+            if showLived {
+                StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
+                    .onTapGesture { statusListFilter = .lived }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func counterRow(alignment: VerticalAlignment = .top) -> some View {
+        HStack(alignment: alignment, spacing: 8) {
+            Text("\(visitedCount + (showLived ? livedCount : 0)) / \(countingMode.denominator)")
+                .font(.palatino(.title3, weight: .bold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .onTapGesture { showAllCountries = true }
+            Spacer()
+            Button(action: { showSearch = true }) {
+                Image(systemName: "magnifyingglass")
+                    .font(.palatino(.title3))
+                    .padding(10)
+                    .background(.regularMaterial, in: Circle())
+            }
+        }
+        .padding(.horizontal, 12)
+    }
+
+    @ViewBuilder
+    private func menuOverlay() -> some View {
+        if menuPositionIsTop {
+            // ── ARRIBA ──
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Button { showProfile = true } label: {
+                        HStack(spacing: 8) {
+                            ProfileAvatarView(image: profileImage, size: 34)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Raskmap")
+                                    .font(.palatino(.headline, weight: .bold))
+                                    .foregroundStyle(.primary)
+                                if !username.isEmpty {
+                                    Text("@ \(username)")
+                                        .font(.palatino(.caption))
+                                        .foregroundStyle(.secondary)
                                 }
-                                Spacer()
                             }
-                        }
-                        .buttonStyle(.plain)
-                        
-                        HStack(spacing: 4) {
-                            StatBadge(value: visitedCount, label: "Visitados", color: colorTheme.visitedColor)
-                                .onTapGesture { statusListFilter = .visited }
-                            if showBucketList {
-                                StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
-                                    .onTapGesture { statusListFilter = .bucketList }
-                            }
-                            StatBadge(value: wantCount, label: "Próximos", color: colorTheme.wantToVisitColor)
-                                .onTapGesture { statusListFilter = .wantToVisit }
-                            if showLived {
-                                StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
-                                    .onTapGesture { statusListFilter = .lived }
-                            }
+                            Spacer()
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
+                    .buttonStyle(.plain)
+                    badgesRow()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
 
-                    // Fila: contador izquierda + lupa derecha
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("\(visitedCount + (showLived ? livedCount : 0)) / \(countingMode.denominator)")
-                            .font(.palatino(.title3, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            .onTapGesture { showAllCountries = true }
-                        Spacer()
-                        Button(action: { showSearch = true }) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.palatino(.title3))
-                                .padding(10)
-                                .background(.regularMaterial, in: Circle())
-                        }
-                    }
-                    .padding(.horizontal, 12)
+                counterRow(alignment: .top)
                     .padding(.top, 6)
-                }
-            } else {
-                // ── ABAJO ──
-                VStack(spacing: 6) {
-                    // Fila intermedia: contador países (izq) + lupa (der)
-                    HStack(alignment: .bottom, spacing: 8) {
-                        Text("\(visitedCount + (showLived ? livedCount : 0)) / \(countingMode.denominator)")
-                            .font(.palatino(.title3, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            .onTapGesture { showAllCountries = true }
-                        Spacer()
-                        Button(action: { showSearch = true }) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.palatino(.title3))
-                                .padding(10)
-                                .background(.regularMaterial, in: Circle())
-                        }
-                    }
-                    .padding(.horizontal, 12)
-
-                    // Contenedor principal: avatar/título + badges
-                    HStack(spacing: 12) {
-                        Button { showProfile = true } label: {
-                            HStack(spacing: 8) {
-                                ProfileAvatarView(image: profileImage, size: 34)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text("Raskmap")
-                                        .font(.palatino(.headline, weight: .bold))
-                                        .foregroundStyle(.primary)
-                                    if !username.isEmpty {
-                                        Text("@\(username)")
-                                            .font(.palatino(.caption))
-                                            .foregroundStyle(.secondary)
-                                    }
+            }
+        } else {
+            // ── ABAJO ──
+            VStack(spacing: 6) {
+                counterRow(alignment: .bottom)
+                HStack(spacing: 12) {
+                    Button { showProfile = true } label: {
+                        HStack(spacing: 8) {
+                            ProfileAvatarView(image: profileImage, size: 34)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Raskmap")
+                                    .font(.palatino(.headline, weight: .bold))
+                                    .foregroundStyle(.primary)
+                                if !username.isEmpty {
+                                    Text("@ \(username)")
+                                        .font(.palatino(.caption))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
-                        .buttonStyle(.plain)
-                        Spacer()
-                        HStack(spacing: 4) {
-                            StatBadge(value: visitedCount, label: "Visitados", color: colorTheme.visitedColor)
-                                .onTapGesture { statusListFilter = .visited }
-                            if showBucketList {
-                                StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
-                                    .onTapGesture { statusListFilter = .bucketList }
-                            }
-                            StatBadge(value: wantCount, label: "Próximos", color: colorTheme.wantToVisitColor)
-                                .onTapGesture { statusListFilter = .wantToVisit }
-                            if showLived {
-                                StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
-                                    .onTapGesture { statusListFilter = .lived }
-                            }
-                        }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 32)
+                    .buttonStyle(.plain)
+                    Spacer()
+                    badgesRow()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 6)
+                .padding(.bottom, 32)
+            }
+        }
+    }
+
+    var body: some View {
+        mapWithSheets()
+            .onChange(of: profileImage) {
+                if let img = profileImage, let data = img.jpegData(compressionQuality: 0.8) {
+                    UserDefaults.standard.set(data, forKey: "profileImageData")
                 }
             }
+            .task {
+                if features.isEmpty {
+                    GeoJSONLoader.loadCountriesAsync { loadedFeatures in
+                        self.features = loadedFeatures
+                        let existingCodes = Set(self.countries.map { $0.isoCode })
+                        for feature in loadedFeatures {
+                            if !existingCodes.contains(feature.isoCode) {
+                                let country = Country(name: feature.adminName, isoCode: feature.isoCode)
+                                self.modelContext.insert(country)
+                            }
+                        }
+                        self.isLoadingFeatures = false
+                        self.onContentReady?()
+                    }
+                } else {
+                    isLoadingFeatures = false
+                    onContentReady?()
+                }
+                if username.isEmpty { showOnboarding = true }
+            }
+    }
+
+    @ViewBuilder
+    private func mapWithSheets() -> some View {
+        mapCore()
+            .sheet(item: $selectedCountry, onDismiss: { highlightedIsoCode = nil }) { country in
+                CountryBottomSheet(
+                    country: country,
+                    displayName: localizedName(for: country),
+                    flagEmoji: flagEmoji(for: country),
+                    onStatusChange: { newStatus in
+                        updateCountryStatus(country: country, newStatus: newStatus)
+                        selectedCountry = nil
+                    },
+                    onDismiss: { highlightedIsoCode = nil; selectedCountry = nil },
+                    showLived: showLived,
+                    showBucketList: showBucketList
+                )
+                .presentationDetents([.fraction(0.40)])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showSearch, onDismiss: {
+                if pendingShowSheet { pendingShowSheet = false; showSheet = true }
+            }) { searchSheet() }
+            .sheet(isPresented: $showOnboarding) { onboardingSheet() }
+            .sheet(isPresented: $showAllCountries) {
+                let visitedCodes: Set<String> = Set(countries.compactMap { country -> String? in
+                    if country.status == .visited { return country.isoCode }
+                    if showLived && country.status == .lived { return country.isoCode }
+                    return nil
+                })
+                AllCountriesSheet(features: features, mode: countingMode, visitedIsoCodes: visitedCodes, countries: countries)
+            }
+            .sheet(item: $statusListFilter) { filter in
+                StatusListSheet(
+                    filter: filter, countries: countries, features: features,
+                    onRemove: { country in
+                        country.status = .none; country.plannedDate = nil
+                        try? modelContext.save()
+                    },
+                    onSetDate: filter == .wantToVisit ? { country in
+                        deferredDateCountry = country
+                        statusListFilter = nil
+                    } : nil
+                )
+            }
+            .sheet(item: $pendingDateCountry) { country in datePicker(for: country) }
+            .onChange(of: statusListFilter) { _, newValue in
+                if newValue == nil, let deferred = deferredDateCountry {
+                    deferredDateCountry = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        pendingDateCountry = deferred
+                    }
+                }
+            }
+            .sheet(isPresented: $showProfile) { profileContent() }
+    }
+
+    @ViewBuilder
+    private func mapCore() -> some View {
+        ZStack(alignment: menuPositionIsTop ? .top : .bottom) {
+            RaskMapView(
+                countries: countries, features: features,
+                onCountryTapped: { handleCountryTap($0) },
+                highlightedIsoCode: highlightedIsoCode,
+                showLived: showLived, showBucketList: showBucketList,
+                onReady: { mapStore.centerOnCountry = $0 }
+            )
+            .ignoresSafeArea()
+            menuOverlay()
         }
         // MARK: - Sheet país
         .sheet(item: $selectedCountry, onDismiss: {
@@ -280,186 +340,119 @@ struct ContentView: View {
             .presentationDragIndicator(.visible)
         }
 
-        // MARK: - Sheet búsqueda
-        .sheet(isPresented: $showSearch, onDismiss: {
-            if pendingShowSheet {
-                pendingShowSheet = false
-                showSheet = true
-            }
-        }) {
-            NavigationStack {
-                List {
-                    ForEach(groupedSearchResults, id: \.letter) { section in
-                        Section(header: searchText.isEmpty ? Text(section.letter) : nil) {
-                            ForEach(section.features, id: \.isoCode) { feature in
-                                // contentShape hace que TODO el ancho de la fila sea tappable
-                                HStack {
-                                    Text(feature.flagEmoji ?? "🌐")
-                                    Text(feature.localizedName)
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    if let status = countryStatusMap[feature.isoCode], status != .none {
-                                        Text(status.label)
-                                            .font(.palatino(.caption))
-                                            .foregroundStyle(.secondary)
-                                    }
+
+    }
+
+    @ViewBuilder
+    private func searchSheet() -> some View {
+        NavigationStack {
+            List {
+                ForEach(groupedSearchResults, id: \.letter) { section in
+                    Section(header: searchText.isEmpty ? Text(section.letter) : nil) {
+                        ForEach(section.features, id: \.isoCode) { feature in
+                            HStack {
+                                Text(feature.flagEmoji ?? "🌐")
+                                Text(feature.localizedName).foregroundStyle(.primary)
+                                Spacer()
+                                if let status = countryStatusMap[feature.isoCode], status != .none {
+                                    Text(status.label).font(.palatino(.caption)).foregroundStyle(.secondary)
                                 }
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    let isoCode = feature.isoCode
-                                    if let existing = countries.first(where: { $0.isoCode == isoCode }) {
-                                        selectedCountry = existing
-                                    } else {
-                                        let newCountry = Country(name: feature.name, isoCode: isoCode)
-                                        modelContext.insert(newCountry)
-                                        selectedCountry = newCountry
-                                    }
-                                    highlightedIsoCode = isoCode
-                                    centerMap(on: isoCode)
-                                    pendingShowSheet = true
-                                    showSearch = false
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                let isoCode = feature.isoCode
+                                if let existing = countries.first(where: { $0.isoCode == isoCode }) {
+                                    selectedCountry = existing
+                                } else {
+                                    let newCountry = Country(name: feature.name, isoCode: isoCode)
+                                    modelContext.insert(newCountry)
+                                    selectedCountry = newCountry
                                 }
+                                highlightedIsoCode = isoCode
+                                centerMap(on: isoCode)
+                                pendingShowSheet = true
+                                showSearch = false
                             }
                         }
                     }
                 }
-                .listStyle(.plain)
-                .scrollIndicators(.visible)
-                .searchable(text: $searchText, prompt: "Buscar país...")
-                .navigationTitle("Buscar país")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancelar") {
-                            showSearch = false
-                            searchText = ""
-                        }
-                    }
+            }
+            .listStyle(.plain)
+            .scrollIndicators(.visible)
+            .searchable(text: $searchText, prompt: "Buscar país...")
+            .navigationTitle("Buscar país")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { showSearch = false; searchText = "" }
                 }
             }
         }
+    }
 
-        // MARK: - Sheet onboarding
-        .sheet(isPresented: $showOnboarding) {
-            VStack(spacing: 24) {
-                Spacer()
-                Text("👋 Bienvenido a Raskmap")
-                    .font(.palatino(.title2, weight: .bold))
-                Text("¿Cómo quieres que te llamemos?")
-                    .font(.palatino(.subheadline))
-                    .foregroundStyle(.secondary)
-                TextField("Tu nombre de usuario", text: $usernameInput)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal, 32)
-                    .onChange(of: usernameInput) {
-                        usernameInput = String(usernameInput
-                            .filter { $0.isLetter || $0.isNumber }
-                            .prefix(15))
-                    }
-                Button(action: {
-                    let clean = String(usernameInput
-                        .filter { $0.isLetter || $0.isNumber }
-                        .prefix(15))
-                    if !clean.isEmpty {
-                        username = clean
-                        showOnboarding = false
-                    }
-                }) {
-                    Text("Empezar")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.white)
-                }
+    @ViewBuilder
+    private func onboardingSheet() -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Text("👋 Bienvenido a Raskmap").font(.palatino(.title2, weight: .bold))
+            Text("¿Cómo quieres que te llamemos?").font(.palatino(.subheadline)).foregroundStyle(.secondary)
+            TextField("Tu nombre de usuario", text: $usernameInput)
+                .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 32)
-                Spacer()
-            }
-            .interactiveDismissDisabled(true)
-        }
-
-        // MARK: - Sheet todos los territorios
-        .sheet(isPresented: $showAllCountries) {
-            AllCountriesSheet(features: features, mode: countingMode)
-        }
-
-        // MARK: - Sheet lista por estado
-        .sheet(item: $statusListFilter) { filter in
-            StatusListSheet(
-                filter: filter,
-                countries: countries,
-                features: features,
-                onRemove: { country in
-                    country.status = .none
-                    try? modelContext.save()
+                .onChange(of: usernameInput) {
+                    usernameInput = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(15))
                 }
-            )
-        }
-
-        // MARK: - Sheet perfil
-        .sheet(isPresented: $showProfile) {
-            let visitedFlags: Set<String> = Set(
-                countries
-                    .filter { $0.status == .visited || $0.status == .lived }
-                    .compactMap { country in
-                        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
-                    }
-            )
-            ProfileSheet(
-                username: $username,
-                profileImage: $profileImage,
-                countingModeRaw: $countingModeRaw,
-                menuPositionRaw: $menuPositionRaw,
-                showLived: $showLived,
-                showBucketList: $showBucketList,
-                onClearStatus: { status in
-                    for country in countries where country.status == status {
-                        country.status = .none
-                    }
-                    try? modelContext.save()
-                },
-                topGold: $topGold,
-                topSilver: $topSilver,
-                topBronze: $topBronze,
-                topTable: $topTable,
-                visitedFlags: visitedFlags,
-                allFeatures: features,
-                visitedIsoCodes: Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
-            )
-        }
-        .onChange(of: profileImage) {
-            if let img = profileImage, let data = img.jpegData(compressionQuality: 0.8) {
-                UserDefaults.standard.set(data, forKey: "profileImageData")
+            Button(action: {
+                let clean = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(15))
+                if !clean.isEmpty { username = clean; showOnboarding = false }
+            }) {
+                Text("Empezar").fontWeight(.semibold)
+                    .frame(maxWidth: .infinity).padding()
+                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
             }
+            .padding(.horizontal, 32)
+            Spacer()
         }
+        .interactiveDismissDisabled(true)
+    }
 
-        // MARK: - Carga inicial
-        .task {
-            if features.isEmpty {
-                GeoJSONLoader.loadCountriesAsync { loadedFeatures in
-                    self.features = loadedFeatures
-                    // Pre-insertar todos los países que aún no existen en SwiftData.
-                    // Así el primer tap siempre encuentra el objeto en @Query
-                    // y nunca hay race condition → pantalla blanca eliminada.
-                    let existingCodes = Set(self.countries.map { $0.isoCode })
-                    for feature in loadedFeatures {
-                        if !existingCodes.contains(feature.isoCode) {
-                            let country = Country(name: feature.adminName, isoCode: feature.isoCode)
-                            self.modelContext.insert(country)
-                        }
-                    }
-                    self.isLoadingFeatures = false
-                    self.onContentReady?()
-                }
-            } else {
-                isLoadingFeatures = false
-                onContentReady?()
+    @ViewBuilder
+    private func datePicker(for country: Country) -> some View {
+        PlannedDatePickerSheet(
+            countryName: localizedName(for: country),
+            flagEmoji: flagEmoji(for: country) ?? "🌐",
+            existingDate: country.plannedDate,
+            onSave: { date in
+                country.status = .wantToVisit
+                country.plannedDate = date
+                try? modelContext.save()
+                highlightedIsoCode = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { centerMap(on: country.isoCode) }
             }
+        )
+    }
 
-            if username.isEmpty {
-                showOnboarding = true
-            }
-        }
+    @ViewBuilder
+    private func profileContent() -> some View {
+        let visitedFlags: Set<String> = Set(
+            countries.filter { $0.status == .visited || $0.status == .lived }
+                .compactMap { country in features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji }
+        )
+        ProfileSheet(
+            username: $username, profileImage: $profileImage,
+            countingModeRaw: $countingModeRaw, menuPositionRaw: $menuPositionRaw,
+            showLived: $showLived, showBucketList: $showBucketList,
+            onClearStatus: { status in
+                for country in countries where country.status == status { country.status = .none }
+                try? modelContext.save()
+            },
+            topGold: $topGold, topSilver: $topSilver, topBronze: $topBronze, topTable: $topTable,
+            visitedFlags: visitedFlags,
+            allFeatures: features,
+            visitedIsoCodes: Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode }),
+            countries: countries
+        )
     }
 
     // MARK: - Lógica de negocio
@@ -503,12 +496,18 @@ struct ContentView: View {
     }
     
     private func updateCountryStatus(country: Country, newStatus: CountryStatus) {
-        country.status = newStatus
-        // Quitar el borde negro al asignar estado
-        highlightedIsoCode = nil
-        if newStatus != .none {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                centerMap(on: country.isoCode)
+        if newStatus == .wantToVisit {
+            // Show date picker before saving
+            pendingDateCountry = country
+            pendingDateStatus = newStatus
+        } else {
+            country.status = newStatus
+            if newStatus == .none { country.plannedDate = nil }
+            highlightedIsoCode = nil
+            if newStatus != .none {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    centerMap(on: country.isoCode)
+                }
             }
         }
     }
@@ -688,6 +687,7 @@ struct StatusListSheet: View {
     let countries: [Country]
     let features: [CountryFeature]
     let onRemove: (Country) -> Void
+    var onSetDate: ((Country) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var countryToRemove: Country? = nil
@@ -704,8 +704,51 @@ struct StatusListSheet: View {
         features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
     }
 
-    // Agrupados por primera letra, igual que la búsqueda
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    // Para Próximos: ordenar por fecha (sin fecha al final), luego alfabético
+    private var sortedFiltered: [Country] {
+        if filter == .wantToVisit {
+            return filtered.sorted {
+                switch ($0.plannedDate, $1.plannedDate) {
+                case let (a?, b?): return a < b
+                case (_?, nil):    return true
+                case (nil, _?):    return false
+                default:           return displayName(for: $0) < displayName(for: $1)
+                }
+            }
+        }
+        return filtered.sorted { displayName(for: $0) < displayName(for: $1) }
+    }
+
+    // Agrupados por primera letra (solo para no-Próximos) o por mes/año (Próximos con fecha)
     private var grouped: [(letter: String, items: [Country])] {
+        if filter == .wantToVisit {
+            // Para Próximos: agrupar por mes/año o "Sin fecha"
+            var result: [(letter: String, items: [Country])] = []
+            for country in sortedFiltered {
+                let key: String
+                if let date = country.plannedDate {
+                    let df = DateFormatter()
+                    df.dateFormat = "MMMM yyyy"
+                    df.locale = Locale(identifier: "es_ES")
+                    key = df.string(from: date).capitalized
+                } else {
+                    key = "Sin fecha"
+                }
+                if let idx = result.firstIndex(where: { $0.letter == key }) {
+                    result[idx].items.append(country)
+                } else {
+                    result.append((letter: key, items: [country]))
+                }
+            }
+            return result
+        }
         let sorted = filtered.sorted { displayName(for: $0) < displayName(for: $1) }
         var result: [(letter: String, items: [Country])] = []
         for country in sorted {
@@ -741,9 +784,27 @@ struct StatusListSheet: View {
                                 ForEach(section.items, id: \.isoCode) { country in
                                     HStack {
                                         Text(flagEmoji(for: country))
-                                        Text(displayName(for: country))
-                                            .font(.palatino(.body))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(displayName(for: country))
+                                                .font(.palatino(.body))
+                                            if filter == .wantToVisit, let date = country.plannedDate {
+                                                Text(Self.dateFormatter.string(from: date))
+                                                    .font(.palatino(.caption))
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
                                         Spacer()
+                                        if filter == .wantToVisit, let onSetDate {
+                                            Button {
+                                                onSetDate(country)
+                                            } label: {
+                                                Image(systemName: "calendar")
+                                                    .foregroundStyle(.blue)
+                                                    .font(.body)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .padding(.trailing, 8)
+                                        }
                                         Button {
                                             countryToRemove = country
                                         } label: {
@@ -838,6 +899,7 @@ struct ProfileSheet: View {
     let visitedFlags: Set<String>
     let allFeatures: [CountryFeature]
     let visitedIsoCodes: Set<String>
+    let countries: [Country]
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @Environment(\.dismiss) private var dismiss
@@ -975,12 +1037,15 @@ struct ProfileSheet: View {
                     // ── Nombre de usuario inline ──
                     UsernameEditView(username: $username)
 
+                    // ── Próximos: banderas ordenadas por fecha ──
+                    ProximosFlagsView(
+                        countries: countries,
+                        features: allFeatures
+                    )
+                    .padding(.top, 4)
+
                     // ── Mi top — tabla región × medalla ──
                     VStack(spacing: 12) {
-                        Text("Mi top")
-                            .font(.palatino(.title2, weight: .bold))
-                            .frame(maxWidth: .infinity, alignment: .center)
-
                         VStack(spacing: 0) {
                             // Cabecera medallas
                             HStack(spacing: 0) {
@@ -1461,18 +1526,23 @@ struct TableFlagPickerSheet: View {
 }
 
 
-// MARK: - Lista de todos los territorios (solo lectura)
+// MARK: - Lista de territorios visitados
 struct AllCountriesSheet: View {
     let features: [CountryFeature]
     let mode: CountingMode
+    let visitedIsoCodes: Set<String>
+    let countries: [Country]
     @Environment(\.dismiss) private var dismiss
+    @State private var editingVisitCount: Country? = nil
 
     private var filtered: [CountryFeature] {
+        let modeFiltered: [CountryFeature]
         switch mode {
-        case .all:    return features
-        case .un:     return features.filter { CountingMode.unMembers.contains($0.isoCode) }
-        case .unPlus: return features.filter { CountingMode.unMembers.contains($0.isoCode) || CountingMode.unObservers.contains($0.isoCode) }
+        case .all:    modeFiltered = features
+        case .un:     modeFiltered = features.filter { CountingMode.unMembers.contains($0.isoCode) }
+        case .unPlus: modeFiltered = features.filter { CountingMode.unMembers.contains($0.isoCode) || CountingMode.unObservers.contains($0.isoCode) }
         }
+        return modeFiltered.filter { visitedIsoCodes.contains($0.isoCode) }
     }
 
     private var grouped: [(letter: String, items: [CountryFeature])] {
@@ -1493,6 +1563,10 @@ struct AllCountriesSheet: View {
         return result
     }
 
+    private func country(for isoCode: String) -> Country? {
+        countries.first { $0.isoCode == isoCode }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -1500,11 +1574,31 @@ struct AllCountriesSheet: View {
                     Section(header: Text(section.letter)
                         .font(.palatino(.caption, weight: .bold))) {
                         ForEach(section.items, id: \.isoCode) { feature in
+                            let c = country(for: feature.isoCode)
                             HStack(spacing: 10) {
                                 Text(feature.flagEmoji ?? "🌐")
                                     .font(.title3)
                                 Text(feature.localizedName)
                                     .font(.palatino(.body))
+                                Spacer()
+                                if let c, c.visitCount > 0 {
+                                    Text("\(c.visitCount)x")
+                                        .font(.palatino(.subheadline, weight: .bold))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color(.systemGray5), in: Capsule())
+                                }
+                                if c?.status != .lived {
+                                    Button {
+                                        if let c { editingVisitCount = c }
+                                    } label: {
+                                        Image(systemName: "pencil.circle")
+                                            .font(.title3)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                             .padding(.vertical, 2)
                         }
@@ -1512,13 +1606,18 @@ struct AllCountriesSheet: View {
                 }
             }
             .listStyle(.plain)
-            .navigationTitle("\(mode.label) (\(filtered.count))")
+            .navigationTitle("Visitados (\(filtered.count))")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }
                         .font(.palatino(.body))
                 }
+            }
+            .sheet(item: $editingVisitCount) { country in
+                VisitCountPickerSheet(country: country,
+                    displayName: features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name,
+                    flagEmoji: features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐")
             }
         }
     }
@@ -1592,6 +1691,205 @@ struct UsernameEditView: View {
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, 4)
+    }
+}
+
+
+// MARK: - Selector de fecha para Próximos
+struct PlannedDatePickerSheet: View {
+    let countryName: String
+    let flagEmoji: String
+    let existingDate: Date?
+    let onSave: (Date) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedDate: Date
+
+    init(countryName: String, flagEmoji: String, existingDate: Date?,
+         onSave: @escaping (Date) -> Void) {
+        self.countryName = countryName
+        self.flagEmoji = flagEmoji
+        self.existingDate = existingDate
+        self.onSave = onSave
+        _selectedDate = State(initialValue: existingDate ?? Calendar.current.date(
+            byAdding: .month, value: 1, to: Date()) ?? Date())
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 28) {
+                Spacer().frame(height: 8)
+
+                Text("\(flagEmoji) \(countryName)")
+                    .font(.palatino(.title2, weight: .bold))
+                    .multilineTextAlignment(.center)
+
+                Text("¿Cuándo tienes pensado ir?")
+                    .font(.palatino(.subheadline))
+                    .foregroundStyle(.secondary)
+
+                DatePicker("", selection: $selectedDate, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .padding(.horizontal, 8)
+
+                Button {
+                    onSave(selectedDate)
+                    dismiss()
+                } label: {
+                    Text("Añadir a Próximos")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+            }
+            .navigationTitle("📅 Fecha de viaje")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .interactiveDismissDisabled(false)
+    }
+}
+
+// MARK: - Banderas de Próximos en perfil (máx 10, ordenadas por fecha)
+struct ProximosFlagsView: View {
+    let countries: [Country]
+    let features: [CountryFeature]
+
+    private var proximos: [Country] {
+        let filtered = countries.filter { $0.status == .wantToVisit }
+        let sorted = filtered.sorted {
+            switch ($0.plannedDate, $1.plannedDate) {
+            case let (a?, b?): return a < b
+            case (_?, nil):    return true
+            case (nil, _?):    return false
+            default:           return false
+            }
+        }
+        return Array(sorted.prefix(10))
+    }
+
+    private func flagEmoji(for country: Country) -> String {
+        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
+    }
+
+    var body: some View {
+        if !proximos.isEmpty {
+            VStack(spacing: 6) {
+                Text("Próximos")
+                    .font(.palatino(.title2, weight: .bold))
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                HStack(spacing: 4) {
+                    ForEach(proximos, id: \.isoCode) { country in
+                        Text(flagEmoji(for: country))
+                            .font(.system(size: 28))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+}
+
+
+// MARK: - Selector de número de visitas
+struct VisitCountPickerSheet: View {
+    @Bindable var country: Country
+    let displayName: String
+    let flagEmoji: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var count: Int
+
+    init(country: Country, displayName: String, flagEmoji: String) {
+        self.country = country
+        self.displayName = displayName
+        self.flagEmoji = flagEmoji
+        _count = State(initialValue: max(1, country.visitCount))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 32) {
+                Spacer()
+
+                Text("\(flagEmoji) \(displayName)")
+                    .font(.palatino(.title2, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Text("¿Cuántas veces has visitado?")
+                    .font(.palatino(.subheadline))
+                    .foregroundStyle(.secondary)
+
+                // Stepper grande
+                HStack(spacing: 40) {
+                    Button {
+                        if count > 1 { count -= 1 }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(count > 1 ? .blue : Color(.systemGray4))
+                    }
+                    .disabled(count <= 1)
+
+                    Text("\(count)")
+                        .font(.system(size: 72, weight: .bold, design: .rounded))
+                        .frame(minWidth: 80)
+                        .monospacedDigit()
+
+                    Button {
+                        count += 1
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                Text(count == 1 ? "vez" : "veces")
+                    .font(.palatino(.title3))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    country.visitCount = count
+                    dismiss()
+                } label: {
+                    Text("Guardar")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+            }
+            .navigationTitle("Visitas")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.large])
     }
 }
 

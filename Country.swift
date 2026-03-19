@@ -48,6 +48,8 @@ class Country {
     var name: String        // Nombre del país (ej: "Spain")
     var isoCode: String     // Código ISO A3 (ej: "ESP")
     var statusRaw: String   // Guardamos el rawValue del enum como String
+    var plannedDate: Date?  // Fecha planificada para próximos
+    var visitCount: Int = 0   // Número de veces visitado
 
     // Propiedad calculada para trabajar con el enum (como un getter/setter en Java)
     var status: CountryStatus {
@@ -55,10 +57,12 @@ class Country {
         set { statusRaw = newValue.rawValue }
     }
 
-    init(name: String, isoCode: String, status: CountryStatus = .none) {
+    init(name: String, isoCode: String, status: CountryStatus = .none, plannedDate: Date? = nil, visitCount: Int = 0) {
         self.name = name
         self.isoCode = isoCode
         self.statusRaw = status.rawValue
+        self.plannedDate = plannedDate
+        self.visitCount = visitCount
     }
     
     func cycleStatus() {
