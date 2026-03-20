@@ -36,7 +36,7 @@ enum CountryStatus: String, Codable, Identifiable {
         case .visited:     return "✅ Visitados"
         case .wantToVisit: return "🔜 Próximos"
         case .lived:       return "🏠 Vivido"
-        case .bucketList:  return "📝 Bucket List"
+        case .bucketList:  return "📝 Bucket list"
         }
     }
 }
@@ -51,6 +51,7 @@ class Country {
     var plannedDate: Date?     // Fecha desde (inicio del viaje)
     var plannedDateTo: Date?   // Fecha hasta (fin del viaje)
     var transport: String?     // Medio de transporte
+    var plannedTitle: String?  // Título del viaje próximo
     var visitCount: Int = 0   // Número de veces visitado
 
     // Propiedad calculada para trabajar con el enum (como un getter/setter en Java)
@@ -61,13 +62,14 @@ class Country {
 
     init(name: String, isoCode: String, status: CountryStatus = .none,
          plannedDate: Date? = nil, plannedDateTo: Date? = nil,
-         transport: String? = nil, visitCount: Int = 0) {
+         transport: String? = nil, plannedTitle: String? = nil, visitCount: Int = 0) {
         self.name = name
         self.isoCode = isoCode
         self.statusRaw = status.rawValue
         self.plannedDate = plannedDate
         self.plannedDateTo = plannedDateTo
         self.transport = transport
+        self.plannedTitle = plannedTitle
         self.visitCount = visitCount
     }
     

@@ -31,7 +31,7 @@ struct RaskMapView: UIViewRepresentable {
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
             span: MKCoordinateSpan(latitudeDelta: 140, longitudeDelta: 180)
         ), animated: false)
-        mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: 30_000_000)
+        mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: 25_000_000)
 
         let tap = InstantTapGestureRecognizer(target: context.coordinator,
                                               action: #selector(Coordinator.handleTap(_:)))
@@ -56,13 +56,17 @@ struct RaskMapView: UIViewRepresentable {
             )
             // Use custom center for oversized countries
             let customCenters: [String: CLLocationCoordinate2D] = [
-                "RUS": CLLocationCoordinate2D(latitude: 55.75, longitude: 37.62), // Moscow
+                "RUS": CLLocationCoordinate2D(latitude: 55.75, longitude: 37.62),
                 "CAN": CLLocationCoordinate2D(latitude: 56.13, longitude: -106.35),
                 "USA": CLLocationCoordinate2D(latitude: 38.90, longitude: -97.00),
                 "BRA": CLLocationCoordinate2D(latitude: -14.24, longitude: -51.93),
                 "AUS": CLLocationCoordinate2D(latitude: -25.27, longitude: 133.78),
                 "CHN": CLLocationCoordinate2D(latitude: 35.86, longitude: 104.19),
                 "GRL": CLLocationCoordinate2D(latitude: 71.71, longitude: -42.60),
+                "NOR": CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),  // Oslo
+                "CHL": CLLocationCoordinate2D(latitude: -33.45, longitude: -70.67), // Santiago
+                "FRA": CLLocationCoordinate2D(latitude: 48.85, longitude: 2.35),   // Paris
+                "NLD": CLLocationCoordinate2D(latitude: 52.38, longitude: 4.90),   // Amsterdam
             ]
             let center = customCenters[isoCode] ?? region.center
             mapView.setRegion(MKCoordinateRegion(center: center, span: cappedSpan), animated: true)

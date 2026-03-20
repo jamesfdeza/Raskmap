@@ -11,13 +11,15 @@ import SwiftData
 @Model
 class Trip {
     var isoCode: String       // País al que pertenece este viaje
+    var title: String?        // Título opcional del viaje
     var dateFrom: Date        // Fecha inicio
     var dateTo: Date?         // Fecha fin (opcional)
     var transport: String?    // Emoji de transporte
     var createdAt: Date
 
-    init(isoCode: String, dateFrom: Date, dateTo: Date? = nil, transport: String? = nil) {
+    init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil, transport: String? = nil) {
         self.isoCode = isoCode
+        self.title = title
         self.dateFrom = dateFrom
         self.dateTo = dateTo
         self.transport = transport

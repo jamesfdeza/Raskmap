@@ -31,7 +31,14 @@ struct ContentView: View {
     @State private var locationIsoCode: String? = nil
     @State private var showVisitedToast: Bool = false
     @State private var visitedToastMessage: String = ""
+    @State private var pendingAddTripCountry: Country? = nil
+    @State private var statusBeforeVisit: CountryStatus = .none
+    @State private var refreshTrigger: Bool = false
+    @State private var shouldOpenAddTrip: Bool = false
+    @State private var lastModifiedCountry: Country? = nil
+    @State private var editingFutureTrip: Trip? = nil
     @StateObject private var locationManager = LocationManager.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var pendingDateStatus: CountryStatus = .none
     @State private var deferredDateCountry: Country? = nil
     @State private var searchText: String = ""
@@ -47,6 +54,7 @@ struct ContentView: View {
     @AppStorage("menuPosition")    private var menuPositionRaw: String = "bottom"
     @AppStorage("showLived")      private var showLived: Bool = true
     @AppStorage("showBucketList") private var showBucketList: Bool = true
+    @AppStorage("showCountdown")  private var showCountdown: Bool = true
     @AppStorage("topGold")   private var topGold:   String = "[]"
     @AppStorage("topSilver") private var topSilver: String = "[]"
     @AppStorage("topBronze") private var topBronze: String = "[]"
@@ -75,6 +83,29 @@ struct ContentView: View {
     private var wantCount: Int {
         countingMode == .all ? wantCountAll :
         countries.filter { $0.status == .wantToVisit && countingMode.counts($0.isoCode) }.count
+    }
+
+    // Countries with a future trip registered (visited status + future Trip)
+    private var visitedWithFutureTrip: [Country] {
+        let today = Calendar.current.startOfDay(for: Date())
+        let futureIsoCodes = Set(trips.compactMap { trip -> String? in
+            guard Calendar.current.startOfDay(for: trip.dateFrom) >= today else { return nil }
+            return trip.isoCode
+        })
+        return countries.filter { $0.status == .visited && futureIsoCodes.contains($0.isoCode) }
+    }
+
+    // All "próximos": wantToVisit + visited with future trip
+    private var allProximos: [Country] {
+        let wantToVisit = countries.filter { $0.status == .wantToVisit }
+        return (wantToVisit + visitedWithFutureTrip)
+    }
+
+    // Extended próximos count for badge
+    private var proxCount: Int {
+        let base = countries.filter { $0.status == .wantToVisit && countingMode.counts($0.isoCode) }.count
+        let extra = visitedWithFutureTrip.filter { countingMode.counts($0.isoCode) }.count
+        return base + extra
     }
     private var livedCount: Int {
         countingMode == .all ? livedCountAll :
@@ -123,18 +154,19 @@ struct ContentView: View {
     @ViewBuilder
     private func badgesRow() -> some View {
         HStack(spacing: 4) {
-            StatBadge(value: visitedCount, label: "Visitados", color: colorTheme.visitedColor)
-                .onTapGesture { statusListFilter = .visited }
+            Spacer()
+            // Visitados badge hidden per design
             if showBucketList {
                 StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
                     .onTapGesture { statusListFilter = .bucketList }
             }
-            StatBadge(value: wantCount, label: "Próximos", color: colorTheme.wantToVisitColor)
+            StatBadge(value: proxCount, label: "Próximos", color: colorTheme.wantToVisitColor)
                 .onTapGesture { statusListFilter = .wantToVisit }
             if showLived {
                 StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
                     .onTapGesture { statusListFilter = .lived }
             }
+            Spacer()
         }
     }
 
@@ -156,7 +188,35 @@ struct ContentView: View {
                     .background(.regularMaterial, in: Circle())
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 6)
+    }
+
+    private var nextProximosBanner: (days: Int, flag: String, name: String)? {
+        let today = Calendar.current.startOfDay(for: Date())
+        var entries: [(days: Int, flag: String, name: String, date: Date)] = []
+        // wantToVisit countries
+        for country in countries where country.status == .wantToVisit {
+            guard let date = country.plannedDate else { continue }
+            let d = Calendar.current.startOfDay(for: date)
+            guard d > today else { continue }
+            let days = Calendar.current.dateComponents([.day], from: today, to: d).day ?? 0
+            let flag = features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
+            let name = features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
+            entries.append((days, flag, name, d))
+        }
+        // visited countries with future trips
+        for trip in trips where trip.isoCode != "" {
+            let d = Calendar.current.startOfDay(for: trip.dateFrom)
+            guard d >= today else { continue }
+            guard countries.first(where: { $0.isoCode == trip.isoCode })?.status == .visited else { continue }
+            let days = Calendar.current.dateComponents([.day], from: today, to: d).day ?? 0
+            guard days > 0 else { continue }  // skip today's auto-trips
+            let flag = features.first(where: { $0.isoCode == trip.isoCode })?.flagEmoji ?? "🌐"
+            let name = features.first(where: { $0.isoCode == trip.isoCode })?.localizedName ?? trip.isoCode
+            entries.append((days, flag, name, d))
+        }
+        guard let next = entries.sorted(by: { $0.date < $1.date }).first else { return nil }
+        return (next.days, next.flag, next.name)
     }
 
     @ViewBuilder
@@ -185,9 +245,9 @@ struct ContentView: View {
                     badgesRow()
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 16)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 6)
                 .padding(.top, 8)
 
                 counterRow(alignment: .top)
@@ -277,10 +337,42 @@ struct ContentView: View {
                           let planned = country.plannedDate else { continue }
                     let plannedDay = Calendar.current.startOfDay(for: planned)
                     if plannedDay < today {
+                        let autoTrip = Trip(isoCode: country.isoCode,
+                                           title: country.plannedTitle,
+                                           dateFrom: country.plannedDate ?? planned,
+                                           dateTo: country.plannedDateTo,
+                                           transport: country.transport)
+                        modelContext.insert(autoTrip)
                         country.status = .visited
                         country.plannedDate = nil
                         country.plannedDateTo = nil
                         country.transport = nil
+                        country.plannedTitle = nil
+                        changed = true
+                    }
+                }
+                if changed { try? modelContext.save() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                let today = Calendar.current.startOfDay(for: Date())
+                var changed = false
+                for country in countries {
+                    guard country.status == .wantToVisit,
+                          let planned = country.plannedDate else { continue }
+                    let plannedDay = Calendar.current.startOfDay(for: planned)
+                    if plannedDay < today {
+                        let autoTrip = Trip(isoCode: country.isoCode,
+                                           title: country.plannedTitle,
+                                           dateFrom: country.plannedDate ?? planned,
+                                           dateTo: country.plannedDateTo,
+                                           transport: country.transport)
+                        modelContext.insert(autoTrip)
+                        country.status = .visited
+                        country.plannedDate = nil
+                        country.plannedDateTo = nil
+                        country.transport = nil
+                        country.plannedTitle = nil
                         changed = true
                     }
                 }
@@ -293,9 +385,15 @@ struct ContentView: View {
         mapCore()
             .sheet(item: $selectedCountry, onDismiss: {
                 highlightedIsoCode = nil
-                // Re-apply translucent style if user is physically in this country
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     recheckLocationIfNeeded()
+                }
+                // Open AddTripSheet after country sheet fully dismissed
+                if shouldOpenAddTrip, let lastCountry = lastModifiedCountry {
+                    shouldOpenAddTrip = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        pendingAddTripCountry = lastCountry
+                    }
                 }
             }) { country in
                 CountryBottomSheet(
@@ -333,18 +431,70 @@ struct ContentView: View {
             }
             .sheet(item: $statusListFilter) { filter in
                 StatusListSheet(
-                    filter: filter, countries: countries, features: features,
+                    filter: filter,
+                    countries: filter == .wantToVisit ? allProximos : countries,
+                    features: features,
+                    trips: trips,
                     onRemove: { country in
-                        country.status = .none; country.plannedDate = nil
+                        if country.status == .visited {
+                            // Remove future trips for this country
+                            let today = Calendar.current.startOfDay(for: Date())
+                            for trip in trips where trip.isoCode == country.isoCode {
+                                if Calendar.current.startOfDay(for: trip.dateFrom) > today {
+                                    modelContext.delete(trip)
+                                }
+                            }
+                        } else {
+                            country.status = .none; country.plannedDate = nil
+                        }
                         try? modelContext.save()
                     },
-                    onSetDate: filter == .wantToVisit ? { country in
-                        deferredDateCountry = country
-                        statusListFilter = nil
+                    onSetDate: filter == .wantToVisit ? { country, trip in
+                        if let trip = trip {
+                            // Close StatusListSheet first, then open EditTripSheet
+                            statusListFilter = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                editingFutureTrip = trip
+                            }
+                        } else {
+                            deferredDateCountry = country
+                            statusListFilter = nil
+                        }
                     } : nil
                 )
             }
+            .sheet(item: $editingFutureTrip) { trip in
+                EditTripSheet(trip: trip)
+            }
             .sheet(item: $pendingDateCountry) { country in datePicker(for: country) }
+            .sheet(item: $pendingAddTripCountry) { country in
+                AddTripSheet(
+                    isoCode: country.isoCode,
+                    displayName: localizedName(for: country),
+                    flagEmoji: flagEmoji(for: country) ?? "🌐",
+                    onSave: { trip in
+                        modelContext.insert(trip)
+                        try? modelContext.save()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            refreshTrigger.toggle()
+                        }
+                        // Only show toast if we actually changed status to visited
+                        if statusBeforeVisit != .visited {
+                            let name = localizedName(for: country)
+                            visitedToastMessage = "✅ \(name) visitado"
+                            showVisitedToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { showVisitedToast = false }
+                        }
+                    },
+                    onCancel: {
+                        // Only revert if we changed the status (not for visited->addTrip)
+                        if statusBeforeVisit != .visited {
+                            country.status = statusBeforeVisit
+                            try? modelContext.save()
+                        }
+                    }
+                )
+            }
             .onChange(of: statusListFilter) { _, newValue in
                 if newValue == nil, let deferred = deferredDateCountry {
                     deferredDateCountry = nil
@@ -370,6 +520,26 @@ struct ContentView: View {
             .ignoresSafeArea()
             menuOverlay()
 
+            // Próximos countdown banner — opposite side to menu
+            if showCountdown, let banner = nextProximosBanner {
+                VStack {
+                    if menuPositionIsTop { Spacer() }
+                    let dayWord = banner.days == 1 ? "día" : "días"
+                    let quedaWord = banner.days == 1 ? "Queda" : "Quedan"
+                    let bannerText = "\(quedaWord) \(banner.days) \(dayWord) para \(banner.flag) \(banner.name)"
+                    Text(bannerText)
+                        .font(.palatino(.footnote, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.bottom, menuPositionIsTop ? 16 : 0)
+                        .padding(.top, menuPositionIsTop ? 0 : 16)
+                    if !menuPositionIsTop { Spacer() }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .allowsHitTesting(false)
+            }
+
             // Visited toast
             if showVisitedToast {
                 VStack {
@@ -393,8 +563,16 @@ struct ContentView: View {
         }
         // MARK: - Sheet país
         .sheet(item: $selectedCountry, onDismiss: {
-            // Si se cierra sin asignar estado, quitar el borde negro
             highlightedIsoCode = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                recheckLocationIfNeeded()
+            }
+            if shouldOpenAddTrip, let lastCountry = lastModifiedCountry {
+                shouldOpenAddTrip = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    pendingAddTripCountry = lastCountry
+                }
+            }
         }) { country in
             CountryBottomSheet(
                 country: country,
@@ -475,10 +653,10 @@ struct ContentView: View {
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 32)
                 .onChange(of: usernameInput) {
-                    usernameInput = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(15))
+                    usernameInput = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(10))
                 }
             Button(action: {
-                let clean = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(15))
+                let clean = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(10))
                 if !clean.isEmpty { username = clean; showOnboarding = false }
             }) {
                 Text("Empezar").fontWeight(.semibold)
@@ -494,17 +672,21 @@ struct ContentView: View {
 
     @ViewBuilder
     private func datePicker(for country: Country) -> some View {
+        let editing = country.plannedDate != nil
         PlannedDatePickerSheet(
             countryName: localizedName(for: country),
             flagEmoji: flagEmoji(for: country) ?? "🌐",
             existingDate: country.plannedDate,
             existingDateTo: country.plannedDateTo,
             existingTransport: country.transport,
-            onSave: { dateFrom, dateTo, transport in
+            existingTitle: country.plannedTitle,
+            isEditing: editing,
+            onSave: { dateFrom, dateTo, transport, title in
                 country.status = .wantToVisit
                 country.plannedDate = dateFrom
                 country.plannedDateTo = dateTo
                 country.transport = transport
+                country.plannedTitle = title
                 try? modelContext.save()
                 highlightedIsoCode = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { centerMap(on: country.isoCode) }
@@ -525,6 +707,7 @@ struct ContentView: View {
             username: $username, profileImage: $profileImage,
             countingModeRaw: $countingModeRaw, menuPositionRaw: $menuPositionRaw,
             showLived: $showLived, showBucketList: $showBucketList,
+            showCountdown: $showCountdown,
             onClearStatus: { status in
                 for country in countries where country.status == status { country.status = .none }
                 try? modelContext.save()
@@ -590,9 +773,34 @@ struct ContentView: View {
 
     private func autoMarkIfNeeded(isoCode: String) {
         guard let country = countries.first(where: { $0.isoCode == isoCode }) else { return }
+        let today = Calendar.current.startOfDay(for: Date())
+        // If visited and has future trip, no location action needed
+        if country.status == .visited {
+            let hasFutureTrip = trips.contains { $0.isoCode == isoCode && Calendar.current.startOfDay(for: $0.dateFrom) > today }
+            if hasFutureTrip { return } // visual translucency handled elsewhere
+            return
+        }
         switch country.status {
-        case .none, .wantToVisit, .bucketList:
+        case .none, .wantToVisit:
             country.status = .visited
+            country.plannedDate = nil
+            country.plannedDateTo = nil
+            country.transport = nil
+            try? modelContext.save()
+        case .bucketList:
+            let hasFutureTrip = trips.contains { $0.isoCode == isoCode && Calendar.current.startOfDay(for: $0.dateFrom) > today }
+            if hasFutureTrip {
+                // Has future trip registered — mark as wantToVisit, keep trip
+                country.status = .wantToVisit
+            } else {
+                // No future trip — mark visited, create auto trip for today
+                country.status = .visited
+                let df = DateFormatter(); df.dateStyle = .long; df.locale = Locale(identifier: "es_ES")
+                let autoTrip = Trip(isoCode: isoCode,
+                                    title: "Visita en el día \(df.string(from: Date()))",
+                                    dateFrom: today, dateTo: nil, transport: "✈️")
+                modelContext.insert(autoTrip)
+            }
             country.plannedDate = nil
             country.plannedDateTo = nil
             country.transport = nil
@@ -603,7 +811,7 @@ struct ContentView: View {
                 try? modelContext.save()
             }
         case .visited:
-            break // already visited, nothing to do
+            break
         }
     }
 
@@ -643,18 +851,48 @@ struct ContentView: View {
     
     private func updateCountryStatus(country: Country, newStatus: CountryStatus) {
         if newStatus == .wantToVisit {
-            // Show date picker before saving
-            pendingDateCountry = country
-            pendingDateStatus = newStatus
+            if country.status == .visited {
+                // Visited + future trip: open AddTripSheet, keep status as visited
+                pendingAddTripCountry = country
+                statusBeforeVisit = .visited  // don't revert on cancel
+            } else {
+                pendingDateCountry = country
+                pendingDateStatus = newStatus
+            }
         } else {
+            let previousStatus = country.status
             country.status = newStatus
-            if newStatus == .none { country.plannedDate = nil }
+
+            // Clean up planned dates when leaving wantToVisit
+            if previousStatus == .wantToVisit && newStatus != .wantToVisit {
+                country.plannedDate = nil
+                country.plannedDateTo = nil
+                country.transport = nil
+            }
+            if newStatus == .none {
+                country.plannedDate = nil
+                country.plannedDateTo = nil
+                country.transport = nil
+                country.visitCount = 0
+            }
+
+            // Remove future trips when changing to none or bucketList
+            if newStatus == .none || newStatus == .bucketList {
+                let today = Calendar.current.startOfDay(for: Date())
+                for trip in trips where trip.isoCode == country.isoCode {
+                    if Calendar.current.startOfDay(for: trip.dateFrom) >= today {
+                        modelContext.delete(trip)
+                    }
+                }
+            }
+
+            try? modelContext.save()
+            refreshTrigger.toggle()  // force @Query refresh
             highlightedIsoCode = nil
             if newStatus == .visited {
-                let name = localizedName(for: country)
-                visitedToastMessage = "✅ \(name) visitado"
-                showVisitedToast = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { showVisitedToast = false }
+                statusBeforeVisit = previousStatus
+                lastModifiedCountry = country
+                shouldOpenAddTrip = true
             }
             if newStatus != .none {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -760,7 +998,7 @@ struct CountryBottomSheet: View {
                 )
                 if showBucketList {
                     ActionButton(
-                        label: "📝 Bucket List",
+                        label: "📝 Bucket list",
                         color: colorTheme.bucketListColor,
                         isSelected: country.status == .bucketList,
                         action: {
@@ -843,14 +1081,17 @@ struct StatusListSheet: View {
     let filter: CountryStatus
     let countries: [Country]
     let features: [CountryFeature]
+    var trips: [Trip] = []
     let onRemove: (Country) -> Void
-    var onSetDate: ((Country) -> Void)? = nil
+    var onSetDate: ((Country, Trip?) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var countryToRemove: Country? = nil
 
     private var filtered: [Country] {
-        countries.filter { $0.status == filter }
+        // For wantToVisit, countries already contains allProximos (visited+future included)
+        if filter == .wantToVisit { return countries }
+        return countries.filter { $0.status == filter }
     }
 
     private func displayName(for country: Country) -> String {
@@ -859,6 +1100,30 @@ struct StatusListSheet: View {
 
     private func flagEmoji(for country: Country) -> String {
         features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
+    }
+
+    private func futureTrip(for country: Country) -> Trip? {
+        let today = Calendar.current.startOfDay(for: Date())
+        let iso = country.isoCode
+        let future = trips.filter { t in
+            t.isoCode == iso && Calendar.current.startOfDay(for: t.dateFrom) >= today
+        }
+        return future.min(by: { $0.dateFrom < $1.dateFrom })
+    }
+
+    private func proximoDateFrom(for country: Country) -> Date? {
+        if country.status == .wantToVisit { return country.plannedDate }
+        return futureTrip(for: country)?.dateFrom
+    }
+
+    private func proximoDateTo(for country: Country) -> Date? {
+        if country.status == .wantToVisit { return country.plannedDateTo }
+        return futureTrip(for: country)?.dateTo
+    }
+
+    private func proximoTransport(for country: Country) -> String? {
+        if country.status == .wantToVisit { return country.transport }
+        return futureTrip(for: country)?.transport
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -872,7 +1137,7 @@ struct StatusListSheet: View {
     private var sortedFiltered: [Country] {
         if filter == .wantToVisit {
             return filtered.sorted {
-                switch ($0.plannedDate, $1.plannedDate) {
+                switch (proximoDateFrom(for: $0), proximoDateFrom(for: $1)) {
                 case let (a?, b?): return a < b
                 case (_?, nil):    return true
                 case (nil, _?):    return false
@@ -890,7 +1155,7 @@ struct StatusListSheet: View {
             var result: [(letter: String, items: [Country])] = []
             for country in sortedFiltered {
                 let key: String
-                if let date = country.plannedDate {
+                if let date = proximoDateFrom(for: country) {
                     let df = DateFormatter()
                     df.dateFormat = "MMMM yyyy"
                     df.locale = Locale(identifier: "es_ES")
@@ -942,26 +1207,46 @@ struct StatusListSheet: View {
                                     HStack {
                                         Text(flagEmoji(for: country))
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(displayName(for: country))
-                                                .font(.palatino(.body))
                                             if filter == .wantToVisit {
+                                                let tripTitle: String? = country.status == .wantToVisit
+                                                    ? country.plannedTitle
+                                                    : futureTrip(for: country)?.title
+                                                if let title = tripTitle, !title.isEmpty {
+                                                    HStack(spacing: 6) {
+                                                        Text(title).font(.palatino(.body, weight: .bold))
+                                                        Text("|").foregroundStyle(.secondary)
+                                                        Text(displayName(for: country)).font(.palatino(.body)).foregroundStyle(.secondary)
+                                                    }
+                                                } else {
+                                                    Text(displayName(for: country)).font(.palatino(.body))
+                                                }
                                                 HStack(spacing: 4) {
-                                                    if let t = country.transport { Text(t).font(.caption) }
-                                                    if let from = country.plannedDate {
+                                                    if let t = proximoTransport(for: country) { Text(t).font(.caption) }
+                                                    if let from = proximoDateFrom(for: country) {
                                                         Text(Self.dateFormatter.string(from: from))
                                                             .font(.palatino(.caption)).foregroundStyle(.secondary)
-                                                    }
-                                                    if let to = country.plannedDateTo {
-                                                        Text("→ \(Self.dateFormatter.string(from: to))")
-                                                            .font(.palatino(.caption)).foregroundStyle(.secondary)
+                                                        if let to = proximoDateTo(for: country) {
+                                                            Text("→ \(Self.dateFormatter.string(from: to))")
+                                                                .font(.palatino(.caption)).foregroundStyle(.secondary)
+                                                        }
+                                                        let today = Calendar.current.startOfDay(for: Date())
+                                                        let d = Calendar.current.startOfDay(for: from)
+                                                        let days = Calendar.current.dateComponents([.day], from: today, to: d).day ?? 0
+                                                        if days >= 0 {
+                                                            Text("\(days)d")
+                                                                .font(.palatino(.caption, weight: .bold))
+                                                                .foregroundStyle(.blue)
+                                                        }
                                                     }
                                                 }
+                                            } else {
+                                                Text(displayName(for: country)).font(.palatino(.body))
                                             }
                                         }
                                         Spacer()
                                         if filter == .wantToVisit, let onSetDate {
                                             Button {
-                                                onSetDate(country)
+                                                onSetDate(country, futureTrip(for: country))
                                             } label: {
                                                 Image(systemName: "calendar")
                                                     .foregroundStyle(.blue)
@@ -1056,6 +1341,7 @@ struct ProfileSheet: View {
     @Binding var menuPositionRaw: String
     @Binding var showLived: Bool
     @Binding var showBucketList: Bool
+    @Binding var showCountdown: Bool
     var onClearStatus: (CountryStatus) -> Void = { _ in }
     @Binding var topGold: String
     @Binding var topSilver: String
@@ -1187,7 +1473,7 @@ struct ProfileSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 16) {
 
                     // ── Avatar centrado ──
                     Button { showImagePicker = true } label: {
@@ -1204,16 +1490,22 @@ struct ProfileSheet: View {
                     // ── Nombre de usuario inline ──
                     UsernameEditView(username: $username)
 
+                    Divider().padding(.horizontal, 24)
+
                     // ── Años + Finalizados/Próximos ──
                     YearTravelView(
                         countries: countries,
                         features: allFeatures,
                         trips: trips
                     )
-                    .padding(.top, 4)
 
+                    Divider().padding(.horizontal, 24)
                     // ── Mi top — tabla región × medalla ──
-                    VStack(spacing: 12) {
+                    Text("Medallero")
+                        .font(.palatino(.title2, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.bottom, -20)
+                    VStack(spacing: 8) {
                         VStack(spacing: 0) {
                             // Cabecera medallas
                             HStack(spacing: 0) {
@@ -1347,6 +1639,7 @@ struct ProfileSheet: View {
                 menuPositionRaw: $menuPositionRaw,
                 showLived: $showLived,
                 showBucketList: $showBucketList,
+                showCountdown: $showCountdown,
                 onClearStatus: onClearStatus
             )
             .environmentObject(colorTheme)
@@ -1360,6 +1653,7 @@ struct SettingsSheet: View {
     @Binding var menuPositionRaw: String
     @Binding var showLived: Bool
     @Binding var showBucketList: Bool
+    @Binding var showCountdown: Bool
     var onClearStatus: (CountryStatus) -> Void = { _ in }
 
     @State private var pendingClear: CountryStatus? = nil
@@ -1450,7 +1744,7 @@ struct SettingsSheet: View {
                                     Circle()
                                         .fill(colorTheme.bucketListColor)
                                         .frame(width: 14, height: 14)
-                                    Text("Bucket List")
+                                    Text("Bucket list")
                                         .font(.palatino(.body))
                                         .foregroundStyle(.primary)
                                     Spacer()
@@ -1491,6 +1785,28 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
 
+                    // Contador próximo viaje
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Contador próximo viaje:")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            Image(systemName: "calendar.badge.clock")
+                                .foregroundStyle(.blue)
+                                .frame(width: 20)
+                            Text("Mostrar contador")
+                                .font(.palatino(.body))
+                            Spacer()
+                            Toggle("", isOn: $showCountdown)
+                                .labelsHidden()
+                                .tint(.blue)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.horizontal, 24)
+
                     // Colores
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Colores")
@@ -1501,7 +1817,7 @@ struct SettingsSheet: View {
                         VStack(spacing: 0) {
                             ColorPickerRow(label: "Visitado",    color: $colorTheme.visitedColor)
                             Divider().padding(.leading, 56)
-                            ColorPickerRow(label: "Bucket List", color: $colorTheme.bucketListColor)
+                            ColorPickerRow(label: "Bucket list", color: $colorTheme.bucketListColor)
                             Divider().padding(.leading, 56)
                             ColorPickerRow(label: "Próximo",     color: $colorTheme.wantToVisitColor)
                             Divider().padding(.leading, 56)
@@ -1561,7 +1877,7 @@ struct SettingsSheet: View {
                 }
             } message: {
                 if let status = pendingClear {
-                    Text("Se eliminarán todos los países de \(status == .lived ? "Vivido" : "Bucket List"). Esta acción no se puede deshacer.")
+                    Text("Se eliminarán todos los países de \(status == .lived ? "Vivido" : "Bucket list"). Esta acción no se puede deshacer.")
                 }
             }
             .overlay {
@@ -1720,6 +2036,7 @@ struct AllCountriesSheet: View {
     @State private var editingVisitCount: Country? = nil
     @State private var addingTripFor: Country? = nil
     @State private var viewingTripsFor: Country? = nil
+    @State private var confirmDeleteCountry: Country? = nil
 
     private var filtered: [CountryFeature] {
         let modeFiltered: [CountryFeature]
@@ -1758,21 +2075,27 @@ struct AllCountriesSheet: View {
                             let c = country(for: feature.isoCode)
                             HStack(spacing: 10) {
                                 Text(feature.flagEmoji ?? "🌐").font(.title3)
-                                Text(feature.localizedName).font(.palatino(.body))
-                                Spacer()
-                                if c?.status != .lived {
-                                    // Nx — tap opens trip history
+                                if c?.status == .lived {
+                                    Text(feature.localizedName)
+                                        .font(.palatino(.body)).foregroundStyle(.primary)
+                                    Spacer()
+                                } else {
                                     Button {
                                         if let c { viewingTripsFor = c }
                                     } label: {
-                                        Text("\(c.map { totalVisits(for: $0) } ?? 0)x")
-                                            .font(.palatino(.subheadline, weight: .bold))
-                                            .foregroundStyle(.secondary)
-                                            .padding(.horizontal, 8).padding(.vertical, 3)
-                                            .background(Color(.systemGray5), in: Capsule())
+                                        HStack(spacing: 10) {
+                                            Text(feature.localizedName)
+                                                .font(.palatino(.body)).foregroundStyle(.primary)
+                                            Spacer()
+                                            Text("\(c.map { totalVisits(for: $0) } ?? 0)x")
+                                                .font(.palatino(.subheadline, weight: .bold))
+                                                .foregroundStyle(.secondary)
+                                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                                .background(Color(.systemGray5), in: Capsule())
+                                        }
+                                        .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
-                                    // Add trip
                                     Button {
                                         if let c { addingTripFor = c }
                                     } label: {
@@ -1781,6 +2104,14 @@ struct AllCountriesSheet: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
+                                // Delete button
+                                Button {
+                                    if let c { confirmDeleteCountry = c }
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.callout).foregroundStyle(.red.opacity(0.6))
+                                }
+                                .buttonStyle(.plain)
                             }
                             .padding(.vertical, 2)
                         }
@@ -1794,6 +2125,29 @@ struct AllCountriesSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
+            }
+            .confirmationDialog(
+                "¿Eliminar este territorio?",
+                isPresented: Binding(get: { confirmDeleteCountry != nil }, set: { if !$0 { confirmDeleteCountry = nil } }),
+                presenting: confirmDeleteCountry
+            ) { country in
+                Button("Eliminar", role: .destructive) {
+                    // Set to none, remove all trips
+                    country.status = .none
+                    country.plannedDate = nil
+                    country.plannedDateTo = nil
+                    country.transport = nil
+                    country.visitCount = 0
+                    for trip in trips where trip.isoCode == country.isoCode {
+                        modelContext.delete(trip)
+                    }
+                    try? modelContext.save()
+                    confirmDeleteCountry = nil
+                }
+                Button("Cancelar", role: .cancel) { confirmDeleteCountry = nil }
+            } message: { country in
+                let name = features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
+                Text("Se eliminarán todos los datos de \(name): visitas, viajes y fechas.")
             }
             .sheet(item: $editingVisitCount) { country in
                 VisitCountPickerSheet(country: country,
@@ -1850,7 +2204,7 @@ struct UsernameEditView: View {
                         draft = String(
                             draft.lowercased()
                                 .filter { $0.isLetter || $0.isNumber || $0 == "_" }
-                                .prefix(15)
+                                .prefix(10)
                         )
                     }
                 Button {
@@ -1898,16 +2252,19 @@ struct PlannedDatePickerSheet: View {
     let existingDate: Date?
     let existingDateTo: Date?
     let existingTransport: String?
-    let onSave: (Date, Date?, String?) -> Void
+    let existingTitle: String?
+    var isEditing: Bool = false
+    let onSave: (Date, Date?, String?, String?) -> Void  // dateFrom, dateTo, transport, title
 
     @Environment(\.dismiss) private var dismiss
     @State private var dateFrom: Date
     @State private var dateTo: Date?
     @State private var pickingFrom: Bool = true
     @State private var selectedTransport: String?
+    @State private var tripTitle: String
 
     static let transports: [(emoji: String, label: String)] = [
-        ("✈️", "Avión"), ("🚗", "Coche"), ("🚂", "Tren"), ("🚌", "Bus"), ("🚶", "Andando")
+        ("✈️", "Avión"), ("🚗", "Coche"), ("🚂", "Tren"), ("🚌", "Bus"), ("🚢", "Barco"), ("🚶🏻", "Andando")
     ]
     private static let fmt: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
@@ -1915,83 +2272,109 @@ struct PlannedDatePickerSheet: View {
 
     init(countryName: String, flagEmoji: String,
          existingDate: Date?, existingDateTo: Date?, existingTransport: String?,
-         onSave: @escaping (Date, Date?, String?) -> Void) {
+         existingTitle: String? = nil, isEditing: Bool = false,
+         onSave: @escaping (Date, Date?, String?, String?) -> Void) {
         self.countryName = countryName
         self.flagEmoji = flagEmoji
         self.existingDate = existingDate
         self.existingDateTo = existingDateTo
         self.existingTransport = existingTransport
+        self.existingTitle = existingTitle
+        self.isEditing = isEditing
         self.onSave = onSave
         _dateFrom = State(initialValue: existingDate ?? Date())
         _dateTo = State(initialValue: existingDateTo)
         _selectedTransport = State(initialValue: existingTransport)
+        _tripTitle = State(initialValue: existingTitle ?? "")
+    }
+
+    @ViewBuilder
+    private func transportRow() -> some View {
+        HStack(spacing: 8) {
+            ForEach(Self.transports, id: \.emoji) { t in
+                let isSelected = selectedTransport == t.emoji
+                Button { selectedTransport = isSelected ? nil : t.emoji } label: {
+                    VStack(spacing: 2) {
+                        Text(t.emoji).font(.title3)
+                        Text(t.label).font(.system(size: 9))
+                            .foregroundStyle(isSelected ? .white : .secondary)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 6)
+                    .background(isSelected ? Color.blue : Color(.systemGray5), in: RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private func dateTabsRow() -> some View {
+        let fromLabel = Self.fmt.string(from: dateFrom)
+        let toLabel = dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta"
+        HStack(spacing: 0) {
+            dateTab(isFrom: true, label: "DESDE", value: fromLabel)
+            dateTab(isFrom: false, label: "HASTA", value: toLabel)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func dateTab(isFrom: Bool, label: String, value: String) -> some View {
+        let active = pickingFrom == isFrom
+        let color: Color = active ? .blue : (isFrom ? .primary : (dateTo == nil ? .secondary : .primary))
+        Button { pickingFrom = isFrom } label: {
+            VStack(spacing: 2) {
+                Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                Text(value).font(.palatino(.subheadline, weight: .bold)).foregroundStyle(color)
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 8)
+            .background(active ? Color.blue.opacity(0.08) : Color.clear)
+            .overlay(alignment: .bottom) {
+                if active { Rectangle().fill(Color.blue).frame(height: 2) }
+            }
+        }.buttonStyle(.plain)
     }
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 0) {
                 Text("\(flagEmoji) \(countryName)")
                     .font(.palatino(.title3, weight: .bold))
-                    .padding(.top, 12).padding(.bottom, 8)
+                    .padding(.top, 12).padding(.bottom, isEditing ? 4 : 8)
 
-                // Transporte
-                HStack(spacing: 8) {
-                    ForEach(Self.transports, id: \.emoji) { t in
-                        Button { selectedTransport = selectedTransport == t.emoji ? nil : t.emoji } label: {
-                            VStack(spacing: 2) {
-                                Text(t.emoji).font(.title3)
-                                Text(t.label).font(.system(size: 9))
-                                    .foregroundStyle(selectedTransport == t.emoji ? .white : .secondary)
-                            }
-                            .frame(maxWidth: .infinity).padding(.vertical, 6)
-                            .background(selectedTransport == t.emoji ? Color.blue : Color(.systemGray5),
-                                        in: RoundedRectangle(cornerRadius: 8))
-                        }.buttonStyle(.plain)
-                    }
+                if isEditing {
+                    TextField("Título del viaje *", text: $tripTitle)
+                        .font(.palatino(.body))
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.horizontal, 16).padding(.bottom, 8)
                 }
-                .padding(.horizontal, 16).padding(.bottom, 8)
 
-                // Tabs desde/hasta
-                HStack(spacing: 0) {
-                    ForEach([(true, "DESDE", Self.fmt.string(from: dateFrom)),
-                             (false, "HASTA", dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")],
-                            id: \.1) { isFrom, label, value in
-                        Button { pickingFrom = isFrom } label: {
-                            VStack(spacing: 2) {
-                                Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                                Text(value).font(.palatino(.subheadline, weight: .bold))
-                                    .foregroundStyle(pickingFrom == isFrom ? .blue : (isFrom ? .primary : (dateTo == nil ? .secondary : .primary)))
-                            }
-                            .frame(maxWidth: .infinity).padding(.vertical, 8)
-                            .background(pickingFrom == isFrom ? Color.blue.opacity(0.08) : Color.clear)
-                            .overlay(alignment: .bottom) {
-                                if pickingFrom == isFrom { Rectangle().fill(Color.blue).frame(height: 2) }
-                            }
-                        }.buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16)
+                transportRow()
+                dateTabsRow()
                 Divider()
 
                 RangeDatePicker(dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom)
                     .padding(.horizontal, 8)
-
                 Spacer()
 
+                let canSave = selectedTransport != nil && (!isEditing || !tripTitle.isEmpty)
                 Button {
-                    onSave(dateFrom, dateTo, selectedTransport)
+                    let title: String? = isEditing && !tripTitle.isEmpty ? tripTitle : nil
+                    onSave(dateFrom, dateTo, selectedTransport, title)
                     dismiss()
                 } label: {
-                    Text("Añadir a Próximos")
+                    Text(isEditing ? "Guardar cambios" : "Añadir a Próximos")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(selectedTransport != nil ? Color.blue : Color(.systemGray4),
-                                    in: RoundedRectangle(cornerRadius: 12))
+                        .background(canSave ? Color.blue : Color(.systemGray4), in: RoundedRectangle(cornerRadius: 12))
                         .foregroundStyle(.white)
                 }
-                .disabled(selectedTransport == nil)
+                .disabled(!canSave)
                 .padding(.horizontal, 24).padding(.bottom, 24)
-            }
+            } // VStack
+            } // ScrollView
             .navigationTitle("📅 Fecha de viaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2090,47 +2473,62 @@ struct YearTravelView: View {
         return years.sorted(by: >)
     }
 
-    // Finalizados: países con al menos un trip finalizado en el año seleccionado
-    // Un país aparece UNA sola vez, ordenado por el último trip
+    // Finalizados: países con al menos un trip finalizado en el año seleccionado.
+    // Cada país aparece UNA sola vez. Orden FIFO: por dateFrom del PRIMER viaje a ese país en el año.
     private var finalizados: [(isoCode: String, lastDate: Date)] {
-        var byCountry: [String: Date] = [:]
-        // From Trip records
+        // Collect all (isoCode, dateFrom) pairs for finished trips this year
+        var allEntries: [String: [Date]] = [:]  // isoCode -> list of dateFrom
         for trip in trips {
-            let end = trip.effectiveEndDate
-            let endDay = Calendar.current.startOfDay(for: end)
+            let endDay = Calendar.current.startOfDay(for: trip.effectiveEndDate)
             if endDay <= today && trip.year == selectedYear {
-                if byCountry[trip.isoCode] == nil || end > byCountry[trip.isoCode]! {
-                    byCountry[trip.isoCode] = end
-                }
+                allEntries[trip.isoCode, default: []].append(trip.dateFrom)
             }
         }
-        // From country planned dates (legacy)
         for country in countries {
             let endDate = country.plannedDateTo ?? country.plannedDate
             guard let end = endDate else { continue }
             let endDay = Calendar.current.startOfDay(for: end)
             let year = Calendar.current.component(.year, from: end)
             if endDay <= today && year == selectedYear {
-                if byCountry[country.isoCode] == nil || end > byCountry[country.isoCode]! {
-                    byCountry[country.isoCode] = end
-                }
+                let from = country.plannedDate ?? end
+                allEntries[country.isoCode, default: []].append(from)
             }
         }
-        return byCountry.map { ($0.key, $0.value) }.sorted { $0.lastDate < $1.lastDate }
+        // For each country: take earliest dateFrom (FIFO = first trip comes first)
+        var result: [(isoCode: String, lastDate: Date)] = []
+        for (iso, dates) in allEntries {
+            if let earliest = dates.min() {
+                result.append((isoCode: iso, lastDate: earliest))
+            }
+        }
+        return result.sorted { $0.lastDate < $1.lastDate }
     }
 
     // Próximos: status wantToVisit
     private var proximos: [Country] {
-        countries.filter { $0.status == .wantToVisit }
-            .sorted {
-                switch ($0.plannedDate, $1.plannedDate) {
-                case let (a?, b?): return a < b
-                case (_?, nil):    return true
-                default:           return false
-                }
+        let today = Calendar.current.startOfDay(for: Date())
+        // Include wantToVisit + visited with future trip (same as badge proxCount)
+        let futureIsoCodes = Set(trips.compactMap { trip -> String? in
+            guard Calendar.current.startOfDay(for: trip.dateFrom) >= today else { return nil }
+            return trip.isoCode
+        })
+        let visitedWithFuture = countries.filter { $0.status == .visited && futureIsoCodes.contains($0.isoCode) }
+        let wantToVisit = countries.filter { $0.status == .wantToVisit }
+        let all = (wantToVisit + visitedWithFuture)
+        func nextDate(_ country: Country) -> Date? {
+            if country.status == .wantToVisit { return country.plannedDate }
+            return trips.filter { t in
+                t.isoCode == country.isoCode && Calendar.current.startOfDay(for: t.dateFrom) >= today
+            }.min(by: { lhs, rhs in lhs.dateFrom < rhs.dateFrom })?.dateFrom
+        }
+        return all.sorted { c0, c1 in
+            switch (nextDate(c0), nextDate(c1)) {
+            case let (a?, b?): return a < b
+            case (_?, nil): return true
+            default: return false
             }
-            .prefix(10)
-            .map { $0 }
+        }
+        .prefix(10).map { $0 }
     }
 
     private func flagEmoji(for country: Country) -> String? {
@@ -2588,7 +2986,7 @@ struct MapExportSheet: View {
                 }
             }
             .sheet(isPresented: $showTransportStats) {
-                TransportStatsSheet(visitedCountries: visitedCountries, trips: trips)
+                TransportStatsSheet(visitedCountries: visitedCountries, trips: trips, allFeatures: features)
             }
             .sheet(item: $selectedSubgroup) { info in
                 SubgroupListSheet(
@@ -2836,10 +3234,10 @@ struct MapExportSheet: View {
         let este    = visitedCount(in: Self.asiaEste)
 
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            statTile(title: "Asia sudeste", visited: sudeste.visited, total: sudeste.total, emoji: "🌴", group: Self.sudEsteAsiatico)
             statTile(title: "Asia central",     visited: central.visited, total: central.total, emoji: "🏔️", group: Self.asiaCentral)
-            statTile(title: "Asia sur",         visited: sur.visited,     total: sur.total,     emoji: "🕌", group: Self.asiaSur)
             statTile(title: "Asia este",        visited: este.visited,    total: este.total,    emoji: "🗾", group: Self.asiaEste)
+            statTile(title: "Asia sur",         visited: sur.visited,     total: sur.total,     emoji: "🕌", group: Self.asiaSur)
+            statTile(title: "Asia sudeste", visited: sudeste.visited, total: sudeste.total, emoji: "🌴", group: Self.sudEsteAsiatico)
         }
         .padding(.horizontal, 16)
     }
@@ -3263,8 +3661,11 @@ struct AddTripSheet: View {
     let displayName: String
     let flagEmoji: String
     let onSave: (Trip) -> Void
+    var onCancel: (() -> Void)? = nil
 
+    @State private var didSave = false
     @Environment(\.dismiss) private var dismiss
+    @State private var tripTitle: String = ""
     @State private var dateFrom: Date = Date()
     @State private var dateTo: Date? = nil
     @State private var pickingFrom: Bool = true
@@ -3276,10 +3677,17 @@ struct AddTripSheet: View {
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 0) {
                 Text("\(flagEmoji) \(displayName)")
                     .font(.palatino(.title3, weight: .bold))
-                    .padding(.top, 12).padding(.bottom, 8)
+                    .padding(.top, 12).padding(.bottom, 4)
+
+                TextField("Título del viaje *", text: $tripTitle)
+                    .font(.palatino(.body))
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16).padding(.bottom, 8)
 
                 HStack(spacing: 8) {
                     ForEach(PlannedDatePickerSheet.transports, id: \.emoji) { t in
@@ -3320,28 +3728,37 @@ struct AddTripSheet: View {
                 Spacer()
 
                 Button {
-                    let trip = Trip(isoCode: isoCode, dateFrom: dateFrom, dateTo: dateTo, transport: selectedTransport)
+                    let trip = Trip(isoCode: isoCode, title: tripTitle.isEmpty ? nil : tripTitle, dateFrom: dateFrom, dateTo: dateTo, transport: selectedTransport)
+                    didSave = true
                     onSave(trip)
                     dismiss()
                 } label: {
                     Text("Guardar viaje")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(selectedTransport != nil ? Color.blue : Color(.systemGray4), in: RoundedRectangle(cornerRadius: 12))
+                        .background(selectedTransport != nil && !tripTitle.isEmpty ? Color.blue : Color(.systemGray4), in: RoundedRectangle(cornerRadius: 12))
                         .foregroundStyle(.white)
                 }
-                .disabled(selectedTransport == nil)
+                .disabled(selectedTransport == nil || tripTitle.isEmpty)
                 .padding(.horizontal, 24).padding(.bottom, 24)
-            }
+            } // end VStack
+            } // end ScrollView
             .navigationTitle("➕ Añadir viaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                    Button("Cancelar") {
+                        onCancel?()
+                        dismiss()
+                    }.font(.palatino(.body))
                 }
             }
         }
         .presentationDetents([.large])
+        .interactiveDismissDisabled(false)
+        .onDisappear {
+            if !didSave { onCancel?() }
+        }
     }
 }
 
@@ -3349,26 +3766,29 @@ struct AddTripSheet: View {
 // MARK: - Estadísticas de transporte
 struct TransportStatsSheet: View {
     let visitedCountries: [Country]
+    let trips: [Trip]
+    let allFeatures: [CountryFeature]
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedTransportFilter: (String, String)? = nil  // (emoji, label)
 
     private let transports = PlannedDatePickerSheet.transports
 
-    let trips: [Trip]
+    private var pastTrips: [Trip] {
+        let today = Calendar.current.startOfDay(for: Date())
+        return trips.filter { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+    }
 
     private var counts: [(emoji: String, label: String, count: Int)] {
         transports.map { t in
-            let fromTrips = trips.filter { $0.transport == t.emoji }.count
-            let fromCountry = visitedCountries.filter { $0.transport == t.emoji }.count
+            let matchEmojis: Set<String> = t.emoji == "🚶🏻" ? ["🚶🏻", "🚶"] : [t.emoji]
+            let fromTrips = pastTrips.filter { matchEmojis.contains($0.transport ?? "") }.count
+            let fromCountry = visitedCountries.filter { matchEmojis.contains($0.transport ?? "") }.count
             return (t.emoji, t.label, fromTrips + fromCountry)
         }.filter { $0.count > 0 }
         .sorted { $0.count > $1.count }
     }
 
-    private var withTransport: Int {
-        trips.filter { $0.transport != nil }.count +
-        visitedCountries.filter { country in country.transport != nil && trips.first(where: { $0.isoCode == country.isoCode }) == nil }.count
-    }
-    private var total: Int { visitedCountries.count + trips.count }
+    private var totalTrips: Int { pastTrips.count }
 
     var body: some View {
         NavigationStack {
@@ -3377,9 +3797,9 @@ struct TransportStatsSheet: View {
 
                 // Total con transporte
                 VStack(spacing: 4) {
-                    Text("\(withTransport)/\(total)")
+                    Text("\(totalTrips)")
                         .font(.system(size: 52, weight: .bold, design: .rounded))
-                    Text("viajes con transporte registrado")
+                    Text("total viajes")
                         .font(.palatino(.subheadline))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -3395,28 +3815,39 @@ struct TransportStatsSheet: View {
                 } else {
                     VStack(spacing: 12) {
                         ForEach(counts, id: \.emoji) { item in
-                            HStack(spacing: 16) {
-                                Text(item.emoji)
-                                    .font(.system(size: 36))
-                                    .frame(width: 50)
+                            Button {
+                                selectedTransportFilter = (item.emoji, item.label)
+                            } label: {
+                                HStack(spacing: 16) {
+                                    Text(item.emoji)
+                                        .font(.system(size: 36))
+                                        .frame(width: 50)
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.label)
-                                        .font(.palatino(.body, weight: .bold))
-                                    GeometryReader { geo in
-                                        let maxCount = counts.first?.count ?? 1
-                                        let width = geo.size.width * CGFloat(item.count) / CGFloat(maxCount)
-                                        RoundedRectangle(cornerRadius: 4)
-                                            .fill(Color.blue.opacity(0.7))
-                                            .frame(width: max(width, 4), height: 8)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.label)
+                                            .font(.palatino(.body, weight: .bold))
+                                            .foregroundStyle(.primary)
+                                        GeometryReader { geo in
+                                            let maxCount = counts.first?.count ?? 1
+                                            let width = geo.size.width * CGFloat(item.count) / CGFloat(maxCount)
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(Color.blue.opacity(0.7))
+                                                .frame(width: max(width, 4), height: 8)
+                                        }
+                                        .frame(height: 8)
                                     }
-                                    .frame(height: 8)
-                                }
 
-                                Text("\(item.count)")
-                                    .font(.palatino(.title3, weight: .bold))
-                                    .frame(width: 36, alignment: .trailing)
+                                    Text("\(item.count)")
+                                        .font(.palatino(.title3, weight: .bold))
+                                        .foregroundStyle(.primary)
+                                        .frame(width: 36, alignment: .trailing)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 32)
@@ -3431,9 +3862,26 @@ struct TransportStatsSheet: View {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
             }
+            .sheet(item: Binding(
+                get: { selectedTransportFilter.map { TransportFilter(emoji: $0.0, label: $0.1) } },
+                set: { _ in selectedTransportFilter = nil }
+            )) { filter in
+                TransportTripsListSheet(
+                    transportEmoji: filter.emoji,
+                    transportLabel: filter.label,
+                    trips: trips,
+                    allFeatures: allFeatures
+                )
+            }
         }
         .presentationDetents([.large])
     }
+}
+
+struct TransportFilter: Identifiable {
+    let id = UUID()
+    let emoji: String
+    let label: String
 }
 
 
@@ -3460,20 +3908,22 @@ struct CountryTripsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                // Manual visit count section
-                Section(header: Text("Visitas manuales").font(.palatino(.caption, weight: .bold))) {
-                    HStack {
-                        Text("Contador manual")
-                            .font(.palatino(.body))
-                        Spacer()
-                        Stepper("\(country.visitCount)", value: Binding(
-                            get: { country.visitCount },
-                            set: { country.visitCount = $0; try? modelContext.save() }
-                        ), in: 0...99)
-                        .labelsHidden()
-                        Text("\(country.visitCount)x")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .foregroundStyle(.secondary)
+                // Manual visit count section (not for lived)
+                if country.status != .lived {
+                    Section(header: Text("Visitas manuales").font(.palatino(.caption, weight: .bold))) {
+                        HStack {
+                            Text("Contador manual")
+                                .font(.palatino(.body))
+                            Spacer()
+                            Stepper("\(country.visitCount)", value: Binding(
+                                get: { country.visitCount },
+                                set: { country.visitCount = $0; try? modelContext.save() }
+                            ), in: 0...99)
+                            .labelsHidden()
+                            Text("\(country.visitCount)x")
+                                .font(.palatino(.subheadline, weight: .bold))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -3481,26 +3931,39 @@ struct CountryTripsSheet: View {
                 if !sortedTrips.isEmpty {
                     Section(header: Text("Viajes registrados (\(sortedTrips.count))").font(.palatino(.caption, weight: .bold))) {
                         ForEach(sortedTrips) { trip in
-                            HStack(spacing: 12) {
-                                Text(trip.transport ?? "🌐").font(.title3)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(Self.fmt.string(from: trip.dateFrom))
-                                        .font(.palatino(.body))
-                                    if let to = trip.dateTo {
-                                        Text("→ \(Self.fmt.string(from: to))")
-                                            .font(.palatino(.caption))
-                                            .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 12) {
+                                    Text(trip.transport ?? "🌐").font(.title3)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        // Título | fecha en una línea si hay título
+                                        if let t = trip.title, !t.isEmpty {
+                                            HStack(spacing: 6) {
+                                                Text(t).font(.palatino(.body, weight: .bold))
+                                                Text("|").foregroundStyle(.secondary)
+                                                Text(Self.fmt.string(from: trip.dateFrom))
+                                                    .font(.palatino(.body)).foregroundStyle(.secondary)
+                                            }
+                                        } else {
+                                            Text(Self.fmt.string(from: trip.dateFrom))
+                                                .font(.palatino(.body))
+                                        }
+                                        if let to = trip.dateTo {
+                                            Text("→ \(Self.fmt.string(from: to))")
+                                                .font(.palatino(.caption))
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
+                                    Spacer()
+                                    Button {
+                                        confirmDelete = trip
+                                        showDeleteConfirm = true
+                                    } label: {
+                                        Image(systemName: "trash").foregroundStyle(.red.opacity(0.7))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(width: 28)
                                 }
-                                Spacer()
-                                Button {
-                                    confirmDelete = trip
-                                    showDeleteConfirm = true
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.red.opacity(0.7))
-                                }
-                                .buttonStyle(.plain)
+                                TripTitleEditRow(trip: trip)
                             }
                             .padding(.vertical, 2)
                         }
@@ -3523,6 +3986,221 @@ struct CountryTripsSheet: View {
                 Button("Cancelar", role: .cancel) {}
             } message: { trip in
                 Text("\(Self.fmt.string(from: trip.dateFrom))\(trip.dateTo.map { " → \(Self.fmt.string(from: $0))" } ?? "")")
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+
+// MARK: - Edición de título de viaje inline
+struct TripTitleEditRow: View {
+    @Bindable var trip: Trip
+    @Environment(\.modelContext) private var modelContext
+    @State private var draft: String = ""
+    @State private var editing: Bool = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        if editing {
+            HStack(spacing: 12) {
+                TextField("Título del viaje", text: $draft)
+                    .font(.palatino(.caption))
+                    .focused($focused)
+                    .onAppear { draft = trip.title ?? "" }
+                Spacer()
+                Button {
+                    trip.title = draft.isEmpty ? nil : draft
+                    try? modelContext.save()
+                    editing = false
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28)
+            }
+            .padding(.top, 6)
+        } else {
+            Button {
+                draft = trip.title ?? ""
+                editing = true
+                focused = true
+            } label: {
+                Label(trip.title.map { "\"\($0)\"" } ?? "Añadir título…",
+                      systemImage: "pencil")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Lista de viajes por transporte
+struct TransportTripsListSheet: View {
+    let transportEmoji: String
+    let transportLabel: String
+    let trips: [Trip]
+    let allFeatures: [CountryFeature]
+    @Environment(\.dismiss) private var dismiss
+
+    private static let fmt: DateFormatter = {
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+    }()
+
+    private var sorted: [Trip] {
+        let today = Calendar.current.startOfDay(for: Date())
+        return trips.filter { $0.transport == transportEmoji &&
+            Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+             .sorted { $0.dateFrom > $1.dateFrom }
+    }
+
+    private func countryName(for isoCode: String) -> String {
+        allFeatures.first(where: { $0.isoCode == isoCode })?.localizedName ?? isoCode
+    }
+    private func flagEmoji(for isoCode: String) -> String {
+        allFeatures.first(where: { $0.isoCode == isoCode })?.flagEmoji ?? "🌐"
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(sorted) { trip in
+                HStack(spacing: 10) {
+                    Text(flagEmoji(for: trip.isoCode)).font(.title3)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let t = trip.title, !t.isEmpty {
+                            HStack(spacing: 6) {
+                                Text(t).font(.palatino(.body, weight: .bold))
+                                Text("|").foregroundStyle(.secondary)
+                                Text(countryName(for: trip.isoCode)).font(.palatino(.body))
+                            }
+                        } else {
+                            Text(countryName(for: trip.isoCode)).font(.palatino(.body))
+                        }
+                        HStack(spacing: 4) {
+                            Text(Self.fmt.string(from: trip.dateFrom))
+                                .font(.palatino(.caption)).foregroundStyle(.secondary)
+                            if let to = trip.dateTo {
+                                Text("→ \(Self.fmt.string(from: to))")
+                                    .font(.palatino(.caption)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .listStyle(.plain)
+            .navigationTitle("\(transportEmoji) \(transportLabel)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+
+// MARK: - Editar viaje existente (desde lista Próximos)
+struct EditTripSheet: View {
+    @Bindable var trip: Trip
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var dateFrom: Date
+    @State private var dateTo: Date?
+    @State private var pickingFrom: Bool = true
+    @State private var selectedTransport: String?
+    @State private var tripTitle: String
+
+    private static let fmt: DateFormatter = {
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+    }()
+
+    init(trip: Trip) {
+        self.trip = trip
+        _dateFrom = State(initialValue: trip.dateFrom)
+        _dateTo = State(initialValue: trip.dateTo)
+        _selectedTransport = State(initialValue: trip.transport)
+        _tripTitle = State(initialValue: trip.title ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+            VStack(spacing: 0) {
+                TextField("Título del viaje *", text: $tripTitle)
+                    .font(.palatino(.body))
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+
+                HStack(spacing: 8) {
+                    ForEach(PlannedDatePickerSheet.transports, id: \.emoji) { t in
+                        Button { selectedTransport = selectedTransport == t.emoji ? nil : t.emoji } label: {
+                            VStack(spacing: 2) {
+                                Text(t.emoji).font(.title3)
+                                Text(t.label).font(.system(size: 9))
+                                    .foregroundStyle(selectedTransport == t.emoji ? .white : .secondary)
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 6)
+                            .background(selectedTransport == t.emoji ? Color.blue : Color(.systemGray5), in: RoundedRectangle(cornerRadius: 8))
+                        }.buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.bottom, 8)
+
+                HStack(spacing: 0) {
+                    ForEach([(true, "DESDE", Self.fmt.string(from: dateFrom)),
+                             (false, "HASTA", dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")], id: \.1) { isFrom, label, value in
+                        Button { pickingFrom = isFrom } label: {
+                            VStack(spacing: 2) {
+                                Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                                Text(value).font(.palatino(.subheadline, weight: .bold))
+                                    .foregroundStyle(pickingFrom == isFrom ? .blue : (isFrom ? .primary : (dateTo == nil ? .secondary : .primary)))
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 8)
+                            .background(pickingFrom == isFrom ? Color.blue.opacity(0.08) : Color.clear)
+                            .overlay(alignment: .bottom) { if pickingFrom == isFrom { Rectangle().fill(Color.blue).frame(height: 2) } }
+                        }.buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                Divider()
+
+                RangeDatePicker(dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom)
+                    .padding(.horizontal, 8)
+
+                Spacer()
+
+                Button {
+                    trip.dateFrom = dateFrom
+                    trip.dateTo = dateTo
+                    trip.transport = selectedTransport
+                    trip.title = tripTitle.isEmpty ? nil : tripTitle
+                    try? modelContext.save()
+                    dismiss()
+                } label: {
+                    Text("Guardar cambios")
+                        .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(selectedTransport != nil && !tripTitle.isEmpty ? Color.blue : Color(.systemGray4),
+                                    in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .disabled(selectedTransport == nil || tripTitle.isEmpty)
+                .padding(.horizontal, 24).padding(.bottom, 24)
+            } // end VStack
+            } // end ScrollView
+            .navigationTitle("✏️ Editar viaje")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                }
             }
         }
         .presentationDetents([.large])
