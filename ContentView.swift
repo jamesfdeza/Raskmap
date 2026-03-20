@@ -153,9 +153,9 @@ struct ContentView: View {
 
     @ViewBuilder
     private func badgesRow() -> some View {
-        HStack(spacing: 4) {
-            Spacer()
-            // Visitados badge hidden per design
+        HStack(spacing: 8) {
+            StatBadge(value: visitedCount + (showLived ? livedCount : 0), label: "Visitados", color: colorTheme.visitedColor)
+                .onTapGesture { showAllCountries = true }
             if showBucketList {
                 StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
                     .onTapGesture { statusListFilter = .bucketList }
@@ -166,20 +166,18 @@ struct ContentView: View {
                 StatBadge(value: livedCount, label: "Vivido", color: colorTheme.livedColor)
                     .onTapGesture { statusListFilter = .lived }
             }
-            Spacer()
         }
     }
 
     @ViewBuilder
     private func counterRow(alignment: VerticalAlignment = .top) -> some View {
         HStack(alignment: alignment, spacing: 8) {
-            Text("\(visitedCount + (showLived ? livedCount : 0)) / \(countingMode.denominator)")
+            Text("\(countingMode.denominator)")
                 .font(.palatino(.title3, weight: .bold))
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .onTapGesture { showAllCountries = true }
             Spacer()
             Button(action: { showSearch = true }) {
                 Image(systemName: "magnifyingglass")
@@ -224,7 +222,7 @@ struct ContentView: View {
         if menuPositionIsTop {
             // ── ARRIBA ──
             VStack(spacing: 0) {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     Button { showProfile = true } label: {
                         HStack(spacing: 8) {
                             ProfileAvatarView(image: profileImage, size: 34)
@@ -232,17 +230,21 @@ struct ContentView: View {
                                 Text("Raskmap")
                                     .font(.palatino(.headline, weight: .bold))
                                     .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 if !username.isEmpty {
                                     Text("@ \(username)")
                                         .font(.palatino(.caption))
                                         .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
-                            Spacer()
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .buttonStyle(.plain)
-                    badgesRow()
+                    badgesRow().fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
@@ -257,7 +259,7 @@ struct ContentView: View {
             // ── ABAJO ──
             VStack(spacing: 6) {
                 counterRow(alignment: .bottom)
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     Button { showProfile = true } label: {
                         HStack(spacing: 8) {
                             ProfileAvatarView(image: profileImage, size: 34)
@@ -265,17 +267,21 @@ struct ContentView: View {
                                 Text("Raskmap")
                                     .font(.palatino(.headline, weight: .bold))
                                     .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 if !username.isEmpty {
                                     Text("@ \(username)")
                                         .font(.palatino(.caption))
                                         .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .buttonStyle(.plain)
-                    Spacer()
-                    badgesRow()
+                    badgesRow().fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
