@@ -157,7 +157,7 @@ struct ContentView: View {
             StatBadge(value: visitedCount + (showLived ? livedCount : 0), label: "Visitados", color: colorTheme.visitedColor)
                 .onTapGesture { showAllCountries = true }
             if showBucketList {
-                StatBadge(value: bucketListCount, label: "Bucket", color: colorTheme.bucketListColor)
+                StatBadge(value: bucketListCount, label: "Quiero", color: colorTheme.bucketListColor)
                     .onTapGesture { statusListFilter = .bucketList }
             }
             StatBadge(value: proxCount, label: "Próximos", color: colorTheme.wantToVisitColor)
@@ -1004,7 +1004,7 @@ struct CountryBottomSheet: View {
                 )
                 if showBucketList {
                     ActionButton(
-                        label: "📝 Bucket list",
+                        label: "📝 Quiero",
                         color: colorTheme.bucketListColor,
                         isSelected: country.status == .bucketList,
                         action: {
@@ -1750,7 +1750,7 @@ struct SettingsSheet: View {
                                     Circle()
                                         .fill(colorTheme.bucketListColor)
                                         .frame(width: 14, height: 14)
-                                    Text("Bucket list")
+                                    Text("Quiero")
                                         .font(.palatino(.body))
                                         .foregroundStyle(.primary)
                                     Spacer()
@@ -1823,7 +1823,7 @@ struct SettingsSheet: View {
                         VStack(spacing: 0) {
                             ColorPickerRow(label: "Visitado",    color: $colorTheme.visitedColor)
                             Divider().padding(.leading, 56)
-                            ColorPickerRow(label: "Bucket list", color: $colorTheme.bucketListColor)
+                            ColorPickerRow(label: "Quiero", color: $colorTheme.bucketListColor)
                             Divider().padding(.leading, 56)
                             ColorPickerRow(label: "Próximo",     color: $colorTheme.wantToVisitColor)
                             Divider().padding(.leading, 56)
