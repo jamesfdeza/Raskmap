@@ -4058,7 +4058,8 @@ struct TransportTripsListSheet: View {
 
     private var sorted: [Trip] {
         let today = Calendar.current.startOfDay(for: Date())
-        return trips.filter { $0.transport == transportEmoji &&
+        let matchEmojis: Set<String> = transportEmoji == "🚶🏻" ? ["🚶🏻", "🚶"] : [transportEmoji]
+        return trips.filter { matchEmojis.contains($0.transport ?? "") &&
             Calendar.current.startOfDay(for: $0.dateFrom) <= today }
              .sorted { $0.dateFrom > $1.dateFrom }
     }
