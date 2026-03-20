@@ -897,8 +897,8 @@ struct ContentView: View {
                 country.visitCount = 0
             }
 
-            // Remove future trips when changing to none or bucketList
-            if newStatus == .none || newStatus == .bucketList {
+            // Remove future trips only when explicitly unmarking (going to .none)
+            if newStatus == .none {
                 let today = Calendar.current.startOfDay(for: Date())
                 for trip in trips where trip.isoCode == country.isoCode {
                     if Calendar.current.startOfDay(for: trip.dateFrom) >= today {
@@ -2283,6 +2283,11 @@ struct PlannedDatePickerSheet: View {
     @State private var pickingFrom: Bool = true
     @State private var selectedTransport: String?
     @State private var tripTitle: String
+    @State private var selectedAirports: [TripAirport] = []
+    @State private var selectedAirlines: [AirlineData] = []
+    @State private var airlineCounts: [String: Int] = [:]
+    @State private var showAirportPicker = false
+    @State private var showAirlinePicker = false
 
     static let transports: [(emoji: String, label: String)] = [
         ("✈️", "Avión"), ("🚗", "Coche"), ("🚂", "Tren"), ("🚌", "Bus"), ("🚢", "Barco"), ("🚶🏻", "Andando")
@@ -2373,12 +2378,46 @@ struct PlannedDatePickerSheet: View {
                 }
 
                 transportRow()
+
+                // Airport + Airlines (only for ✈️)
+                if selectedTransport == "✈️" {
+                    VStack(spacing: 8) {
+                        Button { showAirportPicker = true } label: {
+                            HStack {
+                                Text(selectedAirports.isEmpty ? "Aeropuerto(s) de destino" : selectedAirports.map { "\($0.iata)\($0.roundTrip ? " (I/V)" : "")" }.joined(separator: ", "))
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(selectedAirports.isEmpty ? .secondary : .primary)
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+
+                        Button { showAirlinePicker = true } label: {
+                            HStack {
+                                Text(selectedAirlines.isEmpty ? "Aerolínea(s)" : selectedAirlines.map { $0.name }.joined(separator: ", "))
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(selectedAirlines.isEmpty ? .secondary : .primary)
+                                    .lineLimit(2)
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.bottom, 8)
+                }
+
                 dateTabsRow()
-                Divider()
 
                 RangeDatePicker(dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom)
                     .padding(.horizontal, 8)
-                Spacer()
 
                 let canSave = selectedTransport != nil && (!isEditing || !tripTitle.isEmpty)
                 Button {
@@ -2405,6 +2444,12 @@ struct PlannedDatePickerSheet: View {
             }
         }
         .presentationDetents([.large])
+        .sheet(isPresented: $showAirportPicker) {
+            AirportPickerSheet(selected: $selectedAirports)
+        }
+        .sheet(isPresented: $showAirlinePicker) {
+            AirlinePickerSheet(selected: $selectedAirlines)
+        }
     }
 }
 
@@ -3691,6 +3736,11 @@ struct AddTripSheet: View {
     @State private var dateTo: Date? = nil
     @State private var pickingFrom: Bool = true
     @State private var selectedTransport: String? = nil
+    @State private var selectedAirports: [TripAirport] = []
+    @State private var selectedAirlines: [AirlineData] = []
+    @State private var airlineCounts: [String: Int] = [:]
+    @State private var showAirportPicker = false
+    @State private var showAirlinePicker = false
 
     private static let fmt: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
@@ -3725,6 +3775,71 @@ struct AddTripSheet: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
 
+                // Airport + Airlines (only for ✈️)
+                if selectedTransport == "✈️" {
+                    VStack(spacing: 8) {
+                        Button { showAirportPicker = true } label: {
+                            HStack {
+                                Text(selectedAirports.isEmpty ? "Aeropuerto(s) de destino *" : selectedAirports.map { "\($0.iata)\($0.roundTrip ? " (I/V)" : "")" }.joined(separator: ", "))
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(selectedAirports.isEmpty ? .secondary : .primary)
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+
+                        Button { showAirlinePicker = true } label: {
+                            HStack {
+                                if selectedAirlines.isEmpty {
+                                    Text("Aerolínea(s) *")
+                                        .font(.palatino(.body)).foregroundStyle(.secondary)
+                                } else {
+                                    Text(selectedAirlines.map { $0.name }.joined(separator: ", "))
+                                        .font(.palatino(.body)).foregroundStyle(.primary)
+                                        .lineLimit(2)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+
+                        // Manual count steppers for multi-airline
+                        if selectedAirlines.count > 1 {
+                            VStack(spacing: 0) {
+                                ForEach(selectedAirlines, id: \.iata) { al in
+                                    HStack {
+                                        Text(al.name).font(.palatino(.caption)).foregroundStyle(.primary)
+                                        Spacer()
+                                        Stepper("", value: Binding(
+                                            get: { airlineCounts[al.name] ?? 0 },
+                                            set: { airlineCounts[al.name] = $0 }
+                                        ), in: 0...20)
+                                        .labelsHidden()
+                                        Text("\(airlineCounts[al.name] ?? 0)")
+                                            .font(.palatino(.caption, weight: .bold))
+                                            .frame(width: 20, alignment: .trailing)
+                                    }
+                                    .padding(.horizontal, 16).padding(.vertical, 6)
+                                    if al.iata != selectedAirlines.last?.iata { Divider().padding(.leading, 16) }
+                                }
+                            }
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                    .padding(.bottom, 8)
+                } else {
+                    Color.clear.frame(height: 16)
+                }
+
                 HStack(spacing: 0) {
                     ForEach([(true, "DESDE", Self.fmt.string(from: dateFrom)),
                              (false, "HASTA", dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")], id: \.1) { isFrom, label, value in
@@ -3741,16 +3856,19 @@ struct AddTripSheet: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                Divider()
 
                 RangeDatePicker(dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom)
                     .padding(.horizontal, 8)
 
-                Spacer()
-
+                let isPlane = selectedTransport == "✈️"
+                let canSave = selectedTransport != nil && !tripTitle.isEmpty &&
+                              (!isPlane || (!selectedAirports.isEmpty && !selectedAirlines.isEmpty))
                 Button {
                     let trimmed = tripTitle.trimmingCharacters(in: .whitespaces)
-                    let trip = Trip(isoCode: isoCode, title: trimmed.isEmpty ? nil : trimmed, dateFrom: dateFrom, dateTo: dateTo, transport: selectedTransport)
+                    let trip = Trip(isoCode: isoCode, title: trimmed.isEmpty ? nil : trimmed,
+                                   dateFrom: dateFrom, dateTo: dateTo, transport: selectedTransport,
+                                   tripAirports: selectedAirports, airlines: selectedAirlines.map { $0.name },
+                                   airlineCounts: selectedAirlines.count > 1 ? airlineCounts : [:])
                     didSave = true
                     onSave(trip)
                     dismiss()
@@ -3758,10 +3876,10 @@ struct AddTripSheet: View {
                     Text("Guardar viaje")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(selectedTransport != nil && !tripTitle.isEmpty ? Color.blue : Color(.systemGray4), in: RoundedRectangle(cornerRadius: 12))
+                        .background(canSave ? Color.blue : Color(.systemGray4), in: RoundedRectangle(cornerRadius: 12))
                         .foregroundStyle(.white)
                 }
-                .disabled(selectedTransport == nil || tripTitle.isEmpty)
+                .disabled(!canSave)
                 .padding(.horizontal, 24).padding(.bottom, 24)
             } // end VStack
             } // end ScrollView
@@ -3781,6 +3899,12 @@ struct AddTripSheet: View {
         .onDisappear {
             if !didSave { onCancel?() }
         }
+        .sheet(isPresented: $showAirportPicker) {
+            AirportPickerSheet(selected: $selectedAirports)
+        }
+        .sheet(isPresented: $showAirlinePicker) {
+            AirlinePickerSheet(selected: $selectedAirlines)
+        }
     }
 }
 
@@ -3791,7 +3915,9 @@ struct TransportStatsSheet: View {
     let trips: [Trip]
     let allFeatures: [CountryFeature]
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTransportFilter: (String, String)? = nil  // (emoji, label)
+    @State private var selectedTransportFilter: (String, String)? = nil
+    @State private var showAirportStats = false
+    @State private var showAirlineStats = false
 
     private let transports = PlannedDatePickerSheet.transports
 
@@ -3812,70 +3938,142 @@ struct TransportStatsSheet: View {
 
     private var totalTrips: Int { pastTrips.count }
 
+    // Top airports by count
+    private var topAirports: [(iata: String, name: String, country: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        var lastDate: [String: Date] = [:]
+        for trip in pastTrips where trip.transport == "✈️" {
+            for (iata, cnt) in trip.airportCountForStats {
+                counts[iata, default: 0] += cnt
+                if let prev = lastDate[iata] { if trip.dateFrom > prev { lastDate[iata] = trip.dateFrom } }
+                else { lastDate[iata] = trip.dateFrom }
+            }
+        }
+        return counts.map { iata, count -> (iata: String, name: String, country: String, count: Int) in
+            let ap = AirportPickerSheet.airports.first { $0.iata == iata }
+            return (iata, ap?.name ?? iata, ap?.country ?? "", count)
+        }.sorted {
+            if $0.count != $1.count { return $0.count > $1.count }
+            return (lastDate[$0.iata] ?? .distantPast) > (lastDate[$1.iata] ?? .distantPast)
+        }
+    }
+
+    private var topAirlines: [(name: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        var lastDate: [String: Date] = [:]
+        for trip in pastTrips where trip.transport == "✈️" {
+            let als = trip.airlines
+            guard !als.isEmpty else { continue }
+            for al in als {
+                let increment = trip.countForAirline(al)
+                counts[al, default: 0] += increment
+                if let prev = lastDate[al] { if trip.dateFrom > prev { lastDate[al] = trip.dateFrom } }
+                else { lastDate[al] = trip.dateFrom }
+            }
+        }
+        return counts.map { ($0.key, $0.value) }.sorted {
+            if $0.1 != $1.1 { return $0.1 > $1.1 }
+            return (lastDate[$0.0] ?? .distantPast) > (lastDate[$1.0] ?? .distantPast)
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: 24) {
 
-                // Total con transporte
-                VStack(spacing: 4) {
-                    Text("\(totalTrips)")
-                        .font(.system(size: 52, weight: .bold, design: .rounded))
-                    Text("total viajes")
-                        .font(.palatino(.subheadline))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
+                    // ── Gráfica centrada ──
+                    VStack(spacing: 4) {
+                        Text("\(totalTrips)")
+                            .font(.system(size: 52, weight: .bold, design: .rounded))
+                        Text("total viajes")
+                            .font(.palatino(.subheadline)).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
 
-                // Desglose por medio
-                if counts.isEmpty {
-                    Text("Añade el medio de transporte en tus viajes para ver las estadísticas.")
-                        .font(.palatino(.subheadline))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                } else {
-                    VStack(spacing: 12) {
-                        ForEach(counts, id: \.emoji) { item in
-                            Button {
-                                selectedTransportFilter = (item.emoji, item.label)
-                            } label: {
-                                HStack(spacing: 16) {
-                                    Text(item.emoji)
-                                        .font(.system(size: 36))
-                                        .frame(width: 50)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(item.label)
-                                            .font(.palatino(.body, weight: .bold))
-                                            .foregroundStyle(.primary)
-                                        GeometryReader { geo in
-                                            let maxCount = counts.first?.count ?? 1
-                                            let width = geo.size.width * CGFloat(item.count) / CGFloat(maxCount)
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .fill(Color.blue.opacity(0.7))
-                                                .frame(width: max(width, 4), height: 8)
+                    if counts.isEmpty {
+                        Text("Añade el medio de transporte en tus viajes para ver estadísticas.")
+                            .font(.palatino(.subheadline)).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center).padding(.horizontal, 32)
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(counts, id: \.emoji) { item in
+                                Button { selectedTransportFilter = (item.emoji, item.label) } label: {
+                                    HStack(spacing: 16) {
+                                        Text(item.emoji).font(.system(size: 36)).frame(width: 50)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(item.label).font(.palatino(.body, weight: .bold)).foregroundStyle(.primary)
+                                            GeometryReader { geo in
+                                                let maxCount = counts.first?.count ?? 1
+                                                let width = geo.size.width * CGFloat(item.count) / CGFloat(maxCount)
+                                                RoundedRectangle(cornerRadius: 4).fill(Color.blue.opacity(0.7))
+                                                    .frame(width: max(width, 4), height: 8)
+                                            }.frame(height: 8)
                                         }
-                                        .frame(height: 8)
+                                        Text("\(item.count)").font(.palatino(.title3, weight: .bold)).foregroundStyle(.primary).frame(width: 36, alignment: .trailing)
+                                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                                     }
+                                }.buttonStyle(.plain)
+                            }
+                        }.padding(.horizontal, 32)
+                    }
 
-                                    Text("\(item.count)")
-                                        .font(.palatino(.title3, weight: .bold))
-                                        .foregroundStyle(.primary)
-                                        .frame(width: 36, alignment: .trailing)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                    // ── Cuadrantes aeropuertos / aerolíneas ──
+                    if !topAirports.isEmpty || !topAirlines.isEmpty {
+                        HStack(spacing: 12) {
+                            // Aeropuertos
+                            Button { showAirportStats = true } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("✈️ Aeropuertos").font(.palatino(.caption, weight: .bold)).foregroundStyle(.secondary)
+                                    if topAirports.isEmpty {
+                                        Text("Sin datos").font(.palatino(.caption)).foregroundStyle(.secondary)
+                                    } else {
+                                        ForEach(topAirports.prefix(3), id: \.iata) { ap in
+                                            HStack(spacing: 6) {
+                                                if let a2 = countryA2(ap.country) {
+                                                    Text(flagEmoji(a2)).font(.caption)
+                                                }
+                                                Text(ap.iata).font(.palatino(.caption, weight: .bold))
+                                                Spacer()
+                                                Text("\(ap.count)x").font(.palatino(.caption)).foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+
+                            // Aerolíneas
+                            Button { showAirlineStats = true } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("🛫 Aerolíneas").font(.palatino(.caption, weight: .bold)).foregroundStyle(.secondary)
+                                    if topAirlines.isEmpty {
+                                        Text("Sin datos").font(.palatino(.caption)).foregroundStyle(.secondary)
+                                    } else {
+                                        ForEach(topAirlines.prefix(3), id: \.name) { al in
+                                            HStack {
+                                                Text(al.name).font(.palatino(.caption)).lineLimit(1)
+                                                Spacer()
+                                                Text("\(al.count)x").font(.palatino(.caption)).foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                             }
                             .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 24)
                     }
-                    .padding(.horizontal, 32)
-                }
 
-                Spacer()
+                    Spacer(minLength: 24)
+                }
             }
             .navigationTitle("🚀 Transporte")
             .navigationBarTitleDisplayMode(.inline)
@@ -3888,15 +4086,23 @@ struct TransportStatsSheet: View {
                 get: { selectedTransportFilter.map { TransportFilter(emoji: $0.0, label: $0.1) } },
                 set: { _ in selectedTransportFilter = nil }
             )) { filter in
-                TransportTripsListSheet(
-                    transportEmoji: filter.emoji,
-                    transportLabel: filter.label,
-                    trips: trips,
-                    allFeatures: allFeatures
-                )
+                TransportTripsListSheet(transportEmoji: filter.emoji, transportLabel: filter.label, trips: trips, allFeatures: allFeatures)
+            }
+            .sheet(isPresented: $showAirportStats) {
+                AirportStatsSheet(airports: topAirports, allFeatures: allFeatures)
+            }
+            .sheet(isPresented: $showAirlineStats) {
+                AirlineStatsSheet(airlines: topAirlines)
             }
         }
         .presentationDetents([.large])
+    }
+
+    private func countryA2(_ iso2: String) -> String? { iso2.count == 2 ? iso2 : nil }
+    private func flagEmoji(_ a2: String) -> String {
+        a2.uppercased().unicodeScalars.compactMap {
+            Unicode.Scalar(127397 + $0.value).map { String($0) }
+        }.joined()
     }
 }
 
@@ -3918,6 +4124,7 @@ struct CountryTripsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete: Trip? = nil
     @State private var showDeleteConfirm: Bool = false
+    @State private var editingTrip: Trip? = nil
 
     private static let fmt: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
@@ -3952,43 +4159,7 @@ struct CountryTripsSheet: View {
                 // Registered trips
                 if !sortedTrips.isEmpty {
                     Section(header: Text("Viajes registrados (\(sortedTrips.count))").font(.palatino(.caption, weight: .bold))) {
-                        ForEach(sortedTrips) { trip in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 12) {
-                                    Text(trip.transport ?? "🌐").font(.title3)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        // Título | fecha en una línea si hay título
-                                        if let t = trip.title, !t.isEmpty {
-                                            HStack(spacing: 6) {
-                                                Text(t).font(.palatino(.body, weight: .bold))
-                                                Text("|").foregroundStyle(.secondary)
-                                                Text(Self.fmt.string(from: trip.dateFrom))
-                                                    .font(.palatino(.body)).foregroundStyle(.secondary)
-                                            }
-                                        } else {
-                                            Text(Self.fmt.string(from: trip.dateFrom))
-                                                .font(.palatino(.body))
-                                        }
-                                        if let to = trip.dateTo {
-                                            Text("→ \(Self.fmt.string(from: to))")
-                                                .font(.palatino(.caption))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    Button {
-                                        confirmDelete = trip
-                                        showDeleteConfirm = true
-                                    } label: {
-                                        Image(systemName: "trash").foregroundStyle(.red.opacity(0.7))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .frame(width: 28)
-                                }
-                                TripTitleEditRow(trip: trip)
-                            }
-                            .padding(.vertical, 2)
-                        }
+                        ForEach(sortedTrips) { trip in tripRow(trip) }
                     }
                 }
             }
@@ -4009,8 +4180,63 @@ struct CountryTripsSheet: View {
             } message: { trip in
                 Text("\(Self.fmt.string(from: trip.dateFrom))\(trip.dateTo.map { " → \(Self.fmt.string(from: $0))" } ?? "")")
             }
+            .sheet(item: $editingTrip) { trip in
+                EditTripSheet(trip: trip)
+            }
         }
         .presentationDetents([.large])
+    }
+
+    @ViewBuilder
+    private func tripRow(_ trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Text(trip.transport ?? "🌐").font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    if let t = trip.title, !t.isEmpty {
+                        HStack(spacing: 6) {
+                            Text(t).font(.palatino(.body, weight: .bold))
+                            Text("|").foregroundStyle(.secondary)
+                            Text(Self.fmt.string(from: trip.dateFrom))
+                                .font(.palatino(.body)).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(Self.fmt.string(from: trip.dateFrom)).font(.palatino(.body))
+                    }
+                    if let to = trip.dateTo {
+                        Text("→ \(Self.fmt.string(from: to))")
+                            .font(.palatino(.caption)).foregroundStyle(.secondary)
+                    }
+                    if trip.transport == "✈️" {
+                        let aps = trip.airports
+                        let als = trip.airlines
+                        if !aps.isEmpty || !als.isEmpty {
+                            HStack(spacing: 6) {
+                                if !aps.isEmpty {
+                                    Text(aps.joined(separator: ", "))
+                                        .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue)
+                                }
+                                if !als.isEmpty {
+                                    Text(als.joined(separator: ", "))
+                                        .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer()
+                Button { confirmDelete = trip; showDeleteConfirm = true } label: {
+                    Image(systemName: "trash").foregroundStyle(.red.opacity(0.7))
+                }
+                .buttonStyle(.plain).frame(width: 28)
+            }
+            Button { editingTrip = trip } label: {
+                Label("Editar viaje", systemImage: "pencil.circle")
+                    .font(.palatino(.caption)).foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain).padding(.top, 2)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -4139,6 +4365,11 @@ struct EditTripSheet: View {
     @State private var pickingFrom: Bool = true
     @State private var selectedTransport: String?
     @State private var tripTitle: String
+    @State private var selectedAirports: [TripAirport] = []
+    @State private var selectedAirlines: [AirlineData] = []
+    @State private var airlineCounts: [String: Int] = [:]
+    @State private var showAirportPicker = false
+    @State private var showAirlinePicker = false
 
     private static let fmt: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
@@ -4150,6 +4381,13 @@ struct EditTripSheet: View {
         _dateTo = State(initialValue: trip.dateTo)
         _selectedTransport = State(initialValue: trip.transport)
         _tripTitle = State(initialValue: trip.title ?? "")
+        // Load airports if exist
+        _selectedAirports = State(initialValue: trip.tripAirports)
+        let savedAirlines = trip.airlines.compactMap { name in
+            AirlinePickerSheet.airlines.first { $0.name == name }
+        }
+        _selectedAirlines = State(initialValue: savedAirlines)
+        _airlineCounts = State(initialValue: trip.airlineCounts)
     }
 
     var body: some View {
@@ -4177,6 +4415,71 @@ struct EditTripSheet: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
 
+                // Airport + Airlines (only for ✈️)
+                if selectedTransport == "✈️" {
+                    VStack(spacing: 8) {
+                        Button { showAirportPicker = true } label: {
+                            HStack {
+                                Text(selectedAirports.isEmpty ? "Aeropuerto(s) de destino *" : selectedAirports.map { "\($0.iata)\($0.roundTrip ? " (I/V)" : "")" }.joined(separator: ", "))
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(selectedAirports.isEmpty ? .secondary : .primary)
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+
+                        Button { showAirlinePicker = true } label: {
+                            HStack {
+                                if selectedAirlines.isEmpty {
+                                    Text("Aerolínea(s) *")
+                                        .font(.palatino(.body)).foregroundStyle(.secondary)
+                                } else {
+                                    Text(selectedAirlines.map { $0.name }.joined(separator: ", "))
+                                        .font(.palatino(.body)).foregroundStyle(.primary)
+                                        .lineLimit(2)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+
+                        // Manual count steppers for multi-airline
+                        if selectedAirlines.count > 1 {
+                            VStack(spacing: 0) {
+                                ForEach(selectedAirlines, id: \.iata) { al in
+                                    HStack {
+                                        Text(al.name).font(.palatino(.caption)).foregroundStyle(.primary)
+                                        Spacer()
+                                        Stepper("", value: Binding(
+                                            get: { airlineCounts[al.name] ?? 0 },
+                                            set: { airlineCounts[al.name] = $0 }
+                                        ), in: 0...20)
+                                        .labelsHidden()
+                                        Text("\(airlineCounts[al.name] ?? 0)")
+                                            .font(.palatino(.caption, weight: .bold))
+                                            .frame(width: 20, alignment: .trailing)
+                                    }
+                                    .padding(.horizontal, 16).padding(.vertical, 6)
+                                    if al.iata != selectedAirlines.last?.iata { Divider().padding(.leading, 16) }
+                                }
+                            }
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                    .padding(.bottom, 8)
+                } else {
+                    Color.clear.frame(height: 16)
+                }
+
                 HStack(spacing: 0) {
                     ForEach([(true, "DESDE", Self.fmt.string(from: dateFrom)),
                              (false, "HASTA", dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")], id: \.1) { isFrom, label, value in
@@ -4193,12 +4496,12 @@ struct EditTripSheet: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                Divider()
+                .padding(.bottom, 12)
 
                 RangeDatePicker(dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom)
                     .padding(.horizontal, 8)
-
-                Spacer()
+                    .frame(height: 340)
+                    .padding(.bottom, 16)
 
                 Button {
                     trip.dateFrom = dateFrom
@@ -4206,6 +4509,9 @@ struct EditTripSheet: View {
                     trip.transport = selectedTransport
                     let trimmedTitle = tripTitle.trimmingCharacters(in: .whitespaces)
                     trip.title = trimmedTitle.isEmpty ? nil : trimmedTitle
+                    trip.tripAirports = selectedAirports
+                    trip.airlines = selectedAirlines.map { $0.name }
+                    trip.airlineCounts = selectedAirlines.count > 1 ? airlineCounts : [:]
                     try? modelContext.save()
                     dismiss()
                 } label: {
@@ -4229,6 +4535,12 @@ struct EditTripSheet: View {
             }
         }
         .presentationDetents([.large])
+        .sheet(isPresented: $showAirportPicker) {
+            AirportPickerSheet(selected: $selectedAirports)
+        }
+        .sheet(isPresented: $showAirlinePicker) {
+            AirlinePickerSheet(selected: $selectedAirlines)
+        }
     }
 }
 
@@ -4314,3 +4626,288 @@ extension Font {
     }
 }
 
+
+// MARK: - Data models for airports and airlines
+
+struct AirportData: Identifiable, Codable, Hashable {
+    var id: String { iata }
+    let iata: String
+    let name: String
+    let city: String
+    let country: String  // ISO2
+
+    var flagEmoji: String {
+        country.uppercased().unicodeScalars.compactMap {
+            Unicode.Scalar(127397 + $0.value).map { String($0) }
+        }.joined()
+    }
+}
+
+struct AirlineData: Identifiable, Codable, Hashable {
+    var id: String { iata }
+    let iata: String
+    let name: String
+    let country: String
+}
+
+// MARK: - Airport picker
+struct AirportPickerSheet: View {
+    @Binding var selected: [TripAirport]
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    static let airports: [AirportData] = {
+        guard let url = Bundle.main.url(forResource: "airports", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let arr = try? JSONDecoder().decode([AirportData].self, from: data) else { return [] }
+        return arr.sorted { $0.name < $1.name }
+    }()
+
+    private var filtered: [AirportData] {
+        if query.isEmpty { return Self.airports }
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return Self.airports.filter {
+            $0.iata.range(of: query, options: opts) != nil ||
+            $0.name.range(of: query, options: opts) != nil ||
+            $0.city.range(of: query, options: opts) != nil
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Selected airports with roundtrip toggle
+                if !selected.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(selected, id: \.iata) { tripAp in
+                            let ap = AirportPickerSheet.airports.first { $0.iata == tripAp.iata }
+                            HStack(spacing: 10) {
+                                Text(ap?.flagEmoji ?? "🌐").font(.title3)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("\(tripAp.iata) – \(ap?.name ?? tripAp.iata)")
+                                        .font(.palatino(.caption, weight: .bold))
+                                    Text(ap?.city ?? "").font(.palatino(.caption2)).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                HStack(spacing: 4) {
+                                    Text(tripAp.roundTrip ? "I/V" : "Ida")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                    Toggle("", isOn: Binding(
+                                        get: { tripAp.roundTrip },
+                                        set: { newVal in
+                                            if let idx = selected.firstIndex(where: { $0.iata == tripAp.iata }) {
+                                                selected[idx].roundTrip = newVal
+                                            }
+                                        }
+                                    ))
+                                    .labelsHidden()
+                                    .tint(.blue)
+                                }
+                                Button {
+                                    selected.removeAll { $0.iata == tripAp.iata }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.6))
+                                }.buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            Divider().padding(.leading, 16)
+                        }
+                    }
+                    .background(Color(.systemGray6))
+                    Divider()
+                }
+
+                List(filtered) { ap in
+                    let isSelected = selected.contains(where: { $0.iata == ap.iata })
+                    Button {
+                        if let idx = selected.firstIndex(where: { $0.iata == ap.iata }) {
+                            selected.remove(at: idx)
+                        } else {
+                            selected.append(TripAirport(iata: ap.iata, roundTrip: false))
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(ap.flagEmoji).font(.title3)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(ap.iata).font(.palatino(.subheadline, weight: .bold))
+                                    Text(ap.name).font(.palatino(.body)).foregroundStyle(.primary)
+                                }
+                                Text(ap.city).font(.palatino(.caption)).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if isSelected {
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+                .searchable(text: $query, prompt: "Buscar aeropuerto o IATA")
+
+                Button { dismiss() } label: {
+                    Text(selected.isEmpty ? "Listo" : "Listo (\(selected.count) aeropuerto\(selected.count == 1 ? "" : "s"))")
+                        .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 12)
+                .background(Color(.systemBackground))
+            }
+            .navigationTitle("Aeropuerto(s)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+// MARK: - Airline picker (multi-select)
+struct AirlinePickerSheet: View {
+    @Binding var selected: [AirlineData]
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    static let airlines: [AirlineData] = {
+        guard let url = Bundle.main.url(forResource: "airlines", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let arr = try? JSONDecoder().decode([AirlineData].self, from: data) else { return [] }
+        return arr.sorted { $0.name < $1.name }
+    }()
+
+    private var filtered: [AirlineData] {
+        if query.isEmpty { return Self.airlines }
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return Self.airlines.filter {
+            $0.name.range(of: query, options: opts) != nil ||
+            $0.iata.range(of: query, options: opts) != nil
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                List(filtered) { al in
+                    Button {
+                        if let idx = selected.firstIndex(where: { $0.iata == al.iata }) {
+                            selected.remove(at: idx)
+                        } else {
+                            selected.append(al)
+                        }
+                    } label: {
+                        HStack {
+                            Text(al.name).font(.palatino(.body)).foregroundStyle(.primary)
+                            Spacer()
+                            if selected.contains(where: { $0.iata == al.iata }) {
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+                .searchable(text: $query, prompt: "Buscar aerolínea")
+
+                // Sticky Listo button always visible
+                Button { dismiss() } label: {
+                    Text(selected.isEmpty ? "Listo" : "Listo (\(selected.count) seleccionada\(selected.count == 1 ? "" : "s"))")
+                        .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 12)
+                .background(Color(.systemBackground))
+            }
+            .navigationTitle("Aerolíneas")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+// MARK: - Airport stats sheet
+struct AirportStatsSheet: View {
+    let airports: [(iata: String, name: String, country: String, count: Int)]
+    let allFeatures: [CountryFeature]
+    @Environment(\.dismiss) private var dismiss
+
+    private func flagEmoji(_ a2: String) -> String {
+        guard a2.count == 2 else { return "🌐" }
+        return a2.uppercased().unicodeScalars.compactMap {
+            Unicode.Scalar(127397 + $0.value).map { String($0) }
+        }.joined()
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(airports, id: \.iata) { ap in
+                HStack(spacing: 10) {
+                    Text(flagEmoji(ap.country)).font(.title3)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ap.name).font(.palatino(.body)).foregroundStyle(.primary)
+                        Text(ap.iata).font(.palatino(.caption, weight: .bold)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("\(ap.count)x")
+                        .font(.palatino(.subheadline, weight: .bold)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color(.systemGray5), in: Capsule())
+                }
+                .padding(.vertical, 2)
+            }
+            .listStyle(.plain)
+            .navigationTitle("✈️ Aeropuertos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+// MARK: - Airline stats sheet
+struct AirlineStatsSheet: View {
+    let airlines: [(name: String, count: Int)]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(airlines, id: \.name) { al in
+                HStack {
+                    Text(al.name).font(.palatino(.body))
+                    Spacer()
+                    Text("\(al.count)x")
+                        .font(.palatino(.subheadline, weight: .bold)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color(.systemGray5), in: Capsule())
+                }
+                .padding(.vertical, 2)
+            }
+            .listStyle(.plain)
+            .navigationTitle("🛫 Aerolíneas")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
