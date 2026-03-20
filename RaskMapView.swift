@@ -64,6 +64,12 @@ struct RaskMapView: UIViewRepresentable {
                 "CHN": CLLocationCoordinate2D(latitude: 35.86, longitude: 104.19),
                 "GRL": CLLocationCoordinate2D(latitude: 71.71, longitude: -42.60),
                 "NOR": CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),  // Oslo
+                "NZL": CLLocationCoordinate2D(latitude: -36.86, longitude: 174.76), // Auckland
+                "REU": CLLocationCoordinate2D(latitude: -21.13, longitude: 55.54),  // Saint-Denis
+                "GLP": CLLocationCoordinate2D(latitude: 16.25, longitude: -61.55),  // Basse-Terre
+                "MTQ": CLLocationCoordinate2D(latitude: 14.64, longitude: -61.02),  // Fort-de-France
+                "GUF": CLLocationCoordinate2D(latitude: 4.93, longitude: -52.33),   // Cayenne
+                "MYT": CLLocationCoordinate2D(latitude: -12.78, longitude: 45.23),  // Mamoudzou
                 "CHL": CLLocationCoordinate2D(latitude: -33.45, longitude: -70.67), // Santiago
                 "FRA": CLLocationCoordinate2D(latitude: 48.85, longitude: 2.35),   // Paris
                 "NLD": CLLocationCoordinate2D(latitude: 52.38, longitude: 4.90),   // Amsterdam

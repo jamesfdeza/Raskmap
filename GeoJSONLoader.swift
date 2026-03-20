@@ -131,6 +131,11 @@ class GeoJSONLoader {
              "FRA": "FR",  // France
              "KOS": "XK",  // Kosovo
              "TWN": "TW",  // Taiwan
+             "REU": "RE",  // Réunion
+             "GLP": "GP",  // Guadeloupe
+             "MTQ": "MQ",  // Martinique
+             "GUF": "GF",  // French Guiana
+             "MYT": "YT",  // Mayotte
          ]
          var isoA2 = "-99"
          if let v = props["ISO3166-1-Alpha-2"] {
@@ -222,8 +227,8 @@ class GeoJSONLoader {
             : outerCoords
         guard simplifiedOuter.count >= 3 else { return nil }
 
-        // Polígonos interiores = "huecos" — usan la misma tolerancia que su padre
-        let _: [MKPolygon] = rings.dropFirst().compactMap { ring in
+        // Solo ZAF (Sudáfrica) tiene un hueco real (Lesoto) — el resto son artefactos
+        let holes: [MKPolygon] = iso == "ZAF" ? rings.dropFirst().compactMap { ring in
             let holeCoords: [CLLocationCoordinate2D] = ring.compactMap { point in
                 guard point.count >= 2 else { return nil }
                 return CLLocationCoordinate2D(latitude: point[1], longitude: point[0])
@@ -234,12 +239,12 @@ class GeoJSONLoader {
                 : holeCoords
             guard simplified.count >= 3 else { return nil }
             return MKPolygon(coordinates: simplified, count: simplified.count)
-        }
+        } : []
 
         let polygon = CountryPolygon(
             coordinates: simplifiedOuter,
             count: simplifiedOuter.count,
-            interiorPolygons: nil
+            interiorPolygons: holes.isEmpty ? nil : holes
         )
         polygon.countryName = name
         polygon.isoCode = iso

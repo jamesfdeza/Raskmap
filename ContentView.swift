@@ -37,6 +37,7 @@ struct ContentView: View {
     @State private var shouldOpenAddTrip: Bool = false
     @State private var lastModifiedCountry: Country? = nil
     @State private var editingFutureTrip: Trip? = nil
+    @State private var bannerTappedCountry: Country? = nil
     @StateObject private var locationManager = LocationManager.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var pendingDateStatus: CountryStatus = .none
@@ -189,9 +190,9 @@ struct ContentView: View {
         .padding(.horizontal, 6)
     }
 
-    private var nextProximosBanner: (days: Int, flag: String, name: String)? {
+    private var nextProximosBanner: (days: Int, flag: String, name: String, isoCode: String)? {
         let today = Calendar.current.startOfDay(for: Date())
-        var entries: [(days: Int, flag: String, name: String, date: Date)] = []
+        var entries: [(days: Int, flag: String, name: String, isoCode: String, date: Date)] = []
         // wantToVisit countries
         for country in countries where country.status == .wantToVisit {
             guard let date = country.plannedDate else { continue }
@@ -200,7 +201,7 @@ struct ContentView: View {
             let days = Calendar.current.dateComponents([.day], from: today, to: d).day ?? 0
             let flag = features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
             let name = features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
-            entries.append((days, flag, name, d))
+            entries.append((days, flag, name, country.isoCode, d))
         }
         // visited countries with future trips
         for trip in trips where trip.isoCode != "" {
@@ -211,10 +212,10 @@ struct ContentView: View {
             guard days > 0 else { continue }  // skip today's auto-trips
             let flag = features.first(where: { $0.isoCode == trip.isoCode })?.flagEmoji ?? "🌐"
             let name = features.first(where: { $0.isoCode == trip.isoCode })?.localizedName ?? trip.isoCode
-            entries.append((days, flag, name, d))
+            entries.append((days, flag, name, trip.isoCode, d))
         }
         guard let next = entries.sorted(by: { $0.date < $1.date }).first else { return nil }
-        return (next.days, next.flag, next.name)
+        return (next.days, next.flag, next.name, next.isoCode)
     }
 
     @ViewBuilder
@@ -472,6 +473,14 @@ struct ContentView: View {
             .sheet(item: $editingFutureTrip) { trip in
                 EditTripSheet(trip: trip)
             }
+            .sheet(item: $bannerTappedCountry) { country in
+                CountryTripsSheet(
+                    country: country,
+                    trips: trips.filter { $0.isoCode == country.isoCode },
+                    displayName: localizedName(for: country),
+                    flagEmoji: flagEmoji(for: country) ?? "🌐"
+                )
+            }
             .sheet(item: $pendingDateCountry) { country in datePicker(for: country) }
             .sheet(item: $pendingAddTripCountry) { country in
                 AddTripSheet(
@@ -533,17 +542,23 @@ struct ContentView: View {
                     let dayWord = banner.days == 1 ? "día" : "días"
                     let quedaWord = banner.days == 1 ? "Queda" : "Quedan"
                     let bannerText = "\(quedaWord) \(banner.days) \(dayWord) para \(banner.flag) \(banner.name)"
-                    Text(bannerText)
-                        .font(.palatino(.footnote, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(.bottom, menuPositionIsTop ? 16 : 0)
-                        .padding(.top, menuPositionIsTop ? 0 : 16)
+                    Button {
+                        if let country = countries.first(where: { $0.isoCode == banner.isoCode }) {
+                            bannerTappedCountry = country
+                        }
+                    } label: {
+                        Text(bannerText)
+                            .font(.palatino(.footnote, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, menuPositionIsTop ? 16 : 0)
+                    .padding(.top, menuPositionIsTop ? 0 : 16)
                     if !menuPositionIsTop { Spacer() }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .allowsHitTesting(false)
             }
 
             // Visited toast
@@ -692,7 +707,7 @@ struct ContentView: View {
                 country.plannedDate = dateFrom
                 country.plannedDateTo = dateTo
                 country.transport = transport
-                country.plannedTitle = title
+                country.plannedTitle = title?.trimmingCharacters(in: .whitespaces)
                 try? modelContext.save()
                 highlightedIsoCode = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { centerMap(on: country.isoCode) }
@@ -3734,7 +3749,8 @@ struct AddTripSheet: View {
                 Spacer()
 
                 Button {
-                    let trip = Trip(isoCode: isoCode, title: tripTitle.isEmpty ? nil : tripTitle, dateFrom: dateFrom, dateTo: dateTo, transport: selectedTransport)
+                    let trimmed = tripTitle.trimmingCharacters(in: .whitespaces)
+                    let trip = Trip(isoCode: isoCode, title: trimmed.isEmpty ? nil : trimmed, dateFrom: dateFrom, dateTo: dateTo, transport: selectedTransport)
                     didSave = true
                     onSave(trip)
                     dismiss()
@@ -4016,7 +4032,8 @@ struct TripTitleEditRow: View {
                     .onAppear { draft = trip.title ?? "" }
                 Spacer()
                 Button {
-                    trip.title = draft.isEmpty ? nil : draft
+                    let trimmedDraft = draft.trimmingCharacters(in: .whitespaces)
+                    trip.title = trimmedDraft.isEmpty ? nil : trimmedDraft
                     try? modelContext.save()
                     editing = false
                 } label: {
@@ -4187,7 +4204,8 @@ struct EditTripSheet: View {
                     trip.dateFrom = dateFrom
                     trip.dateTo = dateTo
                     trip.transport = selectedTransport
-                    trip.title = tripTitle.isEmpty ? nil : tripTitle
+                    let trimmedTitle = tripTitle.trimmingCharacters(in: .whitespaces)
+                    trip.title = trimmedTitle.isEmpty ? nil : trimmedTitle
                     try? modelContext.save()
                     dismiss()
                 } label: {
