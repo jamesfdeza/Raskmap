@@ -6,7 +6,21 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0266FBF72F644BBE003EF8D6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0266FBF62F644BBE003EF8D6 /* WidgetKit.framework */; };
+		0266FBF92F644BBE003EF8D6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0266FBF82F644BBE003EF8D6 /* SwiftUI.framework */; };
+		0266FC062F644BBF003EF8D6 /* RaskmapWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0266FBF42F644BBE003EF8D6 /* RaskmapWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		027BD9612F64723C00CEE4CA /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 027BD9602F64723C00CEE4CA /* AppIntents.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		0266FC042F644BBF003EF8D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 02A1986D2F5F383C0057AA98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0266FBF32F644BBE003EF8D6;
+			remoteInfo = RaskmapWidgetExtension;
+		};
 		02A198872F5F383D0057AA98 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 02A1986D2F5F383C0057AA98 /* Project object */;
@@ -23,13 +37,39 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		0266FC072F644BBF003EF8D6 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0266FC062F644BBF003EF8D6 /* RaskmapWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0266FBF42F644BBE003EF8D6 /* RaskmapWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RaskmapWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		0266FBF62F644BBE003EF8D6 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		0266FBF82F644BBE003EF8D6 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		0266FC0C2F644C17003EF8D6 /* RaskmapWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RaskmapWidgetExtension.entitlements; sourceTree = "<group>"; };
 		027640A82F61C407000FC517 /* Raskmap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Raskmap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		027640A92F61C407000FC517 /* RaskmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		027640AA2F61C407000FC517 /* RaskmapUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		027BD9602F64723C00CEE4CA /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0266FC0B2F644BBF003EF8D6 /* Exceptions for "RaskmapWidget" folder in "RaskmapWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0266FBF32F644BBE003EF8D6 /* RaskmapWidgetExtension */;
+		};
 		02A198982F5F383D0057AA98 /* Exceptions for "Raskmap" folder in "Raskmap" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -40,6 +80,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		0266FBFA2F644BBE003EF8D6 /* RaskmapWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0266FC0B2F644BBF003EF8D6 /* Exceptions for "RaskmapWidget" folder in "RaskmapWidgetExtension" target */,
+			);
+			path = RaskmapWidget;
+			sourceTree = "<group>";
+		};
 		02A198772F5F383C0057AA98 /* Raskmap */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -61,6 +109,16 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0266FBF12F644BBE003EF8D6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0266FBF92F644BBE003EF8D6 /* SwiftUI.framework in Frameworks */,
+				0266FBF72F644BBE003EF8D6 /* WidgetKit.framework in Frameworks */,
+				027BD9612F64723C00CEE4CA /* AppIntents.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		02A198722F5F383C0057AA98 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -85,21 +143,57 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0266FBF52F644BBE003EF8D6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				027BD9602F64723C00CEE4CA /* AppIntents.framework */,
+				0266FBF62F644BBE003EF8D6 /* WidgetKit.framework */,
+				0266FBF82F644BBE003EF8D6 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		02A1986C2F5F383C0057AA98 = {
 			isa = PBXGroup;
 			children = (
+				0266FC0C2F644C17003EF8D6 /* RaskmapWidgetExtension.entitlements */,
 				02A198772F5F383C0057AA98 /* Raskmap */,
 				02A198892F5F383D0057AA98 /* RaskmapTests */,
 				02A198932F5F383D0057AA98 /* RaskmapUITests */,
 				027640A82F61C407000FC517 /* Raskmap.app */,
 				027640A92F61C407000FC517 /* RaskmapTests.xctest */,
 				027640AA2F61C407000FC517 /* RaskmapUITests.xctest */,
+				0266FBF42F644BBE003EF8D6 /* RaskmapWidgetExtension.appex */,
+				0266FBFA2F644BBE003EF8D6 /* RaskmapWidget */,
+				0266FBF52F644BBE003EF8D6 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0266FBF32F644BBE003EF8D6 /* RaskmapWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0266FC0A2F644BBF003EF8D6 /* Build configuration list for PBXNativeTarget "RaskmapWidgetExtension" */;
+			buildPhases = (
+				0266FBF02F644BBE003EF8D6 /* Sources */,
+				0266FBF12F644BBE003EF8D6 /* Frameworks */,
+				0266FBF22F644BBE003EF8D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0266FBFA2F644BBE003EF8D6 /* RaskmapWidget */,
+			);
+			name = RaskmapWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = RaskmapWidgetExtension;
+			productReference = 0266FBF42F644BBE003EF8D6 /* RaskmapWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		02A198742F5F383C0057AA98 /* Raskmap */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 02A198992F5F383D0057AA98 /* Build configuration list for PBXNativeTarget "Raskmap" */;
@@ -107,10 +201,12 @@
 				02A198712F5F383C0057AA98 /* Sources */,
 				02A198722F5F383C0057AA98 /* Frameworks */,
 				02A198732F5F383C0057AA98 /* Resources */,
+				0266FC072F644BBF003EF8D6 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0266FC052F644BBF003EF8D6 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				02A198772F5F383C0057AA98 /* Raskmap */,
@@ -178,6 +274,9 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					0266FBF32F644BBE003EF8D6 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					02A198742F5F383C0057AA98 = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -208,11 +307,19 @@
 				02A198742F5F383C0057AA98 /* Raskmap */,
 				02A198852F5F383D0057AA98 /* RaskmapTests */,
 				02A1988F2F5F383D0057AA98 /* RaskmapUITests */,
+				0266FBF32F644BBE003EF8D6 /* RaskmapWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0266FBF22F644BBE003EF8D6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		02A198732F5F383C0057AA98 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -237,6 +344,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0266FBF02F644BBE003EF8D6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		02A198712F5F383C0057AA98 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -261,6 +375,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0266FC052F644BBF003EF8D6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0266FBF32F644BBE003EF8D6 /* RaskmapWidgetExtension */;
+			targetProxy = 0266FC042F644BBF003EF8D6 /* PBXContainerItemProxy */;
+		};
 		02A198882F5F383D0057AA98 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 02A198742F5F383C0057AA98 /* Raskmap */;
@@ -274,6 +393,70 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0266FC082F644BBF003EF8D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RaskmapWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RaskmapWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RaskmapWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				NEW_SETTING = "";
+				PRODUCT_BUNDLE_IDENTIFIER = RealDev.Raskmap.RaskmapWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0266FC092F644BBF003EF8D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RaskmapWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RaskmapWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RaskmapWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				NEW_SETTING = "";
+				PRODUCT_BUNDLE_IDENTIFIER = RealDev.Raskmap.RaskmapWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		02A1989A2F5F383D0057AA98 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -286,6 +469,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Raskmap/Info.plist;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Raskmap necesita tu ubicación para algunas funcionalidades meramente visuales";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Raskmap necesita acceso para guardar tu mapa en la galería.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -320,6 +505,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Raskmap/Info.plist;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Raskmap necesita tu ubicación para algunas funcionalidades meramente visuales";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Raskmap necesita acceso para guardar tu mapa en la galería.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -550,6 +737,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0266FC0A2F644BBF003EF8D6 /* Build configuration list for PBXNativeTarget "RaskmapWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0266FC082F644BBF003EF8D6 /* Debug */,
+				0266FC092F644BBF003EF8D6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		02A198702F5F383C0057AA98 /* Build configuration list for PBXProject "Raskmap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

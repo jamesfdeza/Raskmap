@@ -11,36 +11,32 @@ import SwiftData
 import UIKit
 
 // MARK: - Estado del país (como un enum de Java)
-enum CountryStatus: String, Codable {
+enum CountryStatus: String, Codable, Identifiable {
+    var id: String { rawValue }
     case none        = "none"
     case visited     = "visited"     // Rojo
     case wantToVisit = "wantToVisit" // Azul
     case lived       = "lived"       // Verde
+    case bucketList  = "bucketList"  // Naranja
 
     var overlayColor: UIColor {
-        switch self {
-        case .none:        return .clear
-        case .visited:     return UIColor.systemRed.withAlphaComponent(0.45)
-        case .wantToVisit: return UIColor.systemBlue.withAlphaComponent(0.45)
-        case .lived:       return UIColor.systemGreen.withAlphaComponent(0.45)
-        }
+        ColorThemeManager.shared.uiColor(for: self)
     }
 
     var strokeColor: UIColor {
         switch self {
-        case .none:        return UIColor.systemGray.withAlphaComponent(0.2)
-        case .visited:     return UIColor.systemRed
-        case .wantToVisit: return UIColor.systemBlue
-        case .lived:       return UIColor.systemGreen
+        case .none: return UIColor.systemGray.withAlphaComponent(0.2)
+        default:    return ColorThemeManager.shared.uiColor(for: self)
         }
     }
 
     var label: String {
         switch self {
         case .none:        return "Sin marcar"
-        case .visited:     return "✅ Visitado"
-        case .wantToVisit: return "🔵 Quiero ir"
-        case .lived:       return "🏠 He vivido"
+        case .visited:     return "✅ Visitados"
+        case .wantToVisit: return "Próximos"
+        case .lived:       return "Vivido"
+        case .bucketList:  return "Quiero"
         }
     }
 }
@@ -52,6 +48,11 @@ class Country {
     var name: String        // Nombre del país (ej: "Spain")
     var isoCode: String     // Código ISO A3 (ej: "ESP")
     var statusRaw: String   // Guardamos el rawValue del enum como String
+    var plannedDate: Date?     // Fecha desde (inicio del viaje)
+    var plannedDateTo: Date?   // Fecha hasta (fin del viaje)
+    var transport: String?     // Medio de transporte
+    var plannedTitle: String?  // Título del viaje próximo
+    var visitCount: Int = 0   // Número de veces visitado
 
     // Propiedad calculada para trabajar con el enum (como un getter/setter en Java)
     var status: CountryStatus {
@@ -59,10 +60,17 @@ class Country {
         set { statusRaw = newValue.rawValue }
     }
 
-    init(name: String, isoCode: String, status: CountryStatus = .none) {
+    init(name: String, isoCode: String, status: CountryStatus = .none,
+         plannedDate: Date? = nil, plannedDateTo: Date? = nil,
+         transport: String? = nil, plannedTitle: String? = nil, visitCount: Int = 0) {
         self.name = name
         self.isoCode = isoCode
         self.statusRaw = status.rawValue
+        self.plannedDate = plannedDate
+        self.plannedDateTo = plannedDateTo
+        self.transport = transport
+        self.plannedTitle = plannedTitle
+        self.visitCount = visitCount
     }
     
     func cycleStatus() {
@@ -70,7 +78,8 @@ class Country {
         case .none:        status = .visited
         case .visited:     status = .wantToVisit
         case .wantToVisit: status = .lived
-        case .lived:       status = .none
+        case .lived:       status = .bucketList
+        case .bucketList:  status = .none
         }
     }
 }

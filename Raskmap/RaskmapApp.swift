@@ -2,26 +2,42 @@
 //  RaskmapApp.swift
 //  Raskmap
 //
-//  Punto de entrada de la app. Igual que el main() de Java.
-//  Solo cambiamos Item.self por Country.self
-//
 
 import SwiftUI
 import SwiftData
+import UIKit
+
+// MARK: - Bloqueo de orientación
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    static var orientationLock: UIInterfaceOrientationMask = .portrait
+
+    static func lockOrientation(_ orientation: UIInterfaceOrientationMask) {
+        orientationLock = orientation
+    }
+
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return AppDelegate.orientationLock
+    }
+}
+
+// MARK: - App
 
 @main
 struct RaskmapApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    @State private var showSplash: Bool = true
+    @State private var splashTimerDone: Bool = false
+    @State private var contentReady: Bool = false
+
     var sharedModelContainer: ModelContainer = {
-        // Schema = lista de modelos que SwiftData debe gestionar
-        // (como listar las @Entity en persistence.xml de JPA)
-        let schema = Schema([
-            Country.self,   // ← Reemplazamos Item.self por Country.self
-        ])
+        let schema = Schema([Country.self, Trip.self])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false  // false = persiste en disco (SQLite interno)
+            isStoredInMemoryOnly: false
         )
-
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
@@ -29,10 +45,38 @@ struct RaskmapApp: App {
         }
     }()
 
+    func dismissSplashIfReady() {
+        guard splashTimerDone && contentReady else { return }
+        withAnimation(.easeInOut(duration: 0.5)) {
+            showSplash = false
+        }
+    }
+
+    @StateObject private var colorTheme = ColorThemeManager.shared
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ZStack {
+                ContentView(onContentReady: {
+                        contentReady = true
+                        dismissSplashIfReady()
+                    })
+                    .modelContainer(sharedModelContainer)
+                    .environment(\.font, .custom("Palatino", size: 16))
+                    .environmentObject(colorTheme)
+
+                if showSplash {
+                    SplashView()
+                        .transition(.opacity)
+                        .zIndex(1)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                splashTimerDone = true
+                                dismissSplashIfReady()
+                            }
+                        }
+                }
+            }
         }
-        .modelContainer(sharedModelContainer)
     }
 }

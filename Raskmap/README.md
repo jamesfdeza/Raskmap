@@ -66,7 +66,7 @@ Presiona **▶** o `Cmd+R`. La primera vez tardará un poco en cargar el GeoJSON
 | Acción | Resultado |
 |--------|-----------|
 | Tocar un país | Abre panel de opciones |
-| Seleccionar "Visitado" | País se pinta de 🟢 verde |
+| Seleccionar "Visitados" | País se pinta de 🟢 verde |
 | Seleccionar "Quiero ir" | País se pinta de 🔴 rojo |
 | Seleccionar "Desmarcar" | País vuelve a transparente |
 
