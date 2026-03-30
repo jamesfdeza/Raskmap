@@ -31,11 +31,36 @@ class ColorThemeManager: ObservableObject {
         didSet { save(bucketListColor, key: "color_bucketList") }
     }
 
+    @Published var isDarkMode: Bool {
+        didSet {
+            UserDefaults.standard.set(isDarkMode, forKey: "app_isDarkMode")
+            applyColorScheme()
+        }
+    }
+
+    func applyColorScheme() {
+        let style: UIUserInterfaceStyle = isDarkMode ? .dark : .light
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .forEach { window in
+                window.overrideUserInterfaceStyle = style
+                // Walk the full presented VC chain so open sheets update instantly
+                var vc = window.rootViewController
+                while let next = vc?.presentedViewController {
+                    next.overrideUserInterfaceStyle = style
+                    vc = next
+                }
+                window.rootViewController?.overrideUserInterfaceStyle = style
+            }
+    }
+
     init() {
         visitedColor   = ColorThemeManager.load(key: "color_visited",     default: Self.defaultVisited)
         wantToVisitColor = ColorThemeManager.load(key: "color_wantToVisit", default: Self.defaultWantToVisit)
         livedColor     = ColorThemeManager.load(key: "color_lived",       default: Self.defaultLived)
         bucketListColor = ColorThemeManager.load(key: "color_bucketList",  default: Self.defaultBucketList)
+        isDarkMode     = UserDefaults.standard.bool(forKey: "app_isDarkMode")
     }
 
     func color(for status: CountryStatus) -> Color {
@@ -71,10 +96,25 @@ class ColorThemeManager: ObservableObject {
         UserDefaults.standard.set(data, forKey: key)
     }
     
+    // MARK: - SwiftUI color scheme modifier
+    /// Apply to every sheet's root so it re-renders instantly when isDarkMode changes.
+    struct Scheme: ViewModifier {
+        @ObservedObject fileprivate var mgr = ColorThemeManager.shared
+        func body(content: Content) -> some View {
+            content.preferredColorScheme(mgr.isDarkMode ? .dark : .light)
+        }
+    }
+
     func resetToDefaults() {
         visitedColor = Self.defaultVisited
         wantToVisitColor = Self.defaultWantToVisit
         livedColor = Self.defaultLived
         bucketListColor = Self.defaultBucketList
+    }
+}
+
+extension View {
+    func appColorScheme() -> some View {
+        modifier(ColorThemeManager.Scheme())
     }
 }

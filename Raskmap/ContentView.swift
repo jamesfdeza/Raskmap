@@ -9,6 +9,7 @@ import Combine
 import MapKit
 import Photos
 import CoreLocation
+import MessageUI
 
 class MapStore: ObservableObject {
     var centerOnCountry: ((String) -> Void)?
@@ -515,6 +516,7 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
             menuOverlay()
+                .ignoresSafeArea(.keyboard)
 
             // Próximos countdown banner — opposite side to menu
             if showCountdown, let banner = nextProximosBanner {
@@ -972,7 +974,7 @@ struct CountryBottomSheet: View {
                 }
             }
             .font(.palatino(.title2, weight: .bold))
-            .padding(.top, 72)
+            .padding(.top, 28)
 
             VStack(spacing: 10) {
                 ActionButton(
@@ -1327,8 +1329,12 @@ enum AchievementKind: CaseIterable {
     case visitedAntarctica
     // Oro – zona completada
     case europaCompleta, asiaCompleta, medioOrienteCompleto, africaCompleta, americaCompleta, oceaniaCompleta
+    // Oro – grupos especiales
+    case todaLaUE
     // Oro – hemisferios
     case ambosHemisferios
+    // Plata – grupos especiales
+    case todosEslavos, todosEscandinavos, todosBalcanicos, todosMicroestados
     // Bronce – al menos 1 país visitado en la región
     case visitedNortamerica, visitedCaribe, visitedSudamerica, visitedCentroamerica
     case visitedAfrica, visitedEuropa, visitedMedioOriente, visitedOceania, visitedAsia
@@ -1376,6 +1382,23 @@ enum AchievementKind: CaseIterable {
         "SLB","TON","TUV","VUT","ASM","COK","PYF","GUM","NCL","NIU","NFK","MNP","PCN","WLF"
     ]
     private static let _antarctica: Set<String> = ["ATA"]
+
+    // MARK: Sets de grupos especiales
+    private static let _unionEuropea: Set<String> = [
+        "AUT","BEL","BGR","HRV","CYP","CZE","DNK","EST","FIN","FRA",
+        "DEU","GRC","HUN","IRL","ITA","LVA","LTU","LUX","MLT","NLD",
+        "POL","PRT","ROU","SVK","SVN","ESP","SWE"
+    ]
+    private static let _eslavos: Set<String> = [
+        "RUS","UKR","BLR",                        // Eslavos orientales
+        "POL","CZE","SVK",                         // Eslavos occidentales
+        "SRB","HRV","SVN","BGR","MKD","BIH","MNE"  // Eslavos meridionales
+    ]
+    private static let _escandinavos: Set<String> = ["NOR","SWE","DNK","FIN","ISL"]
+    private static let _balcanicos: Set<String> = [
+        "ALB","BIH","BGR","HRV","GRC","MKD","MNE","ROU","SRB","SVN","KOS"
+    ]
+    private static let _microestados: Set<String> = ["AND","LIE","MCO","SMR","VAT","MLT"]
 
     // MARK: Sets de ISO por zona de Mi mapa (logros completados)
     private static let _zoneEuropa: Set<String> = [
@@ -1430,6 +1453,58 @@ enum AchievementKind: CaseIterable {
         "IOT","SHN"
     ]
 
+    // MARK: Multi-continent adjustment
+    // (iso, primaryZone, secondaryZone)
+    private static let multiContinentData: [(String, String, String)] = [
+        ("RUS", "europa",       "asia"),
+        ("TUR", "medioOriente", "europa"),
+        ("CYP", "europa",       "medioOriente"),
+        ("AZE", "asia",         "europa"),
+        ("GEO", "asia",         "europa"),
+        ("KAZ", "asia",         "europa"),
+        ("EGY", "africa",       "asia"),
+    ]
+
+    /// Returns the base set adjusted for multi-continent country preferences.
+    static func adjustSet(_ base: Set<String>, forZone zoneName: String, assignments: [String: String]) -> Set<String> {
+        var result = base
+        for (iso, primary, secondary) in multiContinentData {
+            let assignment = assignments[iso] ?? primary
+            let inZone: Bool
+            if assignment == "ambos" {
+                inZone = (zoneName == primary || zoneName == secondary)
+            } else {
+                inZone = (assignment == zoneName)
+            }
+            if inZone { result.insert(iso) } else { result.remove(iso) }
+        }
+        return result
+    }
+
+    /// Geographic zone name for zone-completion achievements (nil = cultural/fixed group)
+    var geographicZoneName: String? {
+        switch self {
+        case .europaCompleta:       return "europa"
+        case .asiaCompleta:         return "asia"
+        case .medioOrienteCompleto: return "medioOriente"
+        case .africaCompleta:       return "africa"
+        case .americaCompleta:      return "america"
+        case .oceaniaCompleta:      return "oceania"
+        default:                    return nil
+        }
+    }
+
+    /// Geographic region name for visited/five-trip achievements
+    var geographicRegionName: String? {
+        switch self {
+        case .visitedEuropa, .fiveEurope:                   return "europa"
+        case .visitedAsia, .fiveAsia:                       return "asia"
+        case .visitedMedioOriente, .fiveMedioOriente:       return "medioOriente"
+        case .visitedAfrica, .fiveAfrica:                   return "africa"
+        default:                                            return nil
+        }
+    }
+
     var zoneIsoCodes: Set<String> {
         switch self {
         case .europaCompleta:       return Self._zoneEuropa
@@ -1438,6 +1513,11 @@ enum AchievementKind: CaseIterable {
         case .africaCompleta:       return Self._zoneAfrica
         case .americaCompleta:      return Self._zoneAmerica
         case .oceaniaCompleta:      return Self._zoneOceania
+        case .todaLaUE:             return Self._unionEuropea
+        case .todosEslavos:         return Self._eslavos
+        case .todosEscandinavos:    return Self._escandinavos
+        case .todosBalcanicos:      return Self._balcanicos
+        case .todosMicroestados:    return Self._microestados
         default:                    return []
         }
     }
@@ -1488,6 +1568,11 @@ enum AchievementKind: CaseIterable {
         case .americaCompleta:      return "América completada"
         case .oceaniaCompleta:      return "Oceanía completada"
         case .ambosHemisferios:     return "Ambos hemisferios"
+        case .todaLaUE:             return "Toda la UE"
+        case .todosEslavos:         return "Todos los eslavos"
+        case .todosEscandinavos:    return "Todos los escandinavos"
+        case .todosBalcanicos:      return "Todos los balcánicos"
+        case .todosMicroestados:    return "Todos los microestados"
         case .visitedNortamerica:   return "He estado en Norteamérica"
         case .visitedCaribe:        return "He estado en el Caribe"
         case .visitedSudamerica:    return "He estado en Sudamérica"
@@ -1514,11 +1599,13 @@ enum AchievementKind: CaseIterable {
         case .allWorld, .visitedAntarctica:
             return "🏆"
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
-             .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios:
+             .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
+             .todaLaUE:
             return "🥇"
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
-             .firstLayover:
+             .firstLayover,
+             .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados:
             return "🥈"
         case .firstTrip, .visitedNortamerica, .visitedCaribe, .visitedSudamerica,
              .visitedCentroamerica, .visitedAfrica, .visitedEuropa, .visitedMedioOriente,
@@ -1531,10 +1618,12 @@ enum AchievementKind: CaseIterable {
         switch self {
         case .allWorld, .visitedAntarctica: return 0
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
-             .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios: return 1
+             .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
+             .todaLaUE: return 1
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
-             .firstLayover: return 2
+             .firstLayover,
+             .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados: return 2
         case .firstTrip, .visitedNortamerica, .visitedCaribe, .visitedSudamerica,
              .visitedCentroamerica, .visitedAfrica, .visitedEuropa, .visitedMedioOriente,
              .visitedOceania, .visitedAsia: return 3
@@ -1567,6 +1656,11 @@ struct ProfileSheet: View {
     @State private var showMedallero: Bool = false
     @State private var showTransportStats: Bool = false
 
+    @AppStorage("multiContinentRaw") private var multiContinentRaw: String = "{}"
+    private var multiContinentAssignments: [String: String] {
+        (try? JSONDecoder().decode([String: String].self, from: Data(multiContinentRaw.utf8))) ?? [:]
+    }
+
     enum MedalSlot: String, Identifiable {
         case gold, silver, bronze
         var id: String { rawValue }
@@ -1591,6 +1685,20 @@ struct ProfileSheet: View {
         let sorted = pastTrips.sorted { $0.dateFrom < $1.dateFrom }
         return sorted.count >= 100 ? sorted[99] : nil
     }
+    private func profileLastTripDate(for kind: AchievementKind) -> Date {
+        switch kind {
+        case .firstTrip:    return firstTrip?.effectiveEndDate ?? .distantPast
+        case .firstLayover: return firstLayoverTrip?.effectiveEndDate ?? .distantPast
+        case .trips100:     return trip100?.effectiveEndDate ?? .distantPast
+        case .allWorld, .ambosHemisferios:
+            return pastTrips.map { $0.effectiveEndDate }.max() ?? .distantPast
+        default:
+            let isoCodes = kind.zoneIsoCodes.isEmpty ? kind.regionIsoCodes : kind.zoneIsoCodes
+            return pastTrips.filter { isoCodes.contains($0.isoCode) }
+                .map { $0.effectiveEndDate }.max() ?? .distantPast
+        }
+    }
+
     private var visitedFlagEmojis: [String] {
         let codes = visitedIsoCodes.filter { countingMode.counts($0) }
         return allFeatures
@@ -1600,6 +1708,7 @@ struct ProfileSheet: View {
     }
 
     private func isAchieved(_ kind: AchievementKind) -> Bool {
+        let assignments = multiContinentAssignments
         switch kind {
         case .firstTrip:    return firstTrip != nil
         case .firstLayover: return firstLayoverTrip != nil
@@ -1610,13 +1719,20 @@ struct ProfileSheet: View {
         case .visitedNortamerica, .visitedCaribe, .visitedSudamerica, .visitedCentroamerica,
              .visitedAfrica, .visitedEuropa, .visitedMedioOriente, .visitedOceania,
              .visitedAsia, .visitedAntarctica:
-            return !kind.regionIsoCodes.isDisjoint(with: visitedIsoCodes)
+            let base = kind.regionIsoCodes
+            let adjusted = kind.geographicRegionName.map { AchievementKind.adjustSet(base, forZone: $0, assignments: assignments) } ?? base
+            return !adjusted.isDisjoint(with: visitedIsoCodes)
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica:
-            return pastTrips.filter { kind.regionIsoCodes.contains($0.isoCode) }.count >= 5
+            let base = kind.regionIsoCodes
+            let adjusted = kind.geographicRegionName.map { AchievementKind.adjustSet(base, forZone: $0, assignments: assignments) } ?? base
+            return pastTrips.filter { adjusted.contains($0.isoCode) }.count >= 5
         case .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
-             .africaCompleta, .americaCompleta, .oceaniaCompleta:
-            let valid = kind.zoneIsoCodes.filter { countingMode.counts($0) }
+             .africaCompleta, .americaCompleta, .oceaniaCompleta,
+             .todaLaUE, .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados:
+            let base = kind.zoneIsoCodes
+            let adjusted = kind.geographicZoneName.map { AchievementKind.adjustSet(base, forZone: $0, assignments: assignments) } ?? base
+            let valid = adjusted.filter { countingMode.counts($0) }
             return !valid.isEmpty && valid.allSatisfy { visitedIsoCodes.contains($0) }
         case .ambosHemisferios:
             let south = AchievementKind.southernHemisphere
@@ -1700,8 +1816,11 @@ struct ProfileSheet: View {
                             Text("Logros")
                                 .font(.palatino(.subheadline, weight: .bold))
                             let topAchieved = AchievementKind.allCases
-                                .sorted { $0.medalOrder < $1.medalOrder }
                                 .filter { isAchieved($0) }
+                                .sorted { a, b in
+                                    if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
+                                    return profileLastTripDate(for: a) > profileLastTripDate(for: b)
+                                }
                                 .prefix(3)
                             if topAchieved.isEmpty {
                                 Text("No tienes logros aún")
@@ -1762,9 +1881,9 @@ struct ProfileSheet: View {
 
                     // ── Menú accesos rápidos ──
                     VStack(spacing: 0) {
-                        Button { showTransportStats = true } label: {
+                        Button { showMapExport = true } label: {
                             HStack {
-                                Text("Transportes")
+                                Text("Pasaporte")
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -1794,9 +1913,9 @@ struct ProfileSheet: View {
                         }
                         .buttonStyle(.plain)
                         Divider().padding(.leading, 16)
-                        Button { showMapExport = true } label: {
+                        Button { showTransportStats = true } label: {
                             HStack {
-                                Text("Mi mapa")
+                                Text("Transporte")
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -1830,6 +1949,7 @@ struct ProfileSheet: View {
                 }
             }
         }
+        .presentationDetents([.medium, .large])
         .sheet(isPresented: $showTransportStats) {
             TransportStatsSheet(
                 visitedCountries: countries.filter { $0.status == .visited || $0.status == .lived },
@@ -1871,19 +1991,19 @@ struct ProfileSheet: View {
                         Text("\(toastTitle) (\(visitedFlagEmojis.count))")
                             .font(.palatino(.subheadline, weight: .bold))
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 6) {
-                                let rows = stride(from: 0, to: visitedFlagEmojis.count, by: 10).map {
-                                    Array(visitedFlagEmojis[$0..<min($0 + 10, visitedFlagEmojis.count)])
+                            VStack(alignment: .center, spacing: 6) {
+                                let rows = stride(from: 0, to: visitedFlagEmojis.count, by: 7).map {
+                                    Array(visitedFlagEmojis[$0..<min($0 + 7, visitedFlagEmojis.count)])
                                 }
                                 ForEach(rows.indices, id: \.self) { i in
                                     HStack(spacing: 2) {
                                         ForEach(rows[i], id: \.self) { flag in
                                             Text(flag).font(.title2)
                                         }
-                                        Spacer()
                                     }
                                 }
                             }
+                            .frame(maxWidth: .infinity)
                             .padding(.horizontal, 4)
                         }
                         .frame(maxHeight: 300)
@@ -1915,6 +2035,7 @@ struct ProfileSheet: View {
                 visitedIsoCodes: visitedIsoCodes
             ) { kind in isAchieved(kind) }
         }
+        .appColorScheme()
     }
 }
 
@@ -1945,6 +2066,20 @@ struct LogrosSheet: View {
             return "\(start) – \(Self.dateFmt.string(from: end))"
         }
         return start
+    }
+
+    private func lastTripDate(for kind: AchievementKind) -> Date {
+        switch kind {
+        case .firstTrip:    return firstTrip?.effectiveEndDate ?? .distantPast
+        case .firstLayover: return firstLayoverTrip?.effectiveEndDate ?? .distantPast
+        case .trips100:     return trip100?.effectiveEndDate ?? .distantPast
+        case .allWorld, .ambosHemisferios:
+            return pastTrips.map { $0.effectiveEndDate }.max() ?? .distantPast
+        default:
+            let isoCodes = kind.zoneIsoCodes.isEmpty ? kind.regionIsoCodes : kind.zoneIsoCodes
+            return pastTrips.filter { isoCodes.contains($0.isoCode) }
+                .map { $0.effectiveEndDate }.max() ?? .distantPast
+        }
     }
 
     private func timeAgo(from date: Date) -> String {
@@ -2050,6 +2185,46 @@ struct LogrosSheet: View {
                     .font(.palatino(.caption))
                     .foregroundStyle(.secondary)
             }
+        case .todaLaUE:
+            VStack(spacing: 4) {
+                Text("¡Todos los países de la UE!")
+                    .font(.palatino(.subheadline, weight: .bold))
+                Text("Has visitado los 27 estados miembros")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
+        case .todosEslavos:
+            VStack(spacing: 4) {
+                Text("¡Todos los pueblos eslavos!")
+                    .font(.palatino(.subheadline, weight: .bold))
+                Text("Has visitado los 13 países de habla eslava")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
+        case .todosEscandinavos:
+            VStack(spacing: 4) {
+                Text("¡Escandinavia completa!")
+                    .font(.palatino(.subheadline, weight: .bold))
+                Text("Has visitado los 5 países nórdicos")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
+        case .todosBalcanicos:
+            VStack(spacing: 4) {
+                Text("¡Los Balcanes completos!")
+                    .font(.palatino(.subheadline, weight: .bold))
+                Text("Has visitado todos los países balcánicos")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
+        case .todosMicroestados:
+            VStack(spacing: 4) {
+                Text("¡Todos los microestados europeos!")
+                    .font(.palatino(.subheadline, weight: .bold))
+                Text("Andorra, Liechtenstein, Malta, Mónaco, San Marino y Vaticano")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
         case .ambosHemisferios:
             VStack(spacing: 4) {
                 Text("¡Norte y sur del planeta!")
@@ -2064,9 +2239,12 @@ struct LogrosSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                let sorted = AchievementKind.allCases.sorted { $0.medalOrder < $1.medalOrder }
-                let achievedKinds = sorted.filter { isAchieved($0) }
-                let pendingKinds = sorted.filter { !isAchieved($0) }
+                let achievedKinds = AchievementKind.allCases.filter { isAchieved($0) }.sorted { a, b in
+                    if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
+                    return lastTripDate(for: a) > lastTripDate(for: b)
+                }
+                let pendingKinds = AchievementKind.allCases.filter { !isAchieved($0) }
+                    .sorted { $0.medalOrder < $1.medalOrder }
                 ForEach(achievedKinds + pendingKinds, id: \.title) { kind in
                     let unlocked = isAchieved(kind)
                     Button {
@@ -2093,6 +2271,7 @@ struct LogrosSheet: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .contentShape(Rectangle())
                         .opacity(unlocked ? 1 : 0.5)
                     }
                     .buttonStyle(.plain)
@@ -2136,6 +2315,7 @@ struct LogrosSheet: View {
             }
             .animation(.easeInOut(duration: 0.2), value: selectedKind != nil)
         }
+        .appColorScheme()
     }
 }
 
@@ -2153,6 +2333,8 @@ struct SettingsSheet: View {
     @State private var showImagePicker: Bool = false
     @State private var usernameDraft: String = ""
     @FocusState private var usernameFocused: Bool
+    @State private var showContact: Bool = false
+    @State private var showMultiContinent: Bool = false
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @Environment(\.dismiss) private var dismiss
@@ -2250,6 +2432,22 @@ struct SettingsSheet: View {
                                 }
                             }
                         }
+                        Button { showMultiContinent = true } label: {
+                            HStack {
+                                Text("Países en más de un continente")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 24)
 
@@ -2337,6 +2535,25 @@ struct SettingsSheet: View {
                         .padding(.top, 4)
                     }
 
+                    // Contacto
+                    Button { showContact = true } label: {
+                        HStack {
+                            Label("Contacto", systemImage: "envelope")
+                                .font(.palatino(.body))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .contentShape(Rectangle())
+
                     .padding(.bottom, 32)
                 }
                 .padding(.top, 20)
@@ -2351,6 +2568,14 @@ struct SettingsSheet: View {
                         dismiss()
                     }
                     .font(.palatino(.body))
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        colorTheme.isDarkMode.toggle()
+                    } label: {
+                        Image(systemName: colorTheme.isDarkMode ? "sun.max" : "moon")
+                            .font(.body)
+                    }
                 }
             }
             .onAppear { usernameDraft = username }
@@ -2373,7 +2598,7 @@ struct SettingsSheet: View {
                     pendingClear = nil
                 }
             } message: {
-                if let status = pendingClear {
+                if pendingClear != nil {
                     Text("Se eliminarán todos los países de Bucket list. Esta acción no se puede deshacer.")
                 }
             }
@@ -2399,6 +2624,122 @@ struct SettingsSheet: View {
         .sheet(isPresented: $showImagePicker) {
             ImagePickerView(image: $profileImage)
         }
+        .sheet(isPresented: $showContact) {
+            ContactSheet(username: username)
+        }
+        .sheet(isPresented: $showMultiContinent) {
+            MultiContinentSheet()
+        }
+        .appColorScheme()
+    }
+}
+
+// MARK: - Contacto
+struct MailComposerView: UIViewControllerRepresentable {
+    let toRecipients: [String]
+    let subject: String
+    let body: String
+    @Binding var isPresented: Bool
+    var onFinish: () -> Void = {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> MFMailComposeViewController {
+        let vc = MFMailComposeViewController()
+        vc.setToRecipients(toRecipients)
+        vc.setSubject(subject)
+        vc.setMessageBody(body, isHTML: false)
+        vc.mailComposeDelegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ vc: MFMailComposeViewController, context: Context) {}
+
+    class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let parent: MailComposerView
+        init(_ parent: MailComposerView) { self.parent = parent }
+        func mailComposeController(_ controller: MFMailComposeViewController,
+                                   didFinishWith result: MFMailComposeResult, error: Error?) {
+            parent.isPresented = false
+            parent.onFinish()
+        }
+    }
+}
+
+struct ContactSheet: View {
+    let username: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var messageText = ""
+    @State private var showMailComposer = false
+
+    private let maxChars = 150
+    private var subject: String { "Solicitud de \(username.isEmpty ? "usuario" : username)" }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Escribe tu mensaje")
+                    .font(.palatino(.subheadline))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 24)
+
+                ZStack(alignment: .bottomTrailing) {
+                    TextEditor(text: $messageText)
+                        .font(.palatino(.body))
+                        .padding(12)
+                        .frame(minHeight: 140, maxHeight: 180)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .onChange(of: messageText) { _, new in
+                            if new.count > maxChars { messageText = String(new.prefix(maxChars)) }
+                        }
+                    Text("\(messageText.count)/\(maxChars)")
+                        .font(.palatino(.caption))
+                        .foregroundStyle(messageText.count >= maxChars ? .red : .secondary)
+                        .padding(.trailing, 18).padding(.bottom, 10)
+                }
+                .padding(.horizontal, 24)
+
+                Button {
+                    if MFMailComposeViewController.canSendMail() {
+                        showMailComposer = true
+                    } else if let url = URL(string: "mailto:acederas.boletin-21@icloud.com?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(messageText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
+                        UIApplication.shared.open(url)
+                        dismiss()
+                    }
+                } label: {
+                    Text("Enviar")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(messageText.isEmpty ? Color(.systemGray4) : Color.blue,
+                                    in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .disabled(messageText.isEmpty)
+                .padding(.horizontal, 24)
+
+                Spacer()
+            }
+            .padding(.top, 20)
+            .navigationTitle("Contacto")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+            .sheet(isPresented: $showMailComposer) {
+                MailComposerView(
+                    toRecipients: ["acederas.boletin-21@icloud.com"],
+                    subject: subject,
+                    body: messageText,
+                    isPresented: $showMailComposer,
+                    onFinish: { dismiss() }
+                )
+            }
+        }
+        .presentationDetents([.medium])
+        .appColorScheme()
     }
 }
 
@@ -2963,12 +3304,6 @@ struct AddTripSheet: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 4)
 
-                Toggle(isOn: $hasLayover) {
-                    Label("Escala", systemImage: "arrow.triangle.swap")
-                        .font(.palatino(.body))
-                }
-                .padding(.horizontal, 16).padding(.bottom, 8)
-
                 // Ruta (airport + airlines) - only for ✈️
                 if selectedTransport == "✈️" {
                     Button { showRoutePicker = true } label: {
@@ -3050,8 +3385,10 @@ struct AddTripSheet: View {
             if !didSave { onCancel?() }
         }
         .sheet(isPresented: $showRoutePicker) {
-            RoutePickerSheet(airports: $selectedAirports, airlines: $selectedAirlines)
+            RouteWizardSheet(airports: $selectedAirports, airlines: $selectedAirlines,
+                             hasLayover: $hasLayover, onDone: {})
         }
+        .appColorScheme()
     }
 }
 
@@ -3146,23 +3483,21 @@ struct YearTravelView: View {
     var body: some View {
         VStack(spacing: 12) {
             if availableYears.count > 1 {
-                Menu {
-                    ForEach(availableYears, id: \.self) { year in
-                        Button { selectedYear = year } label: {
-                            Text(String(year))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(availableYears, id: \.self) { year in
+                            Button { selectedYear = year } label: {
+                                Text(String(year))
+                                    .font(.palatino(.subheadline, weight: selectedYear == year ? .bold : .regular))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(selectedYear == year ? Color.blue : Color(.systemGray5), in: Capsule())
+                                    .foregroundStyle(selectedYear == year ? .white : .primary)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(String(selectedYear))
-                            .font(.palatino(.subheadline, weight: .bold))
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Color.blue, in: Capsule())
-                    .foregroundStyle(.white)
+                    .padding(.horizontal, 24)
                 }
             }
 
@@ -3480,17 +3815,26 @@ struct TransportStatsSheet: View {
 
     private var pastTrips: [Trip] {
         let today = Calendar.current.startOfDay(for: Date())
-        return trips.filter { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+        return trips.filter { Calendar.current.startOfDay(for: $0.effectiveEndDate) <= today }
     }
 
     private var counts: [(emoji: String, label: String, count: Int)] {
-        transports.map { t in
+        let today = Calendar.current.startOfDay(for: Date())
+        let isoCodesWithPastTrips = Set(pastTrips.map { $0.isoCode })
+        return transports.compactMap { t -> (emoji: String, label: String, count: Int)? in
             let matchEmojis: Set<String> = t.emoji == "🚶🏻" ? ["🚶🏻", "🚶"] : [t.emoji]
             let fromTrips = pastTrips.filter { matchEmojis.contains($0.transport ?? "") }.count
-            let fromCountry = visitedCountries.filter { matchEmojis.contains($0.transport ?? "") }.count
-            return (t.emoji, t.label, fromTrips + fromCountry)
-        }.filter { $0.count > 0 }
-        .sorted { $0.count > $1.count }
+            let fromCountry = visitedCountries.filter { country -> Bool in
+                guard matchEmojis.contains(country.transport ?? "") else { return false }
+                guard !isoCodesWithPastTrips.contains(country.isoCode) else { return false }
+                let endDate = country.plannedDateTo ?? country.plannedDate
+                guard let end = endDate else { return true }
+                return Calendar.current.startOfDay(for: end) <= today
+            }.count
+            let total = fromTrips + fromCountry
+            guard total > 0 else { return nil }
+            return (t.emoji, t.label, total)
+        }.sorted { $0.count > $1.count }
     }
 
     private var totalTrips: Int { pastTrips.count }
@@ -3651,6 +3995,7 @@ struct TransportStatsSheet: View {
             }
         }
         .presentationDetents([.large])
+        .appColorScheme()
     }
 
     private func countryA2(_ iso2: String) -> String? { iso2.count == 2 ? iso2 : nil }
@@ -3971,12 +4316,6 @@ struct EditTripSheet: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 4)
 
-                Toggle(isOn: $hasLayover) {
-                    Label("Escala", systemImage: "arrow.triangle.swap")
-                        .font(.palatino(.body))
-                }
-                .padding(.horizontal, 16).padding(.bottom, 8)
-
 // Ruta (airport + airlines) - only for ✈️
                 if selectedTransport == "✈️" {
                     Button { showRoutePicker = true } label: {
@@ -4061,8 +4400,10 @@ struct EditTripSheet: View {
         }
         .presentationDetents([.large])
         .sheet(isPresented: $showRoutePicker) {
-            RoutePickerSheet(airports: $selectedAirports, airlines: $selectedAirlines)
+            RouteWizardSheet(airports: $selectedAirports, airlines: $selectedAirlines,
+                             hasLayover: $hasLayover, onDone: {})
         }
+        .appColorScheme()
     }
 }
 
@@ -4322,7 +4663,7 @@ struct MapExportSheet: View {
                 .animation(.easeInOut(duration: 0.2), value: savedToast)
             }
             .padding(.top, 8)
-            .navigationTitle("Mi mapa").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Pasaporte").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
@@ -4359,6 +4700,7 @@ struct MapExportSheet: View {
                 if let q = quadrantToDelete { Text("Se eliminará «\(q.title)».") }
             }
         }
+        .appColorScheme()
     }
 
     @ViewBuilder
@@ -4440,6 +4782,8 @@ struct MapExportSheet: View {
         options.mapType = .mutedStandard
         options.pointOfInterestFilter = .excludingAll
         options.showsBuildings = false
+        let style: UIUserInterfaceStyle = ColorThemeManager.shared.isDarkMode ? .dark : .light
+        options.traitCollection = UITraitCollection(userInterfaceStyle: style)
 
         let visitedIsoCodes = Set(visitedCountries.map { $0.isoCode })
         let visitedFeatures = features.filter { visitedIsoCodes.contains($0.isoCode) }
@@ -4451,11 +4795,10 @@ struct MapExportSheet: View {
             guard let snapshot else { return }
             let renderer = UIGraphicsImageRenderer(size: size)
             let image = renderer.image { _ in
-                // 1. Fondo blanco (necesario para el modo de mezcla multiply)
-                UIColor.white.setFill()
-                UIBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
+                // 1. Mapa base
+                snapshot.image.draw(at: .zero)
 
-                // 2. Polígonos de países visitados sobre el fondo blanco
+                // 2. Polígonos de países visitados encima
                 for feature in visitedFeatures {
                     for polygon in feature.polygons {
                         guard polygon.pointCount >= 3 else { continue }
@@ -4485,15 +4828,6 @@ struct MapExportSheet: View {
                         path.fill()
                     }
                 }
-
-                // 3. Mapa encima con blend mode multiply:
-                //    • zonas sin polígono (fondo blanco): blanco × mapa = mapa normal
-                //    • zonas con polígono: color_país × tile_mapa ≈ color_tintado
-                //      → etiquetas/texto oscuro del mapa quedan visibles encima del color
-                let ctx = UIGraphicsGetCurrentContext()!
-                ctx.setBlendMode(.multiply)
-                snapshot.image.draw(at: .zero)
-                ctx.setBlendMode(.normal)
 
                 // Contador por zona, centrado en la parte inferior
                 let text = counterStr as NSString
@@ -4680,13 +5014,37 @@ struct QuadrantDetailSheet: View {
 }
 
 // MARK: - Medallero sheet
+@Model
+class PersonalAwardModel {
+    var id: UUID = UUID()
+    var sortOrder: Int = 0
+    var title: String = ""
+    var gold: String = ""
+    var silver: String = ""
+    var bronze: String = ""
+    var extrasRaw: String = "[]"
+    var createdAt: Date = Date()
+
+    init(sortOrder: Int = 0) { self.sortOrder = sortOrder }
+
+    var extras: [String] {
+        get { (try? JSONDecoder().decode([String].self, from: Data(extrasRaw.utf8))) ?? [] }
+        set { extrasRaw = (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]" }
+    }
+}
+
 struct MedalleroSheet: View {
     @Binding var topTable: String
     let allFeatures: [CountryFeature]
     let visitedIsoCodes: Set<String>
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \PersonalAwardModel.sortOrder) private var personalAwards: [PersonalAwardModel]
     @State private var editingSpot: ProfileSheet.TopSpot? = nil
+    @State private var editingAward: PersonalAwardModel? = nil
+    @State private var showAlphabet: Bool = false
+    @AppStorage("countingMode") private var countingModeRaw: String = CountingMode.all.rawValue
 
     private func tableDict() -> [String: String] {
         guard let data = topTable.data(using: .utf8),
@@ -4766,16 +5124,85 @@ struct MedalleroSheet: View {
                     .padding(.vertical, 12)
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 20))
                     .padding(.horizontal, 12)
+                // ── Premios personales ──
+                VStack(spacing: 10) {
+                    ForEach(personalAwards) { award in
+                        Button { editingAward = award } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(award.title.isEmpty ? "Premio personal" : award.title)
+                                        .font(.palatino(.body, weight: .bold))
+                                        .foregroundStyle(.primary)
+                                    HStack(spacing: 6) {
+                                        Text("🥇").font(.caption)
+                                        Text(award.gold.isEmpty ? "—" : award.gold)
+                                            .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                    HStack(spacing: 6) {
+                                        Text("🥈").font(.caption)
+                                        Text(award.silver.isEmpty ? "—" : award.silver)
+                                            .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                    HStack(spacing: 6) {
+                                        Text("🥉").font(.caption)
+                                        Text(award.bronze.isEmpty ? "—" : award.bronze)
+                                            .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                    ForEach(award.extras.indices, id: \.self) { i in
+                                        Text("· \(award.extras[i])")
+                                            .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 12)
+                    }
+                    if personalAwards.count < 3 {
+                        Button {
+                            let newAward = PersonalAwardModel(sortOrder: personalAwards.count)
+                            modelContext.insert(newAward)
+                            editingAward = newAward
+                        } label: {
+                            Label("Añadir premio personal", systemImage: "plus.circle")
+                                .font(.palatino(.body))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 12)
+                    }
+                }
+                .padding(.bottom, 24)
+                .padding(.top, 4)
                 }
                 .padding(.top, 16)
             }
             .navigationTitle("Premios")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showAlphabet = true } label: {
+                        Image(systemName: "abc").font(.body)
+                    }
+                }
             }
+        }
+        .sheet(isPresented: $showAlphabet) {
+            FlagAlphabetSheet(
+                allFeatures: allFeatures,
+                visitedIsoCodes: visitedIsoCodes,
+                countingModeRaw: countingModeRaw
+            )
         }
         .sheet(item: $editingSpot) { spot in
             TableFlagPickerSheet(
@@ -4787,6 +5214,316 @@ struct MedalleroSheet: View {
                 onClear: { setTableFlag(nil, region: spot.region, medal: spot.medal) }
             )
         }
+        .sheet(item: $editingAward) { award in
+            PersonalAwardSheet(
+                award: award,
+                onDelete: {
+                    modelContext.delete(award)
+                    editingAward = nil
+                }
+            )
+        }
+        .appColorScheme()
+    }
+}
+
+// MARK: - Personal Award Sheet
+struct PersonalAwardSheet: View {
+    let award: PersonalAwardModel
+    let onDelete: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var gold: String
+    @State private var silver: String
+    @State private var bronze: String
+    @State private var extras: [String]
+    @State private var showDeleteConfirm = false
+
+    private let maxExtras = 5
+
+    init(award: PersonalAwardModel, onDelete: @escaping () -> Void) {
+        self.award = award
+        self.onDelete = onDelete
+        _title = State(initialValue: award.title)
+        _gold = State(initialValue: award.gold)
+        _silver = State(initialValue: award.silver)
+        _bronze = State(initialValue: award.bronze)
+        _extras = State(initialValue: award.extras)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack {
+                        Text("Título")
+                            .font(.palatino(.body))
+                            .foregroundStyle(.secondary)
+                        TextField("Nombre del premio", text: $title)
+                            .font(.palatino(.body))
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+                Section(header: Text("Medallas").font(.palatino(.caption))) {
+                    HStack {
+                        Text("🥇")
+                        TextField("Oro", text: $gold)
+                            .font(.palatino(.body))
+                    }
+                    HStack {
+                        Text("🥈")
+                        TextField("Plata", text: $silver)
+                            .font(.palatino(.body))
+                    }
+                    HStack {
+                        Text("🥉")
+                        TextField("Bronce", text: $bronze)
+                            .font(.palatino(.body))
+                    }
+                }
+                Section(header: Text("Otras opciones").font(.palatino(.caption))) {
+                    ForEach(extras.indices, id: \.self) { i in
+                        HStack {
+                            TextField("Opción \(i + 1)", text: Binding(
+                                get: { extras[i] },
+                                set: { extras[i] = $0 }
+                            ))
+                            .font(.palatino(.body))
+                            Button {
+                                extras.remove(at: i)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if extras.count < maxExtras {
+                        Button {
+                            extras.append("")
+                        } label: {
+                            Label("Añadir opción", systemImage: "plus.circle")
+                                .font(.palatino(.body))
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("Eliminar premio")
+                                .font(.palatino(.body))
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle(title.isEmpty ? "Premio personal" : title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Guardar") {
+                        award.title = title
+                        award.gold = gold
+                        award.silver = silver
+                        award.bronze = bronze
+                        award.extras = extras.filter { !$0.isEmpty }
+                        dismiss()
+                    }
+                    .font(.palatino(.body, weight: .bold))
+                }
+            }
+            .confirmationDialog("¿Eliminar este premio?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Eliminar", role: .destructive) { onDelete() }
+                Button("Cancelar", role: .cancel) {}
+            }
+        }
+        .appColorScheme()
+    }
+}
+
+// MARK: - Banderas por letra
+struct FlagAlphabetSheet: View {
+    let allFeatures: [CountryFeature]
+    let visitedIsoCodes: Set<String>
+    let countingModeRaw: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    private struct AlphaGroup: Identifiable {
+        let id: String          // the letter
+        let items: [(iso: String, flag: String, name: String)]
+        let hasAnyCountry: Bool
+    }
+
+    private var groups: [AlphaGroup] {
+        let letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".map { String($0) }
+        let allCountable = allFeatures.filter { countingMode.counts($0.isoCode) && $0.flagEmoji != nil }
+        let visited = allCountable
+            .filter { visitedIsoCodes.contains($0.isoCode) }
+            .sorted { $0.localizedName.localizedCompare($1.localizedName) == .orderedAscending }
+
+        var visitedDict: [String: [(String, String, String)]] = [:]
+        for f in visited {
+            let letter = String(f.localizedName.uppercased().first ?? "?")
+            visitedDict[letter, default: []].append((f.isoCode, f.flagEmoji!, f.localizedName))
+        }
+        var existsSet: Set<String> = []
+        for f in allCountable {
+            let letter = String(f.localizedName.uppercased().first ?? "?")
+            existsSet.insert(letter)
+        }
+        return letters.map { letter in
+            AlphaGroup(id: letter, items: visitedDict[letter] ?? [], hasAnyCountry: existsSet.contains(letter))
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    ForEach(groups) { group in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(group.id)
+                                .font(.palatino(.largeTitle, weight: .bold))
+                                .padding(.horizontal, 20)
+                            if group.items.isEmpty {
+                                Text(group.hasAnyCountry ? "Sin visitar" : "No existen")
+                                    .font(.palatino(.caption))
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 20)
+                            } else {
+                                let rows = stride(from: 0, to: group.items.count, by: 8).map {
+                                    Array(group.items[$0..<min($0 + 8, group.items.count)])
+                                }
+                                ForEach(rows.indices, id: \.self) { r in
+                                    HStack(spacing: 4) {
+                                        ForEach(rows[r], id: \.iso) { item in
+                                            Text(item.flag).font(.title2)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 20)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 16)
+            }
+            .navigationTitle("Banderas visitadas")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .appColorScheme()
+    }
+}
+
+// MARK: - Países pluricontinentales
+struct MultiContinentEntry: Identifiable {
+    let id: String  // ISO code
+    let flag: String
+    let name: String
+    let options: [(label: String, value: String)]
+    let defaultValue: String
+}
+
+private let multiContinentEntries: [MultiContinentEntry] = [
+    .init(id: "RUS", flag: "🇷🇺", name: "Rusia",
+          options: [("Europa","europa"),("Asia","asia"),("Ambos","ambos")],
+          defaultValue: "europa"),
+    .init(id: "TUR", flag: "🇹🇷", name: "Turquía",
+          options: [("Europa","europa"),("Asia","medioOriente"),("Ambos","ambos")],
+          defaultValue: "medioOriente"),
+    .init(id: "CYP", flag: "🇨🇾", name: "Chipre",
+          options: [("Europa","europa"),("Asia","medioOriente"),("Ambos","ambos")],
+          defaultValue: "europa"),
+    .init(id: "AZE", flag: "🇦🇿", name: "Azerbaiyán",
+          options: [("Europa","europa"),("Asia","asia"),("Ambos","ambos")],
+          defaultValue: "asia"),
+    .init(id: "GEO", flag: "🇬🇪", name: "Georgia",
+          options: [("Europa","europa"),("Asia","asia"),("Ambos","ambos")],
+          defaultValue: "asia"),
+    .init(id: "KAZ", flag: "🇰🇿", name: "Kazajistán",
+          options: [("Europa","europa"),("Asia","asia"),("Ambos","ambos")],
+          defaultValue: "asia"),
+    .init(id: "EGY", flag: "🇪🇬", name: "Egipto",
+          options: [("África","africa"),("Asia","asia"),("Ambos","ambos")],
+          defaultValue: "africa"),
+]
+
+struct MultiContinentSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("multiContinentRaw") private var rawAssignments: String = "{}"
+
+    private var assignments: [String: String] {
+        (try? JSONDecoder().decode([String: String].self, from: Data(rawAssignments.utf8))) ?? [:]
+    }
+
+    private func setAssignment(_ iso: String, _ value: String) {
+        var dict = assignments
+        dict[iso] = value
+        if let data = try? JSONEncoder().encode(dict) {
+            rawAssignments = String(data: data, encoding: .utf8) ?? "{}"
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                Spacer()
+                VStack(spacing: 0) {
+                    ForEach(multiContinentEntries) { entry in
+                        HStack(spacing: 12) {
+                            Text(entry.flag).font(.title2)
+                            Text(entry.name).font(.palatino(.body))
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { assignments[entry.id] ?? entry.defaultValue },
+                                set: { setAssignment(entry.id, $0) }
+                            )) {
+                                ForEach(entry.options, id: \.value) { opt in
+                                    Text(opt.label).tag(opt.value)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .font(.palatino(.body))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        if entry.id != multiContinentEntries.last?.id {
+                            Divider().padding(.leading, 52)
+                        }
+                    }
+                }
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
+                Spacer()
+            }
+            .navigationTitle("Países pluricontinentales")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .appColorScheme()
     }
 }
 
@@ -4894,6 +5631,522 @@ struct AirlineData: Identifiable, Codable, Hashable {
     let iata: String
     let name: String
     let country: String
+}
+
+// MARK: - Route wizard (multi-step)
+struct RouteWizardSheet: View {
+    @Binding var airports: [TripAirport]
+    @Binding var airlines: [TripAirline]
+    @Binding var hasLayover: Bool
+    var onDone: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    enum Step: Equatable {
+        case departure, layoverChoice, layoverList
+        case layoverAddAirport, layoverAddAirline
+        case finalDest, finalAirline, returnChoice
+        case returnAirlineChoice, returnAirline
+        case returnDeparture, returnLayoverChoice, returnLayoverList
+        case returnLayoverAddAirport, returnLayoverAddAirline
+        case returnFinalDest, returnFinalAirline
+    }
+
+    @State private var step: Step = .departure
+    @State private var departureIata = ""
+    @State private var layoverStops: [(iata: String, airline: String)] = []
+    @State private var pendingLayoverIata = ""
+    @State private var finalIata = ""
+    @State private var finalAirline = ""
+    @State private var returnAirlineDraft = ""
+    @State private var returnDepartureIata = ""
+    @State private var returnLayoverStops: [(iata: String, airline: String)] = []
+    @State private var returnPendingLayoverIata = ""
+    @State private var returnFinalIata = ""
+    @State private var returnFinalAirline = ""
+    @State private var query = ""
+    @State private var didPrepopulate = false
+
+    private static let allAirports = RoutePickerSheet.allAirports
+    private static var allAirlines: [AirlineData] { AirlinePickerSheet.airlines }
+
+    private var filteredAirports: [AirportData] {
+        if query.isEmpty { return Array(Self.allAirports.prefix(80)) }
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return Self.allAirports.filter {
+            $0.iata.range(of: query, options: opts) != nil ||
+            $0.name.range(of: query, options: opts) != nil ||
+            $0.city.range(of: query, options: opts) != nil
+        }
+    }
+
+    private var filteredAirlines: [AirlineData] {
+        if query.isEmpty { return Array(Self.allAirlines.prefix(80)) }
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return Self.allAirlines.filter {
+            $0.name.range(of: query, options: opts) != nil ||
+            $0.iata.range(of: query, options: opts) != nil
+        }
+    }
+
+    private var stepTitle: String {
+        switch step {
+        case .departure:          return "Aeropuerto de salida"
+        case .layoverChoice:      return "Tipo de vuelo"
+        case .layoverList:        return "Escalas"
+        case .layoverAddAirport:  return "Aeropuerto de escala"
+        case .layoverAddAirline:  return "Aerolínea del tramo"
+        case .finalDest:          return "Destino final"
+        case .finalAirline:       return "Aerolínea del vuelo"
+        case .returnChoice:       return "¿Vuelta?"
+        case .returnAirlineChoice: return "Aerolínea de vuelta"
+        case .returnAirline:      return "Aerolínea de vuelta"
+        case .returnDeparture:        return "Vuelta · Salida"
+        case .returnLayoverChoice:    return "Vuelta · Tipo de vuelo"
+        case .returnLayoverList:      return "Vuelta · Escalas"
+        case .returnLayoverAddAirport: return "Vuelta · Aeropuerto de escala"
+        case .returnLayoverAddAirline: return "Vuelta · Aerolínea del tramo"
+        case .returnFinalDest:        return "Vuelta · Destino"
+        case .returnFinalAirline:     return "Vuelta · Aerolínea"
+        }
+    }
+
+    private func buildAndSave(isReturn: Bool, differentReturnAirline: String? = nil) {
+        let route = [departureIata] + layoverStops.map(\.iata) + [finalIata]
+        let mult = (isReturn && differentReturnAirline == nil) ? 2 : 1
+        var apCounts: [String: Int] = [:]
+        for iata in route { apCounts[iata, default: 0] += (isReturn ? 2 : 1) }
+        var seen = Set<String>()
+        airports = route.compactMap { iata -> TripAirport? in
+            guard !seen.contains(iata) else { return nil }
+            seen.insert(iata); return TripAirport(iata: iata, count: apCounts[iata]!)
+        }
+        var alCounts: [String: Int] = [:]
+        for stop in layoverStops where !stop.airline.isEmpty {
+            alCounts[stop.airline, default: 0] += mult
+        }
+        if !finalAirline.isEmpty { alCounts[finalAirline, default: 0] += 1 }
+        if isReturn {
+            let rl = differentReturnAirline ?? finalAirline
+            if !rl.isEmpty { alCounts[rl, default: 0] += 1 }
+        }
+        airlines = alCounts.map { TripAirline(name: $0.key, count: $0.value) }
+        hasLayover = !layoverStops.isEmpty
+        onDone(); dismiss()
+    }
+
+    private func buildAndSaveWithReturnRoute() {
+        let outbound = [departureIata] + layoverStops.map(\.iata) + [finalIata]
+        let returning = [returnDepartureIata] + returnLayoverStops.map(\.iata) + [returnFinalIata]
+        var apCounts: [String: Int] = [:]
+        for iata in outbound { apCounts[iata, default: 0] += 1 }
+        for iata in returning { apCounts[iata, default: 0] += 1 }
+        var seen = Set<String>()
+        airports = (outbound + returning).compactMap { iata -> TripAirport? in
+            guard !seen.contains(iata) else { return nil }
+            seen.insert(iata); return TripAirport(iata: iata, count: apCounts[iata]!)
+        }
+        var alCounts: [String: Int] = [:]
+        for stop in layoverStops where !stop.airline.isEmpty { alCounts[stop.airline, default: 0] += 1 }
+        if !finalAirline.isEmpty { alCounts[finalAirline, default: 0] += 1 }
+        for stop in returnLayoverStops where !stop.airline.isEmpty { alCounts[stop.airline, default: 0] += 1 }
+        if !returnFinalAirline.isEmpty { alCounts[returnFinalAirline, default: 0] += 1 }
+        airlines = alCounts.map { TripAirline(name: $0.key, count: $0.value) }
+        hasLayover = !layoverStops.isEmpty || !returnLayoverStops.isEmpty
+        onDone(); dismiss()
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) { stepView }
+            .navigationTitle(stepTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .interactiveDismissDisabled(true)
+        .onAppear {
+            guard !didPrepopulate else { return }
+            didPrepopulate = true
+            let aps = airports; let als = airlines
+            guard aps.count >= 2 else { return }
+            departureIata = aps[0].iata
+            finalIata = aps[aps.count - 1].iata
+            let middle = Array(aps[1..<max(1, aps.count - 1)])
+            layoverStops = middle.enumerated().map { i, ap in
+                (iata: ap.iata, airline: i < als.count ? als[i].name : "")
+            }
+            let lastIdx = middle.count
+            finalAirline = lastIdx < als.count ? als[lastIdx].name : (als.last?.name ?? "")
+        }
+        .appColorScheme()
+    }
+
+    @ViewBuilder private var stepView: some View {
+        switch step {
+        case .departure:
+            airportSearch(hint: "Ciudad, aeropuerto o IATA") { iata in
+                departureIata = iata; query = ""; step = .layoverChoice
+            }
+        case .layoverChoice:
+            layoverChoiceView
+        case .layoverList:
+            layoverListView
+        case .layoverAddAirport:
+            airportSearch(hint: "Ciudad, aeropuerto o IATA") { iata in
+                pendingLayoverIata = iata; query = ""; step = .layoverAddAirline
+            }
+        case .layoverAddAirline:
+            airlineSearch(hint: "Aerolínea") { name in
+                layoverStops.append((iata: pendingLayoverIata, airline: name))
+                pendingLayoverIata = ""; query = ""; step = .layoverList
+            }
+        case .finalDest:
+            airportSearch(hint: "Ciudad, aeropuerto o IATA") { iata in
+                finalIata = iata; query = ""; step = .finalAirline
+            }
+        case .finalAirline:
+            airlineSearch(hint: "Aerolínea") { name in
+                finalAirline = name; query = ""; step = .returnChoice
+            }
+        case .returnChoice:
+            returnView
+        case .returnAirlineChoice:
+            returnAirlineChoiceView
+        case .returnAirline:
+            airlineSearch(hint: "Aerolínea") { name in
+                returnAirlineDraft = name; query = ""
+                buildAndSave(isReturn: true, differentReturnAirline: name)
+            }
+        case .returnDeparture:
+            airportSearch(hint: "Ciudad, aeropuerto o IATA") { iata in
+                returnDepartureIata = iata; query = ""; step = .returnLayoverChoice
+            }
+        case .returnLayoverChoice:
+            returnLayoverChoiceView
+        case .returnLayoverList:
+            returnLayoverListView
+        case .returnLayoverAddAirport:
+            airportSearch(hint: "Ciudad, aeropuerto o IATA") { iata in
+                returnPendingLayoverIata = iata; query = ""; step = .returnLayoverAddAirline
+            }
+        case .returnLayoverAddAirline:
+            airlineSearch(hint: "Aerolínea") { name in
+                returnLayoverStops.append((iata: returnPendingLayoverIata, airline: name))
+                returnPendingLayoverIata = ""; query = ""; step = .returnLayoverList
+            }
+        case .returnFinalDest:
+            airportSearch(hint: "Ciudad, aeropuerto o IATA") { iata in
+                returnFinalIata = iata; query = ""; step = .returnFinalAirline
+            }
+        case .returnFinalAirline:
+            airlineSearch(hint: "Aerolínea") { name in
+                returnFinalAirline = name; query = ""
+                buildAndSaveWithReturnRoute()
+            }
+        }
+    }
+
+    // ── Return airline choice ──
+    private var returnAirlineChoiceView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Text("¿Misma aerolínea a la vuelta?")
+                .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
+            if !finalAirline.isEmpty {
+                Text(finalAirline).font(.palatino(.subheadline)).foregroundStyle(.secondary)
+            }
+            VStack(spacing: 12) {
+                Button { buildAndSave(isReturn: true) } label: {
+                    Text("Sí, la misma")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.white)
+                }
+                Button { query = ""; step = .returnAirline } label: {
+                    Text("No, diferente aerolínea")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.primary)
+                }
+            }.padding(.horizontal, 24)
+            Spacer()
+        }
+    }
+
+    // ── Airport search inline ──
+    @ViewBuilder
+    private func airportSearch(hint: String, onSelect: @escaping (String) -> Void) -> some View {
+        VStack(spacing: 0) {
+            searchBar(placeholder: hint)
+            Divider()
+            List(filteredAirports, id: \.iata) { ap in
+                Button { onSelect(ap.iata) } label: {
+                    HStack(spacing: 10) {
+                        Text(ap.flagEmoji).font(.title3)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(ap.iata).font(.palatino(.subheadline, weight: .bold))
+                                Text(ap.name).font(.palatino(.body)).foregroundStyle(.primary)
+                            }
+                            Text(ap.city).font(.palatino(.caption)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }.listStyle(.plain)
+        }
+    }
+
+    // ── Airline search inline ──
+    @ViewBuilder
+    private func airlineSearch(hint: String, onSelect: @escaping (String) -> Void) -> some View {
+        VStack(spacing: 0) {
+            searchBar(placeholder: hint)
+            Divider()
+            List(filteredAirlines, id: \.iata) { al in
+                Button { onSelect(al.name) } label: {
+                    HStack {
+                        Text(al.name).font(.palatino(.body)).foregroundStyle(.primary)
+                        Spacer()
+                        Text(al.iata).font(.palatino(.caption)).foregroundStyle(.secondary)
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }.listStyle(.plain)
+        }
+    }
+
+    // ── Search bar ──
+    @ViewBuilder
+    private func searchBar(placeholder: String) -> some View {
+        HStack {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField(placeholder, text: $query)
+                .autocorrectionDisabled().textInputAutocapitalization(.never)
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }.buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Color(.systemGray6))
+    }
+
+    // ── Layover choice ──
+    private var layoverChoiceView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            if let ap = Self.allAirports.first(where: { $0.iata == departureIata }) {
+                Text("Salida: \(departureIata) · \(ap.city)")
+                    .font(.palatino(.subheadline)).foregroundStyle(.secondary)
+            }
+            Text("¿El vuelo tiene escala?")
+                .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
+            VStack(spacing: 12) {
+                Button { query = ""; step = .layoverAddAirport } label: {
+                    Text("🔄  Con escala(s)")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.white)
+                }
+                Button { query = ""; step = .finalDest } label: {
+                    Text("✈️  Vuelo directo")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.primary)
+                }
+            }.padding(.horizontal, 24)
+            Spacer()
+        }
+    }
+
+    // ── Layover list ──
+    private var layoverListView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(layoverStops.indices, id: \.self) { i in
+                        let stop = layoverStops[i]
+                        let ap = Self.allAirports.first { $0.iata == stop.iata }
+                        HStack(spacing: 10) {
+                            Text(ap?.flagEmoji ?? "🌐").font(.title3)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(stop.iata) – \(ap?.name ?? stop.iata)")
+                                    .font(.palatino(.caption, weight: .bold))
+                                Text(stop.airline.isEmpty ? "Sin aerolínea" : stop.airline)
+                                    .font(.palatino(.caption)).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button { layoverStops.remove(at: i) } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.7))
+                            }.buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        if i < layoverStops.count - 1 { Divider().padding(.leading, 16) }
+                    }
+                }
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16).padding(.top, 16)
+            }
+            VStack(spacing: 10) {
+                Button { query = ""; step = .layoverAddAirport } label: {
+                    Label("Añadir otra escala", systemImage: "plus.circle")
+                        .font(.palatino(.body))
+                }
+                Button { query = ""; step = .finalDest } label: {
+                    Text("Siguiente →")
+                        .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(.horizontal, 24).padding(.vertical, 14)
+            .background(Color(.systemBackground))
+        }
+    }
+
+    // ── Return choice ──
+    private var returnView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            let segments = [departureIata] + layoverStops.map(\.iata) + [finalIata]
+            VStack(spacing: 6) {
+                Text(segments.joined(separator: " → "))
+                    .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
+                let cities = segments.compactMap { iata in Self.allAirports.first { $0.iata == iata }?.city }
+                if !cities.isEmpty {
+                    Text(cities.joined(separator: " → "))
+                        .font(.palatino(.subheadline)).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                if !finalAirline.isEmpty {
+                    Text(finalAirline).font(.palatino(.caption)).foregroundStyle(.tertiary)
+                }
+            }.padding(.horizontal, 24)
+            Text("¿Misma ruta a la vuelta?")
+                .font(.palatino(.title3, weight: .bold))
+            VStack(spacing: 12) {
+                Button {
+                    if layoverStops.isEmpty {
+                        query = ""; step = .returnAirlineChoice
+                    } else {
+                        buildAndSave(isReturn: true)
+                    }
+                } label: {
+                    Text("↩️  Sí, ida y vuelta (×2)")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.white)
+                }
+                Button { buildAndSave(isReturn: false) } label: {
+                    Text("✈️  No, solo ida")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.primary)
+                }
+                Button {
+                    returnDepartureIata = ""
+                    returnFinalIata = ""
+                    query = ""; step = .returnDeparture
+                } label: {
+                    Text("🔀  Ruta de vuelta diferente")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.primary)
+                }
+            }.padding(.horizontal, 24)
+            Spacer()
+        }
+    }
+
+    // ── Return layover choice ──
+    private var returnLayoverChoiceView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            if let ap = Self.allAirports.first(where: { $0.iata == returnDepartureIata }) {
+                Text("Salida vuelta: \(returnDepartureIata) · \(ap.city)")
+                    .font(.palatino(.subheadline)).foregroundStyle(.secondary)
+            }
+            Text("¿El vuelo de vuelta tiene escala?")
+                .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
+            VStack(spacing: 12) {
+                Button { query = ""; step = .returnLayoverAddAirport } label: {
+                    Text("🔄  Con escala(s)")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.white)
+                }
+                Button { query = ""; step = .returnFinalDest } label: {
+                    Text("✈️  Vuelo directo")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.primary)
+                }
+            }.padding(.horizontal, 24)
+            Spacer()
+        }
+    }
+
+    // ── Return layover list ──
+    private var returnLayoverListView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(returnLayoverStops.indices, id: \.self) { i in
+                        let stop = returnLayoverStops[i]
+                        let ap = Self.allAirports.first { $0.iata == stop.iata }
+                        HStack(spacing: 10) {
+                            Text(ap?.flagEmoji ?? "🌐").font(.title3)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(stop.iata) – \(ap?.name ?? stop.iata)")
+                                    .font(.palatino(.caption, weight: .bold))
+                                Text(stop.airline.isEmpty ? "Sin aerolínea" : stop.airline)
+                                    .font(.palatino(.caption)).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button { returnLayoverStops.remove(at: i) } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.7))
+                            }.buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        if i < returnLayoverStops.count - 1 { Divider().padding(.leading, 16) }
+                    }
+                }
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16).padding(.top, 16)
+            }
+            VStack(spacing: 10) {
+                Button { query = ""; step = .returnLayoverAddAirport } label: {
+                    Label("Añadir otra escala", systemImage: "plus.circle")
+                        .font(.palatino(.body))
+                }
+                Button { query = ""; step = .returnFinalDest } label: {
+                    Text("Siguiente →")
+                        .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(.horizontal, 24).padding(.vertical, 14)
+            .background(Color(.systemBackground))
+        }
+    }
 }
 
 // MARK: - Airport picker
@@ -5012,6 +6265,7 @@ struct RoutePickerSheet: View {
             }
         }
         .presentationDetents([.large])
+        .appColorScheme()
     }
 }
 
@@ -5116,6 +6370,7 @@ struct AirlinePickerSheet: View {
             }
         }
         .presentationDetents([.large])
+        .appColorScheme()
     }
 }
 
@@ -5159,6 +6414,7 @@ struct AirportStatsSheet: View {
             }
         }
         .presentationDetents([.large])
+        .appColorScheme()
     }
 }
 
@@ -5190,5 +6446,6 @@ struct AirlineStatsSheet: View {
             }
         }
         .presentationDetents([.large])
+        .appColorScheme()
     }
 }

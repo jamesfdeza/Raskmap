@@ -33,13 +33,20 @@ struct RaskmapApp: App {
     @State private var contentReady: Bool = false
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Country.self, Trip.self])
-        let modelConfiguration = ModelConfiguration(
+        let schema = Schema([Country.self, Trip.self, PersonalAwardModel.self])
+        // Intenta sincronizar con iCloud/CloudKit; si falla (sin sesión, sin red…)
+        // cae en un contenedor local para no perder datos.
+        let cloudConfig = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .automatic
         )
+        if let container = try? ModelContainer(for: schema, configurations: [cloudConfig]) {
+            return container
+        }
+        let localConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(for: schema, configurations: [localConfig])
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
@@ -77,6 +84,8 @@ struct RaskmapApp: App {
                         }
                 }
             }
+            .preferredColorScheme(colorTheme.isDarkMode ? .dark : .light)
+            .onAppear { colorTheme.applyColorScheme() }
         }
     }
 }

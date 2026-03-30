@@ -45,9 +45,9 @@ enum CountryStatus: String, Codable, Identifiable {
 // @Model es como @Entity — SwiftData gestiona la persistencia automáticamente.
 @Model
 class Country {
-    var name: String        // Nombre del país (ej: "Spain")
-    var isoCode: String     // Código ISO A3 (ej: "ESP")
-    var statusRaw: String   // Guardamos el rawValue del enum como String
+    var name: String = ""        // Nombre del país (ej: "Spain")
+    var isoCode: String = ""     // Código ISO A3 (ej: "ESP")
+    var statusRaw: String = ""   // Guardamos el rawValue del enum como String
     var plannedDate: Date?     // Fecha desde (inicio del viaje)
     var plannedDateTo: Date?   // Fecha hasta (fin del viaje)
     var transport: String?     // Medio de transporte

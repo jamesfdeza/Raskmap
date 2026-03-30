@@ -25,9 +25,12 @@ struct CountryFeature {
     let boundingMapRect: MKMapRect
     // Traducir el nombre al español usando el sistema
     var localizedName: String {
-        if isoA2 != "-99",
-           let localized = Locale(identifier: "es").localizedString(forRegionCode: isoA2) {
-            return localized
+        let nameOverrides: [String: String] = ["PS": "Palestina"]
+        if isoA2 != "-99" {
+            if let override = nameOverrides[isoA2] { return override }
+            if let localized = Locale(identifier: "es").localizedString(forRegionCode: isoA2) {
+                return localized
+            }
         }
         // Fallback manual para territorios sin código ISO
         let manualTranslations: [String: String] = [

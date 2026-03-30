@@ -17,9 +17,9 @@ struct TripAirline: Codable, Hashable {
 
 @Model
 class Trip {
-    var isoCode: String
+    var isoCode: String = ""
     var title: String?
-    var dateFrom: Date
+    var dateFrom: Date = Date()
     var dateTo: Date?
     var transport: String?
     var hasLayover: Bool = false
@@ -27,7 +27,7 @@ class Trip {
     var airportsRaw: String?      // JSON-encoded [TripAirport]
     var airlinesRaw: String?      // JSON-encoded [TripAirline]
     var airlineCountsRaw: String? // Legacy - kept for migration
-    var createdAt: Date
+    var createdAt: Date = Date()
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,

@@ -75,6 +75,7 @@ struct RaskMapView: UIViewRepresentable {
                 "FJI": CLLocationCoordinate2D(latitude: -18.14, longitude: 178.44), // Suva
                 "KIR": CLLocationCoordinate2D(latitude:   1.33, longitude: 172.98), // South Tarawa
                 "COK": CLLocationCoordinate2D(latitude: -21.21, longitude: -159.78), // Avarua
+                "ATA": CLLocationCoordinate2D(latitude: -70.75, longitude:  44.33), // Mizuho Plateau
             ]
             let center = customCenters[isoCode] ?? region.center
             mapView.setRegion(MKCoordinateRegion(center: center, span: cappedSpan), animated: true)
@@ -316,6 +317,7 @@ struct RaskMapView: UIViewRepresentable {
                             highlighted: Bool = false,
                             showBucketList: Bool = true,
                             isUserHere: Bool = false) {
+        let isAntarctica = (renderer.polygon as? CountryPolygon)?.isoCode == "ATA"
         let effective: CountryStatus = {
             if status == .lived                        { return .visited }
             if status == .bucketList && !showBucketList { return .none }
@@ -323,20 +325,24 @@ struct RaskMapView: UIViewRepresentable {
         }()
         if effective == .none && !isUserHere {
             renderer.fillColor   = UIColor.clear
-            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
-            renderer.lineWidth   = highlighted ? 1.0 : 0
+            renderer.strokeColor = (highlighted && !isAntarctica) ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
+            renderer.lineWidth   = (highlighted && !isAntarctica) ? 1.0 : 0
         } else if isUserHere {
-            // User is physically in this country — translucent fill, colored border
             let base = effective != .none ? effective.overlayColor : CountryStatus.visited.overlayColor
             renderer.fillColor   = base.withAlphaComponent(0.45)
             renderer.strokeColor = base
             renderer.lineWidth   = 2.5
         } else {
             renderer.fillColor   = effective.overlayColor
-            renderer.strokeColor = highlighted
-                ? UIColor.black.withAlphaComponent(0.85)
-                : UIColor.black.withAlphaComponent(0.35)
-            renderer.lineWidth   = highlighted ? 1.5 : 0.5
+            if isAntarctica {
+                renderer.strokeColor = UIColor.clear
+                renderer.lineWidth   = 0
+            } else {
+                renderer.strokeColor = highlighted
+                    ? UIColor.black.withAlphaComponent(0.85)
+                    : UIColor.black.withAlphaComponent(0.35)
+                renderer.lineWidth   = highlighted ? 1.5 : 0.5
+            }
         }
     }
 
@@ -410,6 +416,12 @@ struct RaskMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {}
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {}
 
+        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            if annotation is MKUserLocation {
+                mapView.deselectAnnotation(annotation, animated: false)
+            }
+        }
+
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let userLoc = annotation as? MKUserLocation else { return nil }
             userLoc.title = ""
@@ -418,6 +430,7 @@ struct RaskMapView: UIViewRepresentable {
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKUserLocationView
                 ?? MKUserLocationView(annotation: userLoc, reuseIdentifier: id)
             view.canShowCallout = false
+            view.isUserInteractionEnabled = false
             return view
         }
 
@@ -433,8 +446,20 @@ struct RaskMapView: UIViewRepresentable {
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let mapView = gesture.view as? MKMapView else { return }
-            let tapPoint = MKMapPoint(mapView.convert(gesture.location(in: mapView),
-                                                      toCoordinateFrom: mapView))
+            let tapLocation = gesture.location(in: mapView)
+            let tapCoord = mapView.convert(tapLocation, toCoordinateFrom: mapView)
+            let tapPoint = MKMapPoint(tapCoord)
+
+            // Antarctica: Mercator can't represent the south pole correctly.
+            // Any tap below -60° latitude maps reliably to Antarctica —
+            // no other tappable territory exists below that latitude.
+            if tapCoord.latitude < -60 {
+                let result = parent.countries.first { $0.isoCode == "ATA" }
+                          ?? Country(name: "Antarctica", isoCode: "ATA")
+                parent.onCountryTapped(result)
+                return
+            }
+
             let candidates = visibleCountries(for: mapView)
                 .filter { $0.boundingMapRect.contains(tapPoint) }
                 .sorted {
