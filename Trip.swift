@@ -7,39 +7,42 @@ import SwiftData
 
 struct TripAirport: Codable, Hashable {
     let iata: String
-    var roundTrip: Bool
+    var count: Int
+}
+
+struct TripAirline: Codable, Hashable {
+    let name: String
+    var count: Int
 }
 
 @Model
 class Trip {
-    var isoCode: String
+    var isoCode: String = ""
     var title: String?
-    var dateFrom: Date
+    var dateFrom: Date = Date()
     var dateTo: Date?
     var transport: String?
-    var airport: String?        // Legacy single airport
-    var airportsRaw: String?    // JSON-encoded [TripAirport]
-    var airlinesRaw: String?    // JSON-encoded [String]
-    var airlineCountsRaw: String? // JSON-encoded [String: Int] manual counts (multi-airline only)
-    var createdAt: Date
+    var hasLayover: Bool = false
+    var airport: String?          // Legacy single airport
+    var airportsRaw: String?      // JSON-encoded [TripAirport]
+    var airlinesRaw: String?      // JSON-encoded [TripAirline]
+    var airlineCountsRaw: String? // Legacy - kept for migration
+    var createdAt: Date = Date()
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
-         transport: String? = nil, airport: String? = nil,
-         tripAirports: [TripAirport] = [], airlines: [String] = [],
-         airlineCounts: [String: Int] = [:]) {
+         transport: String? = nil,
+         tripAirports: [TripAirport] = [], tripAirlines: [TripAirline] = []) {
         self.isoCode = isoCode
         self.title = title
         self.dateFrom = dateFrom
         self.dateTo = dateTo
         self.transport = transport
         self.airport = nil
-        var all = tripAirports
-        if let ap = airport, !ap.isEmpty, !all.contains(where: { $0.iata == ap }) {
-            all.insert(TripAirport(iata: ap, roundTrip: false), at: 0)
-        }
-        self.airportsRaw = all.isEmpty ? nil : (try? JSONEncoder().encode(all)).flatMap { String(data: $0, encoding: .utf8) }
-        self.airlinesRaw = airlines.isEmpty ? nil : (try? JSONEncoder().encode(airlines)).flatMap { String(data: $0, encoding: .utf8) }
-        self.airlineCountsRaw = airlineCounts.isEmpty ? nil : (try? JSONEncoder().encode(airlineCounts)).flatMap { String(data: $0, encoding: .utf8) }
+        self.airlineCountsRaw = nil
+        self.airportsRaw = tripAirports.isEmpty ? nil :
+            (try? JSONEncoder().encode(tripAirports)).flatMap { String(data: $0, encoding: .utf8) }
+        self.airlinesRaw = tripAirlines.isEmpty ? nil :
+            (try? JSONEncoder().encode(tripAirlines)).flatMap { String(data: $0, encoding: .utf8) }
         self.createdAt = Date()
     }
 
@@ -50,64 +53,57 @@ class Trip {
                 if let arr = try? JSONDecoder().decode([TripAirport].self, from: data) {
                     result = arr
                 } else if let arr = try? JSONDecoder().decode([String].self, from: data) {
-                    result = arr.map { TripAirport(iata: $0, roundTrip: false) }
+                    // Legacy [String] format
+                    result = arr.map { TripAirport(iata: $0, count: 1) }
+                } else if let arr = try? JSONDecoder().decode([[String: String]].self, from: data) {
+                    // Legacy TripAirport with roundTrip bool
+                    result = arr.compactMap { d in
+                        guard let iata = d["iata"] else { return nil }
+                        return TripAirport(iata: iata, count: d["roundTrip"] == "true" ? 2 : 1)
+                    }
                 }
             }
+            // Migrate legacy single airport field
             if let legacy = airport, !legacy.isEmpty, !result.contains(where: { $0.iata == legacy }) {
-                result.insert(TripAirport(iata: legacy, roundTrip: false), at: 0)
+                result.insert(TripAirport(iata: legacy, count: 1), at: 0)
             }
             return result
         }
         set {
-            airportsRaw = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
+            airportsRaw = newValue.isEmpty ? nil :
+                (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
             if !newValue.isEmpty { airport = nil }
         }
     }
 
+    var tripAirlines: [TripAirline] {
+        get {
+            guard let raw = airlinesRaw, let data = raw.data(using: .utf8) else { return [] }
+            if let arr = try? JSONDecoder().decode([TripAirline].self, from: data) { return arr }
+            // Legacy [String] format
+            if let arr = try? JSONDecoder().decode([String].self, from: data) {
+                // Check airlineCountsRaw for manual counts
+                var counts: [String: Int] = [:]
+                if let cr = airlineCountsRaw, let cd = cr.data(using: .utf8),
+                   let dict = try? JSONDecoder().decode([String: Int].self, from: cd) {
+                    counts = dict
+                }
+                return arr.map { TripAirline(name: $0, count: counts[$0] ?? 1) }
+            }
+            return []
+        }
+        set {
+            airlinesRaw = newValue.isEmpty ? nil :
+                (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
+        }
+    }
+
+    // Convenience
     var airports: [String] { tripAirports.map { $0.iata } }
+    var airlines: [String] { tripAirlines.map { $0.name } }
 
-    // Total legs per airport for stats
     var airportCountForStats: [String: Int] {
-        var result: [String: Int] = [:]
-        for ap in tripAirports {
-            result[ap.iata, default: 0] += ap.roundTrip ? 2 : 1
-        }
-        return result
-    }
-
-    var airlines: [String] {
-        get {
-            guard let raw = airlinesRaw, let data = raw.data(using: .utf8),
-                  let arr = try? JSONDecoder().decode([String].self, from: data) else { return [] }
-            return arr
-        }
-        set {
-            airlinesRaw = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
-        }
-    }
-
-    // Manual counts for multi-airline trips
-    var airlineCounts: [String: Int] {
-        get {
-            guard let raw = airlineCountsRaw, let data = raw.data(using: .utf8),
-                  let dict = try? JSONDecoder().decode([String: Int].self, from: data) else { return [:] }
-            return dict
-        }
-        set {
-            airlineCountsRaw = newValue.isEmpty ? nil : (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
-        }
-    }
-
-    // Effective count for each airline in stats
-    func countForAirline(_ name: String) -> Int {
-        let als = airlines
-        if als.count == 1 {
-            // Auto: sum all airport legs
-            return tripAirports.reduce(0) { $0 + ($1.roundTrip ? 2 : 1) }
-        } else {
-            // Manual: use stored count, default 0
-            return airlineCounts[name] ?? 0
-        }
+        Dictionary(tripAirports.map { ($0.iata, $0.count) }, uniquingKeysWith: +)
     }
 
     var year: Int { Calendar.current.component(.year, from: dateTo ?? dateFrom) }

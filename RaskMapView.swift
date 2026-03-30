@@ -9,7 +9,6 @@ struct RaskMapView: UIViewRepresentable {
     var features: [CountryFeature]
     var onCountryTapped: (Country) -> Void
     var highlightedIsoCode: String? = nil
-    var showLived: Bool = true
     var showBucketList: Bool = true
     var locationIsoCode: String? = nil  // country where user currently is
     var onReady: ((_ center: @escaping (String) -> Void) -> Void)? = nil
@@ -73,6 +72,10 @@ struct RaskMapView: UIViewRepresentable {
                 "CHL": CLLocationCoordinate2D(latitude: -33.45, longitude: -70.67), // Santiago
                 "FRA": CLLocationCoordinate2D(latitude: 48.85, longitude: 2.35),   // Paris
                 "NLD": CLLocationCoordinate2D(latitude: 52.38, longitude: 4.90),   // Amsterdam
+                "FJI": CLLocationCoordinate2D(latitude: -18.14, longitude: 178.44), // Suva
+                "KIR": CLLocationCoordinate2D(latitude:   1.33, longitude: 172.98), // South Tarawa
+                "COK": CLLocationCoordinate2D(latitude: -21.21, longitude: -159.78), // Avarua
+                "ATA": CLLocationCoordinate2D(latitude: -70.75, longitude:  44.33), // Mizuho Plateau
             ]
             let center = customCenters[isoCode] ?? region.center
             mapView.setRegion(MKCoordinateRegion(center: center, span: cappedSpan), animated: true)
@@ -97,12 +100,11 @@ struct RaskMapView: UIViewRepresentable {
             let allPolygons = features.flatMap { $0.polygons }
             let statusSnap = statusMap
             let highlightSnap = highlightedIsoCode
-            let showLivedSnap = showLived
+            
             let showBucketSnap = showBucketList
 
             // Precalentar CGPaths en background — solo para países con color (los .none no necesitan path)
             let coloredIsoCodes = Self.coloredIsoCodes(from: statusMap,
-                                                        showLived: showLivedSnap,
                                                         showBucketList: showBucketSnap)
             let coloredPolygons = allPolygons.filter { coloredIsoCodes.contains($0.isoCode) }
 
@@ -114,7 +116,7 @@ struct RaskMapView: UIViewRepresentable {
                     let status = statusSnap[polygon.isoCode] ?? .none
                     RaskMapView.applyStyle(status: status, to: renderer,
                                           highlighted: polygon.isoCode == highlightSnap,
-                                          showLived: showLivedSnap, showBucketList: showBucketSnap)
+                                          showBucketList: showBucketSnap)
                     _ = renderer.path
                     built.append((pid, renderer))
                 }
@@ -143,7 +145,7 @@ struct RaskMapView: UIViewRepresentable {
                 for polygon in feature.polygons {
                     if let renderer = coord.rendererCache[ObjectIdentifier(polygon)] {
                         Self.applyStyle(status: status, to: renderer, highlighted: isHL,
-                                        showLived: showLived, showBucketList: showBucketList,
+                                        showBucketList: showBucketList,
                                         isUserHere: false)
                         renderer.setNeedsDisplay()
                     }
@@ -158,14 +160,14 @@ struct RaskMapView: UIViewRepresentable {
                     if coord.rendererCache[pid] == nil {
                         let renderer = MKPolygonRenderer(polygon: polygon)
                         Self.applyStyle(status: status, to: renderer, highlighted: isHL,
-                                        showLived: showLived, showBucketList: showBucketList,
+                                        showBucketList: showBucketList,
                                         isUserHere: true)
                         coord.rendererCache[pid] = renderer
                         mapView.removeOverlay(polygon)
                         mapView.addOverlay(polygon, level: .aboveRoads)
                     } else if let renderer = coord.rendererCache[pid] {
                         Self.applyStyle(status: status, to: renderer, highlighted: isHL,
-                                        showLived: showLived, showBucketList: showBucketList,
+                                        showBucketList: showBucketList,
                                         isUserHere: true)
                         renderer.setNeedsDisplay()
                     }
@@ -184,7 +186,7 @@ struct RaskMapView: UIViewRepresentable {
                 for polygon in feature.polygons {
                     if let renderer = coord.rendererCache[ObjectIdentifier(polygon)] {
                         Self.applyStyle(status: status, to: renderer, highlighted: false,
-                                        showLived: showLived, showBucketList: showBucketList)
+                                        showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
                     }
                 }
@@ -204,7 +206,7 @@ struct RaskMapView: UIViewRepresentable {
                     if coord.rendererCache[pid] == nil {
                         let renderer = MKPolygonRenderer(polygon: polygon)
                         Self.applyStyle(status: status, to: renderer, highlighted: true,
-                                        showLived: showLived, showBucketList: showBucketList)
+                                        showBucketList: showBucketList)
                         _ = renderer.path
                         coord.rendererCache[pid] = renderer
                         // Overlay ya existe — solo invalidar para que MapKit pida el renderer
@@ -212,7 +214,7 @@ struct RaskMapView: UIViewRepresentable {
                         mapView.addOverlay(polygon, level: .aboveRoads)
                     } else if let renderer = coord.rendererCache[pid] {
                         Self.applyStyle(status: status, to: renderer, highlighted: true,
-                                        showLived: showLived, showBucketList: showBucketList)
+                                        showBucketList: showBucketList)
                         renderer.setNeedsDisplay()
                     }
                 }
@@ -224,13 +226,13 @@ struct RaskMapView: UIViewRepresentable {
                     let pid = ObjectIdentifier(polygon)
                     if let renderer = coord.rendererCache[pid] {
                         Self.applyStyle(status: status, to: renderer, highlighted: false,
-                                        showLived: showLived, showBucketList: showBucketList,
+                                        showBucketList: showBucketList,
                                         isUserHere: true)
                         renderer.setNeedsDisplay()
                     } else {
                         let renderer = MKPolygonRenderer(polygon: polygon)
                         Self.applyStyle(status: status, to: renderer, highlighted: false,
-                                        showLived: showLived, showBucketList: showBucketList,
+                                        showBucketList: showBucketList,
                                         isUserHere: true)
                         coord.rendererCache[pid] = renderer
                         mapView.removeOverlay(polygon)
@@ -250,7 +252,7 @@ struct RaskMapView: UIViewRepresentable {
         for (iso, s) in newMap where oldMap[iso] != s { changed.insert(iso) }
         for iso in oldMap.keys where newMap[iso] == nil { changed.insert(iso) }
 
-        let showLivedSnap = showLived
+        
         let showBucketSnap = showBucketList
 
         for isoCode in changed {
@@ -258,8 +260,8 @@ struct RaskMapView: UIViewRepresentable {
             let newStatus = newMap[isoCode] ?? .none
             let oldStatus = oldMap[isoCode] ?? .none
             let isHighlighted = isoCode == coord.lastHighlighted
-            let isNowColored = Self.isColored(newStatus, showLived: showLivedSnap, showBucketList: showBucketSnap)
-            let wasColored   = Self.isColored(oldStatus, showLived: showLivedSnap, showBucketList: showBucketSnap)
+            let isNowColored = Self.isColored(newStatus, showBucketList: showBucketSnap)
+            let wasColored   = Self.isColored(oldStatus, showBucketList: showBucketSnap)
 
             for polygon in feature.polygons {
                 let pid = ObjectIdentifier(polygon)
@@ -267,13 +269,13 @@ struct RaskMapView: UIViewRepresentable {
                     if let renderer = coord.rendererCache[pid] {
                         // Ya existe — solo actualizar color
                         Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                        showLived: showLivedSnap, showBucketList: showBucketSnap)
+                                        showBucketList: showBucketSnap)
                         renderer.setNeedsDisplay()
                     } else {
                         // Añadir nuevo overlay para este país
                         let renderer = MKPolygonRenderer(polygon: polygon)
                         Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                        showLived: showLivedSnap, showBucketList: showBucketSnap)
+                                        showBucketList: showBucketSnap)
                         coord.rendererCache[pid] = renderer
                         DispatchQueue.global(qos: .userInitiated).async {
                             _ = renderer.path
@@ -287,7 +289,7 @@ struct RaskMapView: UIViewRepresentable {
                     mapView.addOverlay(polygon, level: .aboveRoads)
                 } else if let renderer = coord.rendererCache[pid] {
                     Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                    showLived: showLivedSnap, showBucketList: showBucketSnap)
+                                    showBucketList: showBucketSnap)
                     renderer.setNeedsDisplay()
                 }
             }
@@ -296,46 +298,51 @@ struct RaskMapView: UIViewRepresentable {
 
     // ── Helpers ──
 
-    private static func isColored(_ status: CountryStatus, showLived: Bool, showBucketList: Bool) -> Bool {
+    private static func isColored(_ status: CountryStatus, showBucketList: Bool) -> Bool {
         switch status {
         case .none:        return false
         case .visited:     return true
+        case .lived:       return true
         case .wantToVisit: return true
-        case .lived:       return showLived
         case .bucketList:  return showBucketList
         }
     }
 
     private static func coloredIsoCodes(from statusMap: [String: CountryStatus],
-                                         showLived: Bool, showBucketList: Bool) -> Set<String> {
-        Set(statusMap.filter { isColored($0.value, showLived: showLived, showBucketList: showBucketList) }.keys)
+                                          showBucketList: Bool) -> Set<String> {
+        Set(statusMap.filter { isColored($0.value, showBucketList: showBucketList) }.keys)
     }
 
     static func applyStyle(status: CountryStatus, to renderer: MKPolygonRenderer,
                             highlighted: Bool = false,
-                            showLived: Bool = true, showBucketList: Bool = true,
+                            showBucketList: Bool = true,
                             isUserHere: Bool = false) {
+        let isAntarctica = (renderer.polygon as? CountryPolygon)?.isoCode == "ATA"
         let effective: CountryStatus = {
-            if status == .lived      && !showLived      { return .none }
+            if status == .lived                        { return .visited }
             if status == .bucketList && !showBucketList { return .none }
             return status
         }()
         if effective == .none && !isUserHere {
             renderer.fillColor   = UIColor.clear
-            renderer.strokeColor = highlighted ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
-            renderer.lineWidth   = highlighted ? 1.0 : 0
+            renderer.strokeColor = (highlighted && !isAntarctica) ? UIColor.black.withAlphaComponent(0.85) : UIColor.clear
+            renderer.lineWidth   = (highlighted && !isAntarctica) ? 1.0 : 0
         } else if isUserHere {
-            // User is physically in this country — translucent fill, colored border
             let base = effective != .none ? effective.overlayColor : CountryStatus.visited.overlayColor
             renderer.fillColor   = base.withAlphaComponent(0.45)
             renderer.strokeColor = base
             renderer.lineWidth   = 2.5
         } else {
             renderer.fillColor   = effective.overlayColor
-            renderer.strokeColor = highlighted
-                ? UIColor.black.withAlphaComponent(0.85)
-                : UIColor.black.withAlphaComponent(0.35)
-            renderer.lineWidth   = highlighted ? 1.5 : 0.5
+            if isAntarctica {
+                renderer.strokeColor = UIColor.clear
+                renderer.lineWidth   = 0
+            } else {
+                renderer.strokeColor = highlighted
+                    ? UIColor.black.withAlphaComponent(0.85)
+                    : UIColor.black.withAlphaComponent(0.35)
+                renderer.lineWidth   = highlighted ? 1.5 : 0.5
+            }
         }
     }
 
@@ -376,7 +383,6 @@ struct RaskMapView: UIViewRepresentable {
                 let isUserHere = polygon.isoCode == parent.locationIsoCode
                 RaskMapView.applyStyle(status: status, to: renderer,
                                        highlighted: isHighlighted,
-                                       showLived: parent.showLived,
                                        showBucketList: parent.showBucketList,
                                        isUserHere: isUserHere)
                 renderer.setNeedsDisplay()
@@ -401,7 +407,6 @@ struct RaskMapView: UIViewRepresentable {
                       ?? .none
             RaskMapView.applyStyle(status: status, to: renderer,
                                    highlighted: polygon.isoCode == lastHighlighted,
-                                   showLived: parent.showLived,
                                    showBucketList: parent.showBucketList,
                                    isUserHere: polygon.isoCode == parent.locationIsoCode)
             rendererCache[pid] = renderer
@@ -411,6 +416,12 @@ struct RaskMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {}
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {}
 
+        func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            if annotation is MKUserLocation {
+                mapView.deselectAnnotation(annotation, animated: false)
+            }
+        }
+
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let userLoc = annotation as? MKUserLocation else { return nil }
             userLoc.title = ""
@@ -419,6 +430,7 @@ struct RaskMapView: UIViewRepresentable {
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKUserLocationView
                 ?? MKUserLocationView(annotation: userLoc, reuseIdentifier: id)
             view.canShowCallout = false
+            view.isUserInteractionEnabled = false
             return view
         }
 
@@ -434,8 +446,20 @@ struct RaskMapView: UIViewRepresentable {
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let mapView = gesture.view as? MKMapView else { return }
-            let tapPoint = MKMapPoint(mapView.convert(gesture.location(in: mapView),
-                                                      toCoordinateFrom: mapView))
+            let tapLocation = gesture.location(in: mapView)
+            let tapCoord = mapView.convert(tapLocation, toCoordinateFrom: mapView)
+            let tapPoint = MKMapPoint(tapCoord)
+
+            // Antarctica: Mercator can't represent the south pole correctly.
+            // Any tap below -60° latitude maps reliably to Antarctica —
+            // no other tappable territory exists below that latitude.
+            if tapCoord.latitude < -60 {
+                let result = parent.countries.first { $0.isoCode == "ATA" }
+                          ?? Country(name: "Antarctica", isoCode: "ATA")
+                parent.onCountryTapped(result)
+                return
+            }
+
             let candidates = visibleCountries(for: mapView)
                 .filter { $0.boundingMapRect.contains(tapPoint) }
                 .sorted {

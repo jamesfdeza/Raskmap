@@ -11,8 +11,8 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            // Fondo verde del icono
-            Color(red: 0.18, green: 0.74, blue: 0.35)
+            // Fondo azul del icono
+            Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255)
                 .ignoresSafeArea()
 
             Text("Raskmap")

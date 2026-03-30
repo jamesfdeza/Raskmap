@@ -25,9 +25,12 @@ struct CountryFeature {
     let boundingMapRect: MKMapRect
     // Traducir el nombre al español usando el sistema
     var localizedName: String {
-        if isoA2 != "-99",
-           let localized = Locale(identifier: "es").localizedString(forRegionCode: isoA2) {
-            return localized
+        let nameOverrides: [String: String] = ["PS": "Palestina"]
+        if isoA2 != "-99" {
+            if let override = nameOverrides[isoA2] { return override }
+            if let localized = Locale(identifier: "es").localizedString(forRegionCode: isoA2) {
+                return localized
+            }
         }
         // Fallback manual para territorios sin código ISO
         let manualTranslations: [String: String] = [
@@ -65,19 +68,15 @@ class GeoJSONLoader {
     nonisolated static func loadCountries() -> [CountryFeature] {
         // Buscar el archivo en el bundle (como getResourceAsStream en Java)
         guard let url = Bundle.main.url(forResource: "countries", withExtension: "geojson") else {
-            print("❌ ERROR: No se encontró countries.geojson en el bundle.")
-            print("   → Asegúrate de añadir el archivo al proyecto en Xcode.")
             return []
         }
 
         guard let data = try? Data(contentsOf: url) else {
-            print("❌ ERROR: No se pudo leer countries.geojson")
             return []
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let features = json["features"] as? [[String: Any]] else {
-            print("❌ ERROR: JSON malformado en countries.geojson")
             return []
         }
 
