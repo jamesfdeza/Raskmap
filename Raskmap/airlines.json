@@ -1338,5 +1338,10 @@
     "iata": "FZ",
     "name": "flydubai",
     "country": "AE"
+  },
+  {
+    "iata": "2W",
+    "name": "World2Fly",
+    "country": "PT"
   }
 ]

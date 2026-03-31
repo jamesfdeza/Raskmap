@@ -15,6 +15,18 @@ struct TripAirline: Codable, Hashable {
     var count: Int
 }
 
+struct TripSegment: Codable, Identifiable {
+    var id: UUID = UUID()
+    var transport: String
+    var isoCodes: [String]
+    var dateFrom: Date
+    var dateTo: Date?
+    var airports: [TripAirport]?         // Outbound route airports (ordered) — ✈️ only
+    var returnAirports: [TripAirport]?   // Return route airports (ordered, nil = one-way) — ✈️ only
+    var airlines: [TripAirline]?         // Only for ✈️ segments
+    var hasLayover: Bool?                // Only for ✈️ segments
+}
+
 @Model
 class Trip {
     var isoCode: String = ""
@@ -28,6 +40,9 @@ class Trip {
     var airlinesRaw: String?      // JSON-encoded [TripAirline]
     var airlineCountsRaw: String? // Legacy - kept for migration
     var createdAt: Date = Date()
+    var segmentsRaw: String?      // JSON-encoded [TripSegment]
+    var segmentGroupID: String?   // Groups primary + child trips from same multi-transport save
+    var isSegmentChild: Bool = false
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,
@@ -94,6 +109,17 @@ class Trip {
         }
         set {
             airlinesRaw = newValue.isEmpty ? nil :
+                (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
+        }
+    }
+
+    var tripSegments: [TripSegment] {
+        get {
+            guard let raw = segmentsRaw, let data = raw.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([TripSegment].self, from: data)) ?? []
+        }
+        set {
+            segmentsRaw = newValue.isEmpty ? nil :
                 (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
         }
     }

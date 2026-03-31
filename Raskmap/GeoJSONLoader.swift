@@ -81,8 +81,66 @@ class GeoJSONLoader {
         }
 
         // Mapeamos cada feature GeoJSON a nuestro CountryFeature (como un .stream().map() en Java)
-        return features.compactMap { parseFeature($0) }
+        var result = features.compactMap { parseFeature($0) }
+        // El GeoJSON estándar (Natural Earth) no incluye el exclave de Musandam (Omán).
+        // Lo añadimos manualmente con un polígono aproximado de la Gobernación de Musandam.
+        if let omanIdx = result.firstIndex(where: { $0.isoCode == "OMN" }) {
+            if let musandamPoly = makePolygon(rings: [musandamRing], name: "Oman", iso: "OMN") {
+                let oman = result[omanIdx]
+                let newRect = oman.polygons.map { $0.boundingMapRect }
+                    .reduce(musandamPoly.boundingMapRect) { $0.union($1) }
+                result[omanIdx] = CountryFeature(
+                    name: oman.name, adminName: oman.adminName,
+                    isoCode: oman.isoCode, isoA2: oman.isoA2,
+                    polygons: oman.polygons + [musandamPoly],
+                    boundingMapRect: newRect
+                )
+            }
+        }
+        return result
     }
+
+    // Coordenadas aproximadas del límite exterior del exclave de Musandam (Omán).
+    // Fuentes: datos de frontera de EAU + referencias geográficas.
+    // La frontera terrestre sur con EAU (RAK) sigue los puntos de frontera del polígono de EAU.
+    // Las costas este, norte y oeste son aproximadas (±2-5 km de precisión).
+    private nonisolated static let musandamRing: [[Double]] = [
+        // Frontera sur con EAU (de oeste a este) — trazada a partir del polígono de EAU
+        [55.8035, 25.6974],  // SW: frontera llega al Golfo Pérsico
+        [55.8425, 25.7138],
+        [55.9537, 25.8154],
+        [55.9660, 25.8342],
+        [55.9723, 25.8428],
+        [56.0076, 25.9069],
+        [56.0553, 25.9888],
+        [56.1006, 26.0629],
+        [56.1627, 26.0736],
+        [56.1784, 26.0350],
+        [56.1813, 25.9962],
+        [56.1451, 25.6708],
+        [56.1564, 25.6559],
+        [56.2215, 25.6138],
+        [56.3003, 25.6162],
+        [56.3400, 25.6046],
+        [56.3480, 25.5931],
+        [56.3700, 25.5257],
+        [56.3638, 25.4333],
+        [56.3500, 25.4232],  // SE: costa del Golfo de Omán (cerca de Fujairah)
+        // Costa este (Golfo de Omán), dirección norte
+        [56.4500, 25.5700],
+        [56.5600, 25.8500],
+        [56.5900, 26.0500],
+        [56.5200, 26.2200],
+        [56.4000, 26.3800],
+        // Costa norte / Ra's Musandam
+        [56.2800, 26.4300],
+        [56.1300, 26.4200],
+        // Costa oeste (Golfo Pérsico / Estrecho de Ormuz), dirección sur
+        [55.9700, 26.3200],
+        [55.9000, 26.1500],
+        [55.8600, 25.9500],
+        [55.8035, 25.6974],  // cierre del anillo
+    ]
     // MARK: - Carga en background (evita bloquear la UI)
     static func loadCountriesAsync(completion: @escaping ([CountryFeature]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -203,10 +261,11 @@ class GeoJSONLoader {
         guard outerCoords.count >= 3 else { return nil }
 
         // Tolerancia adaptativa según el tamaño del bounding box del polígono (en grados²):
-        //  > 500°²  → muy grandes (Rusia, Canadá, EEUU…)     → 0.05°  (~5 km)
-        //  > 50°²   → medianos (España, Francia, Alemania…)   → 0.02°  (~2 km)
-        //  > 5°²    → pequeños (Bélgica, Suiza, Portugal…)    → 0.01°  (~1 km)
-        //  ≤ 5°²    → microestados e islas (Malta, Maldivas…) → 0.005° (~500 m)
+        //  > 500°²  → muy grandes (Rusia, Canadá, EEUU…)      → 0.05°  (~5 km)
+        //  > 50°²   → medianos (España, Francia, Alemania…)    → 0.02°  (~2 km)
+        //  > 5°²    → pequeños (Bélgica, Suiza, Portugal…)     → 0.01°  (~1 km)
+        //  > 0.01°² → muy pequeños (Andorra, Liechtenstein…)   → 0.0   (sin simplificar)
+        //  ≤ 0.01°² → microestados e islas (Mónaco, Vaticano…) → 0.0   (sin simplificar)
         let lats = outerCoords.map { $0.latitude }
         let lons = outerCoords.map { $0.longitude }
         let latSpan = (lats.max() ?? 0) - (lats.min() ?? 0)
@@ -217,8 +276,8 @@ class GeoJSONLoader {
         case 500...:    tolerance = 0.05
         case 50...:     tolerance = 0.02
         case 5...:      tolerance = 0.01
-        case 0.01...:   tolerance = 0.005
-        default:        tolerance = 0.0  // microestados (Vaticano, San Marino…): no simplificar
+        case 0.01...:   tolerance = 0.002 // pequeños (Andorra, San Marino…): más precisión
+        default:        tolerance = 0.0   // microestados e islas mínimas: preservar todos los puntos
         }
 
         let simplifiedOuter = tolerance > 0

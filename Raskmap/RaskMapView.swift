@@ -62,7 +62,7 @@ struct RaskMapView: UIViewRepresentable {
                 "AUS": CLLocationCoordinate2D(latitude: -25.27, longitude: 133.78),
                 "CHN": CLLocationCoordinate2D(latitude: 35.86, longitude: 104.19),
                 "GRL": CLLocationCoordinate2D(latitude: 71.71, longitude: -42.60),
-                "NOR": CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),  // Oslo
+                "NOR": CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),   // Oslo
                 "NZL": CLLocationCoordinate2D(latitude: -36.86, longitude: 174.76), // Auckland
                 "REU": CLLocationCoordinate2D(latitude: -21.13, longitude: 55.54),  // Saint-Denis
                 "GLP": CLLocationCoordinate2D(latitude: 16.25, longitude: -61.55),  // Basse-Terre
@@ -70,15 +70,23 @@ struct RaskMapView: UIViewRepresentable {
                 "GUF": CLLocationCoordinate2D(latitude: 4.93, longitude: -52.33),   // Cayenne
                 "MYT": CLLocationCoordinate2D(latitude: -12.78, longitude: 45.23),  // Mamoudzou
                 "CHL": CLLocationCoordinate2D(latitude: -33.45, longitude: -70.67), // Santiago
-                "FRA": CLLocationCoordinate2D(latitude: 48.85, longitude: 2.35),   // Paris
-                "NLD": CLLocationCoordinate2D(latitude: 52.38, longitude: 4.90),   // Amsterdam
+                "FRA": CLLocationCoordinate2D(latitude: 48.85, longitude: 2.35),    // Paris
+                "NLD": CLLocationCoordinate2D(latitude: 52.38, longitude: 4.90),    // Amsterdam
                 "FJI": CLLocationCoordinate2D(latitude: -18.14, longitude: 178.44), // Suva
-                "KIR": CLLocationCoordinate2D(latitude:   1.33, longitude: 172.98), // South Tarawa
+                "KIR": CLLocationCoordinate2D(latitude:  1.33, longitude: 172.98),  // South Tarawa
+                "MHL": CLLocationCoordinate2D(latitude:  7.09, longitude: 171.38),  // Majuro
+                "MUS": CLLocationCoordinate2D(latitude: -20.15, longitude: 57.49),  // Port Louis
                 "COK": CLLocationCoordinate2D(latitude: -21.21, longitude: -159.78), // Avarua
                 "ATA": CLLocationCoordinate2D(latitude: -70.75, longitude:  44.33), // Mizuho Plateau
             ]
+            let customSpans: [String: MKCoordinateSpan] = [
+                "KIR": MKCoordinateSpan(latitudeDelta: 2.5, longitudeDelta: 2.5),
+                "MHL": MKCoordinateSpan(latitudeDelta: 2.5, longitudeDelta: 2.5),
+                "MUS": MKCoordinateSpan(latitudeDelta: 3.0, longitudeDelta: 3.0),
+            ]
             let center = customCenters[isoCode] ?? region.center
-            mapView.setRegion(MKCoordinateRegion(center: center, span: cappedSpan), animated: true)
+            let span = customSpans[isoCode] ?? cappedSpan
+            mapView.setRegion(MKCoordinateRegion(center: center, span: span), animated: true)
         })
 
         return mapView
@@ -87,6 +95,7 @@ struct RaskMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         let coord = context.coordinator
         coord.parent = self
+
 
         guard !features.isEmpty else { return }
 
