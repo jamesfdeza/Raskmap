@@ -53,6 +53,7 @@ class Country {
     var transport: String?     // Medio de transporte
     var plannedTitle: String?  // Título del viaje próximo
     var visitCount: Int = 0   // Número de veces visitado
+    var hasLived: Bool = false // Indicador visual de "he vivido aquí"
 
     // Propiedad calculada para trabajar con el enum (como un getter/setter en Java)
     var status: CountryStatus {
@@ -71,6 +72,7 @@ class Country {
         self.transport = transport
         self.plannedTitle = plannedTitle
         self.visitCount = visitCount
+        self.hasLived = false
     }
     
     func cycleStatus() {

@@ -5518,5 +5518,11 @@
     "name": "Şanlıurfa",
     "city": "Şanlıurfa",
     "country": "TR"
+  },
+  {
+    "iata": "MLA",
+    "name": "Malta International Airport",
+    "city": "Luqa",
+    "country": "MT"
   }
 ]
