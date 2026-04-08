@@ -10,6 +10,8 @@ import MapKit
 import Photos
 import CoreLocation
 import MessageUI
+import StoreKit
+import ActivityKit
 
 class MapStore: ObservableObject {
     var centerOnCountry: ((String) -> Void)?
@@ -58,6 +60,14 @@ struct ContentView: View {
     @AppStorage("showBucketList") private var showBucketList: Bool = true
     @AppStorage("showCountdown")  private var showCountdown: Bool = true
     @AppStorage("topTable")  private var topTable:  String = "{}"
+    @AppStorage("multiContinentRaw") private var multiContinentRaw: String = "{}"
+    @AppStorage("appFontFamily") private var _appFontFamily: String = "satoshi"
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
+    @AppStorage("mapQuadrantsData") private var mapQuadrantsData: String = "{}"
+    @AppStorage("earnedPassportAchievementsRaw") private var earnedPassportRaw: String = "[]"
+    @AppStorage("liveActivityEnabled") private var liveActivityEnabled: Bool = false
+    @State private var showSubscription: Bool = false
+    @State private var prevAchieved: Set<AchievementKind>? = nil
     @State private var highlightedIsoCode: String? = nil
     @State private var profileImage: UIImage? = {
         guard let data = UserDefaults.standard.data(forKey: "profileImageData") else { return nil }
@@ -67,6 +77,106 @@ struct ContentView: View {
     private var menuPositionIsTop: Bool { menuPositionRaw == "top" }
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    private var earnedPassportZones: Set<String> {
+        (try? JSONDecoder().decode([String].self, from: Data(earnedPassportRaw.utf8))).map { Set($0) } ?? []
+    }
+
+    private func markPassportAchievementsEarned(_ kinds: Set<AchievementKind>) {
+        guard !kinds.isEmpty else { return }
+        var zones = earnedPassportZones
+        kinds.compactMap { $0.passportZoneKey }.forEach { zones.insert($0) }
+        if let data = try? JSONEncoder().encode(Array(zones)),
+           let str = String(data: data, encoding: .utf8) {
+            earnedPassportRaw = str
+        }
+    }
+
+    private var multiContAchievedNow: Set<AchievementKind> {
+        let assignments = (try? JSONDecoder().decode([String: String].self, from: Data(multiContinentRaw.utf8))) ?? [:]
+        let today = Calendar.current.startOfDay(for: Date())
+        let past = trips.filter { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+        let visited = Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
+        let allQuadrants = (try? JSONDecoder().decode([String: [MapQuadrant]].self, from: Data(mapQuadrantsData.utf8))) ?? [:]
+        let earnedZones = earnedPassportZones
+        let mode = countingMode
+        var result = Set<AchievementKind>()
+        for kind in AchievementKind.allCases {
+            if let zoneKey = kind.passportZoneKey {
+                if earnedZones.contains(zoneKey) {
+                    result.insert(kind)
+                } else {
+                    let quadrants = (allQuadrants[zoneKey] ?? []).filter { $0.position >= 0 }
+                    if !quadrants.isEmpty && quadrants.allSatisfy({ q in q.candidateIsoCodes.allSatisfy { visited.contains($0) } }) {
+                        result.insert(kind)
+                    }
+                }
+                continue
+            }
+            let achieved: Bool
+            switch kind {
+            case .firstTrip:
+                achieved = !past.isEmpty
+            case .firstLayover:
+                achieved = past.contains { $0.hasLayover }
+            case .trips100:
+                achieved = past.count >= 100
+            case .primerMicroestado:
+                let micro = AchievementKind.todosMicroestados.zoneIsoCodes
+                achieved = past.contains { micro.contains($0.isoCode) }
+            case .allWorld:
+                let valid = visited.filter { mode.counts($0) }
+                achieved = valid.count >= mode.denominator && mode.denominator > 0
+            case .visitedNortamerica, .visitedCaribe, .visitedSudamerica, .visitedCentroamerica,
+                 .visitedAfrica, .visitedEuropa, .visitedMedioOriente, .visitedOceania,
+                 .visitedAsia, .visitedAntarctica:
+                let base = kind.regionIsoCodes
+                let adj = kind.geographicRegionName.map { AchievementKind.adjustSet(base, forZone: $0, assignments: assignments) } ?? base
+                achieved = !adj.isDisjoint(with: visited)
+            case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
+                 .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica:
+                let base = kind.regionIsoCodes
+                let adj = kind.geographicRegionName.map { AchievementKind.adjustSet(base, forZone: $0, assignments: assignments) } ?? base
+                achieved = past.filter { adj.contains($0.isoCode) }.count >= 5
+            case .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
+                 .africaCompleta, .americaCompleta, .oceaniaCompleta,
+                 .todaLaUE, .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados:
+                let base = kind.zoneIsoCodes
+                let adj = kind.geographicZoneName.map { AchievementKind.adjustSet(base, forZone: $0, assignments: assignments) } ?? base
+                let valid = adj.filter { mode.counts($0) }
+                achieved = !valid.isEmpty && valid.allSatisfy { visited.contains($0) }
+            case .ambosHemisferios:
+                let south = AchievementKind.southernHemisphere
+                let hasSouth = visited.contains { south.contains($0) && mode.counts($0) }
+                let hasNorth = visited.contains { !south.contains($0) && mode.counts($0) }
+                achieved = hasSouth && hasNorth
+            case .todosLosContinentes:
+                let americaSet = AchievementKind.visitedNortamerica.regionIsoCodes
+                    .union(AchievementKind.visitedCaribe.regionIsoCodes)
+                    .union(AchievementKind.visitedSudamerica.regionIsoCodes)
+                    .union(AchievementKind.visitedCentroamerica.regionIsoCodes)
+                let continentSets: [Set<String>] = [
+                    AchievementKind.visitedEuropa.regionIsoCodes,
+                    AchievementKind.visitedAsia.regionIsoCodes,
+                    AchievementKind.visitedAfrica.regionIsoCodes,
+                    americaSet,
+                    AchievementKind.visitedOceania.regionIsoCodes,
+                ]
+                achieved = continentSets.allSatisfy { set in
+                    !set.filter { mode.counts($0) }.isDisjoint(with: visited)
+                }
+            case .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
+                 .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania:
+                achieved = false // ya tratado arriba via passportZoneKey
+            }
+            if achieved { result.insert(kind) }
+        }
+        return result
+    }
+
+    private var visitedIsoSet: Set<String> {
+        Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
+    }
 
     // Conteos totales reales (para listas)
     private var visitedCountAll: Int { countries.filter { $0.status == .visited }.count }
@@ -280,6 +390,7 @@ struct ContentView: View {
 
     var body: some View {
         mapWithSheets()
+            .ignoresSafeArea(.keyboard)
             .onChange(of: locationManager.currentLocation) { old, location in
                 guard let location else { locationIsoCode = nil; return }
                 // Immediate on first fix, debounced after
@@ -303,48 +414,30 @@ struct ContentView: View {
                         }
                         self.isLoadingFeatures = false
                         self.onContentReady?()
-                        // Detect country once features are loaded
                         if let loc = self.locationManager.currentLocation {
                             self.checkLocationCountry(loc, immediate: true)
                         }
+                        WidgetDataWriter.syncFontFamily(self._appFontFamily)
+                        if self.liveActivityEnabled { self.startOrUpdateLiveActivity() }
                     }
                 } else {
                     isLoadingFeatures = false
                     onContentReady?()
-                    // Detect country with existing features
                     if let loc = locationManager.currentLocation {
                         checkLocationCountry(loc, immediate: true)
                     }
+                    WidgetDataWriter.syncFontFamily(_appFontFamily)
+                    if liveActivityEnabled { startOrUpdateLiveActivity() }
                 }
                 if username.isEmpty { showOnboarding = true }
 
                 // Request location
                 locationManager.requestAndStart()
 
-                // Auto-marcar como visitado los Próximos cuya fecha ya pasó
                 let today = Calendar.current.startOfDay(for: Date())
                 var changed = false
-                for country in countries {
-                    guard country.status == .wantToVisit,
-                          let planned = country.plannedDate else { continue }
-                    let plannedDay = Calendar.current.startOfDay(for: planned)
-                    if plannedDay < today {
-                        let autoTrip = Trip(isoCode: country.isoCode,
-                                           title: country.plannedTitle,
-                                           dateFrom: country.plannedDate ?? planned,
-                                           dateTo: country.plannedDateTo,
-                                           transport: country.transport)
-                        modelContext.insert(autoTrip)
-                        country.status = .visited
-                        country.plannedDate = nil
-                        country.plannedDateTo = nil
-                        country.transport = nil
-                        country.plannedTitle = nil
-                        changed = true
-                    }
-                }
-                // Auto-marcar países de tramos futuros cuya fecha ya llegó
-                for trip in trips where trip.isSegmentChild {
+                // 1. Auto-marcar países de viajes (todos) cuya fecha ya llegó
+                for trip in trips {
                     let tripDay = Calendar.current.startOfDay(for: trip.dateFrom)
                     guard tripDay <= today else { continue }
                     guard let country = countries.first(where: { $0.isoCode == trip.isoCode }) else { continue }
@@ -357,33 +450,36 @@ struct ContentView: View {
                         changed = true
                     }
                 }
+                // 2. Auto-marcar países con plannedDate llegado que siguen en wantToVisit (sin Trip record)
+                for country in countries {
+                    guard country.status == .wantToVisit,
+                          let planned = country.plannedDate else { continue }
+                    let plannedDay = Calendar.current.startOfDay(for: planned)
+                    guard plannedDay <= today else { continue }
+                    let autoTrip = Trip(isoCode: country.isoCode,
+                                       title: country.plannedTitle,
+                                       dateFrom: country.plannedDate ?? planned,
+                                       dateTo: country.plannedDateTo,
+                                       transport: country.transport)
+                    modelContext.insert(autoTrip)
+                    country.status = .visited
+                    country.plannedDate = nil
+                    country.plannedDateTo = nil
+                    country.transport = nil
+                    country.plannedTitle = nil
+                    changed = true
+                }
                 if changed { try? modelContext.save() }
+                cleanupZeroXVisitedStates()
+                prevAchieved = multiContAchievedNow
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
+                if liveActivityEnabled { startOrUpdateLiveActivity() }
                 let today = Calendar.current.startOfDay(for: Date())
                 var changed = false
-                for country in countries {
-                    guard country.status == .wantToVisit,
-                          let planned = country.plannedDate else { continue }
-                    let plannedDay = Calendar.current.startOfDay(for: planned)
-                    if plannedDay < today {
-                        let autoTrip = Trip(isoCode: country.isoCode,
-                                           title: country.plannedTitle,
-                                           dateFrom: country.plannedDate ?? planned,
-                                           dateTo: country.plannedDateTo,
-                                           transport: country.transport)
-                        modelContext.insert(autoTrip)
-                        country.status = .visited
-                        country.plannedDate = nil
-                        country.plannedDateTo = nil
-                        country.transport = nil
-                        country.plannedTitle = nil
-                        changed = true
-                    }
-                }
-                // Auto-marcar países de tramos futuros cuya fecha ya llegó
-                for trip in trips where trip.isSegmentChild {
+                // 1. Auto-marcar países de viajes (todos) cuya fecha ya llegó
+                for trip in trips {
                     let tripDay = Calendar.current.startOfDay(for: trip.dateFrom)
                     guard tripDay <= today else { continue }
                     guard let country = countries.first(where: { $0.isoCode == trip.isoCode }) else { continue }
@@ -396,7 +492,41 @@ struct ContentView: View {
                         changed = true
                     }
                 }
+                // 2. Auto-marcar países con plannedDate llegado que siguen en wantToVisit (sin Trip record)
+                for country in countries {
+                    guard country.status == .wantToVisit,
+                          let planned = country.plannedDate else { continue }
+                    let plannedDay = Calendar.current.startOfDay(for: planned)
+                    guard plannedDay <= today else { continue }
+                    let autoTrip = Trip(isoCode: country.isoCode,
+                                       title: country.plannedTitle,
+                                       dateFrom: country.plannedDate ?? planned,
+                                       dateTo: country.plannedDateTo,
+                                       transport: country.transport)
+                    modelContext.insert(autoTrip)
+                    country.status = .visited
+                    country.plannedDate = nil
+                    country.plannedDateTo = nil
+                    country.transport = nil
+                    country.plannedTitle = nil
+                    changed = true
+                }
                 if changed { try? modelContext.save() }
+            }
+            .onChange(of: multiContinentRaw) { _, _ in checkAndShowAchievementToasts() }
+            .onChange(of: trips.count) { _, _ in checkAndShowAchievementToasts() }
+            .onChange(of: mapQuadrantsData) { _, _ in checkAndShowAchievementToasts() }
+            .onChange(of: liveActivityEnabled) { _, enabled in
+                if enabled { startOrUpdateLiveActivity() } else { stopLiveActivity() }
+            }
+            .onChange(of: liveActivityKey) { _, _ in
+                if liveActivityEnabled { startOrUpdateLiveActivity() }
+            }
+            .onChange(of: isRaskmapPro) { _, isPro in
+                if !isPro { stopLiveActivity() }
+            }
+            .onChange(of: _appFontFamily) { _, family in
+                WidgetDataWriter.syncFontFamily(family)
             }
     }
 
@@ -464,7 +594,12 @@ struct ContentView: View {
                     if country.status == .visited || country.status == .lived { return country.isoCode }
                     return nil
                 })
-                AllCountriesSheet(features: features, mode: countingMode, visitedIsoCodes: visitedCodes, countries: countries, trips: trips)
+                AllCountriesSheet(features: features, mode: countingMode, visitedIsoCodes: visitedCodes, countries: countries, trips: trips,
+                    onCountryDeleted: { isoCode in
+                        if let emoji = features.first(where: { $0.isoCode == isoCode })?.flagEmoji {
+                            removeFromTopTable(flagEmojis: Set([emoji]))
+                        }
+                    })
             }
             .sheet(item: $statusListFilter) { filter in
                 StatusListSheet(
@@ -476,10 +611,23 @@ struct ContentView: View {
                         let today = Calendar.current.startOfDay(for: Date())
                         switch filter {
                         case .visited:
-                            // Delete ALL trips + unmark as visited
+                            // Delete ALL trips + cascade groups + unmark as visited
+                            var processedGroupIDs = Set<String>()
+                            var seenIDs = Set<ObjectIdentifier>()
+                            var allToDelete: [Trip] = []
                             for trip in trips where trip.isoCode == country.isoCode {
-                                modelContext.delete(trip)
+                                if let gid = trip.segmentGroupID, !processedGroupIDs.contains(gid) {
+                                    processedGroupIDs.insert(gid)
+                                    let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.segmentGroupID == gid })
+                                    for t in (try? modelContext.fetch(desc)) ?? [trip] {
+                                        if seenIDs.insert(ObjectIdentifier(t)).inserted { allToDelete.append(t) }
+                                    }
+                                } else if trip.segmentGroupID == nil {
+                                    if seenIDs.insert(ObjectIdentifier(trip)).inserted { allToDelete.append(trip) }
+                                }
                             }
+                            let siblingIsos = Set(allToDelete.map { $0.isoCode }).subtracting([country.isoCode])
+                            let removedEmoji = flagEmoji(for: country).map { Set([$0]) } ?? []
                             country.status = .none
                             country.visitCount = 0
                             country.hasLived = false
@@ -487,6 +635,33 @@ struct ContentView: View {
                             country.plannedDateTo = nil
                             country.transport = nil
                             country.plannedTitle = nil
+                            for t in allToDelete { modelContext.delete(t) }
+                            removeFromTopTable(flagEmojis: removedEmoji)
+                            try? modelContext.save()
+                            for iso in siblingIsos {
+                                let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
+                                guard let c = try? modelContext.fetch(cd).first else { continue }
+                                guard c.status == .visited || c.status == .lived else { continue }
+                                let td = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                                let remaining = (try? modelContext.fetch(td)) ?? []
+                                let today = Calendar.current.startOfDay(for: Date())
+                                let hasPast = remaining.contains { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+                                let hasFuture = remaining.contains { Calendar.current.startOfDay(for: $0.dateFrom) > today }
+                                guard !hasPast && c.visitCount == 0 else { continue }
+                                if c.plannedDate != nil || hasFuture {
+                                    c.status = .wantToVisit
+                                } else {
+                                    c.status = .none
+                                    c.hasLived = false
+                                    c.plannedDate = nil
+                                    c.plannedDateTo = nil
+                                    c.transport = nil
+                                    c.plannedTitle = nil
+                                }
+                            }
+                            if locationIsoCode == country.isoCode {
+                                autoMarkIfNeeded(isoCode: country.isoCode)
+                            }
                         case .wantToVisit:
                             // Delete all future trips and remove from Próximos list
                             for trip in trips where trip.isoCode == country.isoCode {
@@ -510,7 +685,6 @@ struct ContentView: View {
                     },
                     onSetDate: filter == .wantToVisit ? { country, trip in
                         if let trip = trip {
-                            // Close StatusListSheet first, then open EditTripSheet
                             statusListFilter = nil
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                                 editingFutureTrip = trip
@@ -519,7 +693,45 @@ struct ContentView: View {
                             deferredDateCountry = country
                             statusListFilter = nil
                         }
-                    } : nil
+                    } : nil,
+                    onDeleteAll: {
+                        let today = Calendar.current.startOfDay(for: Date())
+                        switch filter {
+                        case .visited:
+                            let allTripsDesc = FetchDescriptor<Trip>()
+                            let allTrips = (try? modelContext.fetch(allTripsDesc)) ?? []
+                            for t in allTrips { modelContext.delete(t) }
+                            let deletedEmojis = Set(countries.filter { $0.status == .visited || $0.status == .lived }.compactMap { flagEmoji(for: $0) })
+                            for c in countries where c.status == .visited || c.status == .lived {
+                                c.status = .none; c.visitCount = 0; c.hasLived = false
+                                c.plannedDate = nil; c.plannedDateTo = nil
+                                c.transport = nil; c.plannedTitle = nil
+                            }
+                            removeFromTopTable(flagEmojis: deletedEmojis)
+                        case .wantToVisit:
+                            for c in countries where c.status == .wantToVisit {
+                                let iso = c.isoCode
+                                let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                                for t in (try? modelContext.fetch(desc)) ?? [] {
+                                    if Calendar.current.startOfDay(for: t.dateFrom) > today { modelContext.delete(t) }
+                                }
+                                c.status = .none; c.plannedDate = nil; c.plannedDateTo = nil
+                                c.transport = nil; c.plannedTitle = nil
+                            }
+                            for c in countries where c.status == .visited || c.status == .lived {
+                                let iso = c.isoCode
+                                let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                                for t in (try? modelContext.fetch(desc)) ?? [] {
+                                    if Calendar.current.startOfDay(for: t.dateFrom) > today { modelContext.delete(t) }
+                                }
+                            }
+                        default:
+                            for c in countries where c.status == filter {
+                                c.status = .none; c.hasLived = false
+                            }
+                        }
+                        try? modelContext.save()
+                    }
                 )
             }
             .sheet(item: $editingFutureTrip) { trip in
@@ -564,6 +776,8 @@ struct ContentView: View {
                         if statusBeforeVisit != .visited {
                             country.status = statusBeforeVisit
                             try? modelContext.save()
+                        } else {
+                            fixZeroXVisitedIfNeeded(country: country)
                         }
                     }
                 )
@@ -577,6 +791,7 @@ struct ContentView: View {
                 }
             }
             .sheet(isPresented: $showProfile) { profileContent() }
+            .sheet(isPresented: $showSubscription) { SubscriptionSheet() }
     }
 
     @ViewBuilder
@@ -601,16 +816,30 @@ struct ContentView: View {
                     let dayWord = banner.days == 1 ? "día" : "días"
                     let quedaWord = banner.days == 1 ? "Queda" : "Quedan"
                     let bannerText = "\(quedaWord) \(banner.days) \(dayWord) para \(banner.flag) \(banner.name)"
-                    Button {
-                        statusListFilter = .wantToVisit
-                    } label: {
-                        Text(bannerText)
-                            .font(.palatino(.footnote, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(.regularMaterial, in: Capsule())
+                    ZStack {
+                        Button {
+                            statusListFilter = .wantToVisit
+                        } label: {
+                            Text(bannerText)
+                                .font(.palatino(.footnote, weight: .bold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(.regularMaterial, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .blur(radius: isRaskmapPro ? 0 : 5)
+                        .allowsHitTesting(isRaskmapPro)
+                        if !isRaskmapPro {
+                            Button { showSubscription = true } label: {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(.purple)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                    .background(.regularMaterial, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
                     .padding(.bottom, menuPositionIsTop ? 16 : 0)
                     .padding(.top, menuPositionIsTop ? 0 : 16)
                     if !menuPositionIsTop { Spacer() }
@@ -845,10 +1074,16 @@ struct ContentView: View {
                 for country in countries where country.status == status { country.status = .none; country.hasLived = false }
                 try? modelContext.save()
             },
+            onProximosTap: { statusListFilter = .wantToVisit },
             topTable: $topTable,
             visitedFlags: visitedFlags,
             allFeatures: features,
-            visitedIsoCodes: Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode }),
+            visitedIsoCodes: Set(countries.filter { c in
+                let isVisited = c.status == .visited || c.status == .lived
+                let today = Calendar.current.startOfDay(for: Date())
+                let hasPastTrip = trips.contains { $0.isoCode == c.isoCode && Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+                return isVisited && (c.visitCount > 0 || hasPastTrip)
+            }.map { $0.isoCode }),
             countries: countries,
             trips: trips
         )
@@ -943,6 +1178,8 @@ struct ContentView: View {
             didShowLocationToast = true
             withAnimation { showLocationToast = true }
         }
+        // Fire achievement toasts for location-based auto-marks (no trip created, so trips.count won't change)
+        if didMark { checkAndShowAchievementToasts() }
     }
 
     private func handleCountryTap(_ tapped: Country) {
@@ -971,6 +1208,72 @@ struct ContentView: View {
         }
     }
 
+    private func checkAndShowAchievementToasts() {
+        let now = multiContAchievedNow
+        if let prev = prevAchieved {
+            let newlyUnlocked = now.subtracting(prev)
+            if !newlyUnlocked.isEmpty {
+                // Persistir logros de pasaporte recién ganados para que no se pierdan al añadir cuadrantes
+                let newPassport = Set(newlyUnlocked.filter { $0.passportZoneKey != nil })
+                if !newPassport.isEmpty { markPassportAchievementsEarned(newPassport) }
+                // Solo usuarios Pro ven los toasts
+                if isRaskmapPro {
+                    let sorted = newlyUnlocked.sorted { $0.medalOrder < $1.medalOrder }
+                    AchievementToastController.shared.show(sorted, menuPositionIsTop: menuPositionIsTop, isRaskmapPro: isRaskmapPro)
+                }
+            }
+        }
+        prevAchieved = now
+    }
+
+    // MARK: - Live Activity
+
+    private var liveActivityKey: String {
+        guard let b = nextProximosBanner else { return "" }
+        return "\(b.isoCode)_\(b.days)"
+    }
+
+    private func startOrUpdateLiveActivity() {
+        guard liveActivityEnabled, let banner = nextProximosBanner else {
+            stopLiveActivity(); return
+        }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        let state = RaskmapTripAttributes.ContentState(
+            flagEmoji: banner.flag,
+            tripName: banner.name,
+            daysRemaining: banner.days
+        )
+        let stale = Calendar.current.date(byAdding: .hour, value: 12, to: .now)
+        let running = Activity<RaskmapTripAttributes>.activities
+        if running.isEmpty {
+            let content = ActivityContent(state: state, staleDate: stale)
+            do {
+                _ = try Activity.request(
+                    attributes: RaskmapTripAttributes(),
+                    content: content,
+                    pushType: nil
+                )
+            } catch {
+                print("Live Activity request failed: \(error)")
+            }
+        } else {
+            Task {
+                let content = ActivityContent(state: state, staleDate: stale)
+                for activity in running {
+                    await activity.update(content)
+                }
+            }
+        }
+    }
+
+    private func stopLiveActivity() {
+        Task {
+            for activity in Activity<RaskmapTripAttributes>.activities {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+        }
+    }
+
     private func localizedName(for country: Country) -> String {
         features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
     }
@@ -978,7 +1281,60 @@ struct ContentView: View {
     private func flagEmoji(for country: Country) -> String? {
         features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
     }
-    
+
+    private func removeFromTopTable(flagEmojis: Set<String>) {
+        guard !flagEmojis.isEmpty,
+              let data = topTable.data(using: .utf8),
+              var dict = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return }
+        let keysToRemove = dict.keys.filter { flagEmojis.contains(dict[$0] ?? "") }
+        for key in keysToRemove { dict.removeValue(forKey: key) }
+        if let encoded = try? JSONEncoder().encode(dict) {
+            topTable = String(data: encoded, encoding: .utf8) ?? "{}"
+        }
+    }
+
+    /// Si un país está en `visited`/`lived` sin ningún trip ni visitCount (y no es la ubicación actual),
+    /// lo reclasifica a `wantToVisit` (si tiene viaje futuro o plannedDate) o a `.none`.
+    private func fixZeroXVisitedIfNeeded(country: Country) {
+        guard country.isoCode != locationIsoCode else { return }
+        guard country.status == .visited || country.status == .lived else { return }
+        guard country.visitCount == 0 else { return }
+        let today = Calendar.current.startOfDay(for: Date())
+        let hasPastTrip = trips.contains { $0.isoCode == country.isoCode && Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+        guard !hasPastTrip else { return }
+        let hasFutureTrip = trips.contains { $0.isoCode == country.isoCode && Calendar.current.startOfDay(for: $0.dateFrom) > today }
+        if hasFutureTrip || country.plannedDate != nil {
+            country.status = .wantToVisit
+        } else {
+            country.status = .none
+            country.hasLived = false
+        }
+        try? modelContext.save()
+    }
+
+    /// Limpia al arrancar todos los países visited/lived con 0x que no sean la ubicación actual.
+    private func cleanupZeroXVisitedStates() {
+        let today = Calendar.current.startOfDay(for: Date())
+        var changed = false
+        for country in countries {
+            guard country.status == .visited || country.status == .lived else { continue }
+            guard country.isoCode != locationIsoCode else { continue }
+            guard country.visitCount == 0 else { continue }
+            let hasPastTrip = trips.contains { $0.isoCode == country.isoCode && Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+            guard !hasPastTrip else { continue }
+            let hasFutureTrip = trips.contains { $0.isoCode == country.isoCode && Calendar.current.startOfDay(for: $0.dateFrom) > today }
+            if hasFutureTrip || country.plannedDate != nil {
+                country.status = .wantToVisit
+            } else {
+                country.status = .none
+                country.hasLived = false
+            }
+            changed = true
+        }
+        if changed { try? modelContext.save() }
+    }
+
     private func updateCountryStatus(country: Country, newStatus: CountryStatus) {
         if newStatus == .wantToVisit {
             if country.status == .visited {
@@ -998,6 +1354,12 @@ struct ContentView: View {
                 country.plannedDate = nil
                 country.plannedDateTo = nil
                 country.transport = nil
+            }
+            // Remove from medallero when un-visiting
+            if newStatus == .none && (previousStatus == .visited || previousStatus == .lived) {
+                if let emoji = flagEmoji(for: country) {
+                    removeFromTopTable(flagEmojis: Set([emoji]))
+                }
             }
             // When unmarking visited: delete past trips, keep future trips
             if newStatus == .none {
@@ -1243,9 +1605,11 @@ struct StatusListSheet: View {
     var trips: [Trip] = []
     let onRemove: (Country) -> Void
     var onSetDate: ((Country, Trip?) -> Void)? = nil
+    var onDeleteAll: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var countryToRemove: Country? = nil
+    @State private var showDeleteAllConfirm = false
 
     private var filtered: [Country] {
         // For wantToVisit, countries already contains allProximos (visited+future included)
@@ -1436,14 +1800,25 @@ struct StatusListSheet: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancelar") {
-                        // Cierra la sheet asignando nil al binding externo
-                        // Se hace pasando un @Environment dismiss
-                        dismiss()
+                    Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                }
+                if !filtered.isEmpty, onDeleteAll != nil {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { showDeleteAllConfirm = true } label: {
+                            Image(systemName: "trash").foregroundStyle(.red)
+                        }
                     }
-                    .font(.palatino(.body))
                 }
             }
+        }
+        .alert("Borrar lista completa", isPresented: $showDeleteAllConfirm) {
+            Button("Borrar todo", role: .destructive) {
+                onDeleteAll?()
+                dismiss()
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se eliminarán todas las entradas de esta lista. Esta acción no se puede deshacer.")
         }
         .confirmationDialog(
             "¿Eliminar de la lista?",
@@ -1515,6 +1890,8 @@ enum AchievementKind: CaseIterable {
     // Plata – 5 viajes en la región
     case fiveEurope, fiveAsia, fiveAfrica, fiveMedioOriente, fiveOceania
     case fiveNortamerica, fiveCaribe, fiveSudamerica, fiveCentroamerica
+    // Oro – pasaporte lleno
+    case pasaporteEuropa, pasaporteAsia, pasaporteMedioOriente, pasaporteAfrica, pasaporteAmerica, pasaporteOceania
 
     // MARK: Sets de ISO por región (logros visitados/five)
     private static let _northAmerica: Set<String> = ["USA","MEX","CAN"]
@@ -1679,6 +2056,19 @@ enum AchievementKind: CaseIterable {
         }
     }
 
+    /// ExportZone rawValue key for passport-completion achievements (nil = other kinds)
+    var passportZoneKey: String? {
+        switch self {
+        case .pasaporteEuropa:       return "Europa"
+        case .pasaporteAsia:         return "Asia"
+        case .pasaporteMedioOriente: return "M. Oriente"
+        case .pasaporteAfrica:       return "África"
+        case .pasaporteAmerica:      return "América"
+        case .pasaporteOceania:      return "Oceanía"
+        default:                     return nil
+        }
+    }
+
     var zoneIsoCodes: Set<String> {
         switch self {
         case .europaCompleta:       return Self._zoneEuropa
@@ -1692,6 +2082,9 @@ enum AchievementKind: CaseIterable {
         case .todosEscandinavos:    return Self._escandinavos
         case .todosBalcanicos:      return Self._balcanicos
         case .todosMicroestados:    return Self._microestados
+        // passport achievements use candidateIsoCodes from mapQuadrantsData, not static sets
+        case .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania: return []
         default:                    return []
         }
     }
@@ -1767,6 +2160,12 @@ enum AchievementKind: CaseIterable {
         case .fiveCaribe:           return "Cinco veces en el Caribe"
         case .fiveSudamerica:       return "Cinco veces en Sudamérica"
         case .fiveCentroamerica:    return "Cinco veces en Centroamérica"
+        case .pasaporteEuropa:      return "Pasaporte Europa completo"
+        case .pasaporteAsia:        return "Pasaporte Asia completo"
+        case .pasaporteMedioOriente: return "Pasaporte M. Oriente completo"
+        case .pasaporteAfrica:      return "Pasaporte África completo"
+        case .pasaporteAmerica:     return "Pasaporte América completo"
+        case .pasaporteOceania:     return "Pasaporte Oceanía completo"
         }
     }
 
@@ -1776,7 +2175,9 @@ enum AchievementKind: CaseIterable {
             return "🏆"
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
              .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
-             .todaLaUE:
+             .todaLaUE,
+             .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania:
             return "🥇"
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
@@ -1795,7 +2196,9 @@ enum AchievementKind: CaseIterable {
         case .allWorld, .visitedAntarctica, .todosLosContinentes: return 0
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
              .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
-             .todaLaUE: return 1
+             .todaLaUE,
+             .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania: return 1
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
              .firstLayover,
@@ -1816,6 +2219,7 @@ struct ProfileSheet: View {
     @Binding var showBucketList: Bool
     @Binding var showCountdown: Bool
     var onClearStatus: (CountryStatus) -> Void = { _ in }
+    var onProximosTap: (() -> Void)? = nil
     @Binding var topTable: String
     let visitedFlags: Set<String>
     let allFeatures: [CountryFeature]
@@ -1831,10 +2235,20 @@ struct ProfileSheet: View {
     @State private var showVisitedFlags: Bool = false
     @State private var showMedallero: Bool = false
     @State private var showTransportStats: Bool = false
+    @State private var showSubscriptionFromProfile: Bool = false
 
     @AppStorage("multiContinentRaw") private var multiContinentRaw: String = "{}"
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
+    @AppStorage("mapQuadrantsData") private var mapQuadrantsData: String = "{}"
+    @AppStorage("earnedPassportAchievementsRaw") private var earnedPassportRaw: String = "[]"
     private var multiContinentAssignments: [String: String] {
         (try? JSONDecoder().decode([String: String].self, from: Data(multiContinentRaw.utf8))) ?? [:]
+    }
+    private var allPassportQuadrants: [String: [MapQuadrant]] {
+        (try? JSONDecoder().decode([String: [MapQuadrant]].self, from: Data(mapQuadrantsData.utf8))) ?? [:]
+    }
+    private var earnedPassportZones: Set<String> {
+        (try? JSONDecoder().decode([String].self, from: Data(earnedPassportRaw.utf8))).map { Set($0) } ?? []
     }
 
     enum MedalSlot: String, Identifiable {
@@ -1888,15 +2302,31 @@ struct ProfileSheet: View {
             .compactMap { $0.flagEmoji }
     }
 
+    private func isPassportAchieved(_ kind: AchievementKind) -> Bool {
+        guard let zoneKey = kind.passportZoneKey else { return false }
+        // Una vez ganado, se mantiene aunque se añadan nuevos cuadrantes incompletos
+        if earnedPassportZones.contains(zoneKey) { return true }
+        let quadrants = (allPassportQuadrants[zoneKey] ?? []).filter { $0.position >= 0 }
+        guard !quadrants.isEmpty else { return false }
+        return quadrants.allSatisfy { q in q.candidateIsoCodes.allSatisfy { visitedIsoCodes.contains($0) } }
+    }
+
     private func isAchieved(_ kind: AchievementKind) -> Bool {
         let assignments = multiContinentAssignments
         switch kind {
+        case .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania:
+            return isPassportAchieved(kind)
         case .firstTrip:         return firstTrip != nil
         case .firstLayover:      return firstLayoverTrip != nil
         case .trips100:          return trip100 != nil
         case .primerMicroestado: return firstMicroestadoTrip != nil
         case .allWorld:
-            let visited = countries.filter { ($0.status == .visited || $0.status == .lived) && countingMode.counts($0.isoCode) }.count
+            let visited = countries.filter { c in
+                let isVisited = (c.status == .visited || c.status == .lived) && countingMode.counts(c.isoCode)
+                let hasPastTrip = pastTrips.contains { $0.isoCode == c.isoCode }
+                return isVisited && (c.visitCount > 0 || hasPastTrip)
+            }.count
             return visited >= countingMode.denominator && countingMode.denominator > 0
         case .visitedNortamerica, .visitedCaribe, .visitedSudamerica, .visitedCentroamerica,
              .visitedAfrica, .visitedEuropa, .visitedMedioOriente, .visitedOceania,
@@ -2003,7 +2433,8 @@ struct ProfileSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            VStack(spacing: 0) {
+                ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
 
                     // ── Logros izquierda + Porcentaje derecha ──
@@ -2019,42 +2450,75 @@ struct ProfileSheet: View {
                                     return profileLastTripDate(for: a) > profileLastTripDate(for: b)
                                 }
                                 .prefix(3)
-                            if topAchieved.isEmpty {
-                                Text("No tienes logros aún")
-                                    .font(.palatino(.caption))
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(Array(topAchieved), id: \.title) { kind in
-                                    Button { showLogros = true } label: {
-                                        HStack(spacing: 6) {
-                                            Text(kind.medal).font(.body)
-                                            Text(kind.title)
-                                                .font(.palatino(.caption))
-                                                .lineLimit(1)
+                            ZStack {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    if topAchieved.isEmpty {
+                                        Text("No tienes logros aún")
+                                            .font(.palatino(.caption))
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        ForEach(Array(topAchieved), id: \.title) { kind in
+                                            Button { if isRaskmapPro { showLogros = true } } label: {
+                                                HStack(spacing: 6) {
+                                                    Text(kind.medal).font(.body)
+                                                    Text(kind.title)
+                                                        .font(.palatino(.caption))
+                                                        .lineLimit(1)
+                                                }
+                                            }
+                                            .buttonStyle(.plain)
                                         }
+                                        Button { if isRaskmapPro { showLogros = true } } label: {
+                                            Text("Ver todos")
+                                                .font(.palatino(.caption))
+                                                .foregroundStyle(.blue)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .blur(radius: isRaskmapPro ? 0 : 5)
+                                .allowsHitTesting(isRaskmapPro)
+
+                                if !isRaskmapPro {
+                                    Button { showSubscriptionFromProfile = true } label: {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 15))
+                                            .foregroundStyle(.purple)
                                     }
                                     .buttonStyle(.plain)
                                 }
-                                Button { showLogros = true } label: {
-                                    Text("Ver todos")
-                                        .font(.palatino(.caption))
-                                        .foregroundStyle(.blue)
-                                }
-                                .buttonStyle(.plain)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                        // Porcentaje (mitad derecha, centrado) — tap → banderas visitadas
-                        let visitedCount = countries.filter { $0.status == .visited || $0.status == .lived }.count
+                        // Porcentaje (mitad derecha, centrado) — tap → banderas visitadas / Pro
+                        let visitedCount: Int = {
+                            let today = Calendar.current.startOfDay(for: Date())
+                            return countries.filter { c in
+                                let isVisited = c.status == .visited || c.status == .lived
+                                let hasPastTrip = trips.contains { $0.isoCode == c.isoCode && Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+                                return isVisited && (c.visitCount > 0 || hasPastTrip)
+                            }.count
+                        }()
                         let denominator = countingMode.denominator
                         let pct = denominator > 0 ? Double(visitedCount) / Double(denominator) * 100.0 : 0.0
-                        Button { showVisitedFlags = true } label: {
+                        Button {
+                            if isRaskmapPro { showVisitedFlags = true }
+                            else { showSubscriptionFromProfile = true }
+                        } label: {
                             VStack(alignment: .center, spacing: 4) {
-                                Text(String(format: "%.1f%%", pct))
-                                    .font(.system(size: 42, weight: .bold, design: .serif))
-                                    .minimumScaleFactor(0.6)
-                                    .lineLimit(1)
+                                ZStack {
+                                    Text(String(format: "%.1f%%", pct))
+                                        .font(.system(size: 42, weight: .bold, design: .serif))
+                                        .minimumScaleFactor(0.6)
+                                        .lineLimit(1)
+                                        .blur(radius: isRaskmapPro ? 0 : 7)
+                                    if !isRaskmapPro {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 22))
+                                            .foregroundStyle(.purple)
+                                    }
+                                }
                                 Text("del mundo\nvisitado")
                                     .font(.palatino(.caption))
                                     .foregroundStyle(.secondary)
@@ -2074,7 +2538,8 @@ struct ProfileSheet: View {
                     YearTravelView(
                         countries: countries,
                         features: allFeatures,
-                        trips: trips
+                        trips: trips,
+                        onProximosTap: onProximosTap
                     )
 
                     Divider().padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
@@ -2083,7 +2548,7 @@ struct ProfileSheet: View {
                     VStack(spacing: 0) {
                         Button { showMapExport = true } label: {
                             HStack {
-                                Text("Pasaporte")
+                                Label("Pasaporte", systemImage: "map")
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -2099,7 +2564,7 @@ struct ProfileSheet: View {
                         Divider().padding(.leading, 16)
                         Button { showMedallero = true } label: {
                             HStack {
-                                Text("Premios")
+                                Label("Premios", systemImage: "trophy.fill")
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -2115,7 +2580,7 @@ struct ProfileSheet: View {
                         Divider().padding(.leading, 16)
                         Button { showTransportStats = true } label: {
                             HStack {
-                                Text("Transporte")
+                                Label("Transporte", systemImage: "airplane")
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -2131,18 +2596,19 @@ struct ProfileSheet: View {
                     }
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 24)
-
-                    Text("v.1.0")
-                        .font(.palatino(.caption))
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 12)
-                        .padding(.bottom, 40)
+                    .padding(.bottom, 12)
                 }
+                } // end ScrollView
+                Text("v.1.0")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+                    .padding(.bottom, 40)
             }
             .navigationTitle(username.isEmpty ? "Perfil" : username)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }
@@ -2186,6 +2652,9 @@ struct ProfileSheet: View {
                 onClearStatus: onClearStatus
             )
             .environmentObject(colorTheme)
+        }
+        .sheet(isPresented: $showSubscriptionFromProfile) {
+            SubscriptionSheet()
         }
         .overlay {
             if showVisitedFlags {
@@ -2242,6 +2711,8 @@ struct ProfileSheet: View {
                 visitedIsoCodes: visitedIsoCodes
             ) { kind in isAchieved(kind) }
         }
+        .presentationDetents([.fraction(0.70), .large])
+        .presentationDragIndicator(.visible)
         .appColorScheme()
     }
 }
@@ -2452,6 +2923,15 @@ struct LogrosSheet: View {
                     .font(.palatino(.caption))
                     .foregroundStyle(.secondary)
             }
+        case .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania:
+            VStack(spacing: 4) {
+                Text("¡Pasaporte completo!")
+                    .font(.palatino(.subheadline, weight: .bold))
+                Text("Has visitado todos los países de tu pasaporte")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -2562,10 +3042,230 @@ struct SettingsSheet: View {
     @State private var showCountingToast: Bool = false
     @State private var showResetToast: Bool = false
     @State private var showFavoriteAirportPicker: Bool = false
+    @State private var showSubscription: Bool = false
+    @State private var showFAQ: Bool = false
+    @State private var showNovedades: Bool = false
+    @State private var showWidgetLockScreen: Bool = false
+    @State private var showWidgetHome: Bool = false
+    @State private var showWidgetWatch: Bool = false
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
+    @AppStorage("appFontFamily") private var appFontFamily: String = "satoshi"
+    @AppStorage("widgetBgColorHex") private var widgetBgColorHex: String = "#EE6E7D"
+    @AppStorage("liveActivityEnabled") private var liveActivityEnabled: Bool = false
 
     @AppStorage("favoriteAirport") private var favoriteAirport: String = ""
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
+
+    @ViewBuilder private func settingsRowLocked(label: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: isRaskmapPro ? action : { showSubscription = true }) {
+            HStack {
+                Label(label, systemImage: icon)
+                    .font(.palatino(.body))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: isRaskmapPro ? "chevron.right" : "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(isRaskmapPro ? Color.secondary : Color.purple)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private func settingsRow(label: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Label(label, systemImage: icon)
+                    .font(.palatino(.body))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var favoriteAirportSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Selecciona tu aeropuerto favorito:")
+                .font(.palatino(.subheadline, weight: .bold))
+                .foregroundStyle(.secondary)
+            Button { showFavoriteAirportPicker = true } label: {
+                HStack {
+                    if favoriteAirport.isEmpty {
+                        Text("Ninguno")
+                            .font(.palatino(.body))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        let apData = RoutePickerSheet.allAirports.first { $0.iata == favoriteAirport }
+                        let apLabel = "\(favoriteAirport)\(apData.map { " – \($0.name)" } ?? "")"
+                        HStack(spacing: 8) {
+                            Text(apData?.flagEmoji ?? "🌐").font(.body)
+                            Text("⭐️").font(.caption)
+                            Text(apLabel)
+                                .font(.palatino(.body))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    @ViewBuilder private var fontPickerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Fuente de la aplicación")
+                .font(.palatino(.subheadline, weight: .bold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 24)
+
+            ZStack {
+                VStack(spacing: 0) {
+                    ForEach([("satoshi", "Satoshi"), ("palatino", "Palatino")], id: \.0) { key, name in
+                        let isSelected = appFontFamily == key
+                        Button {
+                            if !isSelected { appFontFamily = key }
+                        } label: {
+                            HStack {
+                                Text(name)
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if isSelected {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption)
+                                        .foregroundStyle(.blue)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if key == "satoshi" {
+                            Divider().padding(.leading, 16)
+                        }
+                    }
+                }
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 24)
+                .blur(radius: isRaskmapPro ? 0 : 6)
+                .allowsHitTesting(isRaskmapPro)
+
+                if !isRaskmapPro {
+                    Button { showSubscription = true } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.purple)
+                            Text("Función Pro")
+                                .font(.palatino(.caption, weight: .bold))
+                                .foregroundStyle(.purple)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 90)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var menuPositionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Posición del menú:")
+                .font(.palatino(.subheadline, weight: .bold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach([("top", "Arriba"), ("bottom", "Abajo")], id: \.0) { value, label in
+                    let isSelected = menuPositionRaw == value
+                    let bg: Color = isSelected ? .blue : Color(.systemGray5)
+                    let fg: Color = isSelected ? .white : .primary
+                    let weight: Font.Weight = isSelected ? .bold : .regular
+                    Button { menuPositionRaw = value } label: {
+                        Text(label)
+                            .font(.palatino(.footnote, weight: weight))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(bg, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(fg)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    @ViewBuilder private var colorPickerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Selección de colores")
+                .font(.palatino(.subheadline, weight: .bold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 24)
+            ZStack {
+                VStack(spacing: 12) {
+                    VStack(spacing: 0) {
+                        ColorPickerRow(label: "Visitado", color: $colorTheme.visitedColor)
+                        Divider().padding(.leading, 56)
+                        ColorPickerRow(label: "Quiero", color: $colorTheme.bucketListColor)
+                        Divider().padding(.leading, 56)
+                        ColorPickerRow(label: "Próximo", color: $colorTheme.wantToVisitColor)
+                    }
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 24)
+                    Button {
+                        colorTheme.resetToDefaults()
+                        showResetToast = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showResetToast = false }
+                    } label: {
+                        Text("Restablecer colores predeterminados")
+                            .font(.palatino(.footnote, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(.white)
+                            .background(Color.red, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
+                }
+                .blur(radius: isRaskmapPro ? 0 : 6)
+                .allowsHitTesting(isRaskmapPro)
+                if !isRaskmapPro {
+                    Button { showSubscription = true } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(.purple)
+                            Text("Función Pro")
+                                .font(.palatino(.caption, weight: .bold))
+                                .foregroundStyle(.purple)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 110)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -2627,40 +3327,30 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
 
-                    // Aeropuerto favorito
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Selecciona tu aeropuerto favorito:")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .foregroundStyle(.secondary)
-                        Button { showFavoriteAirportPicker = true } label: {
+                    // ── Raskmap Pro ──
+                    VStack(spacing: 0) {
+                        Color.purple.opacity(0.45).frame(height: 0.75)
+                        Button { showSubscription = true } label: {
                             HStack {
-                                if favoriteAirport.isEmpty {
-                                    Text("Ninguno")
-                                        .font(.palatino(.body))
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    let apData = RoutePickerSheet.allAirports.first { $0.iata == favoriteAirport }
-                                    HStack(spacing: 8) {
-                                        Text(apData?.flagEmoji ?? "🌐").font(.body)
-                                        Text("⭐️").font(.caption)
-                                        Text("\(favoriteAirport)\(apData.map { " – \($0.name)" } ?? "")")
-                                            .font(.palatino(.body))
-                                            .foregroundStyle(.primary)
-                                    }
-                                }
+                                Text("Raskmap Pro")
+                                    .font(.palatino(.body, weight: .bold))
+                                    .foregroundStyle(.purple)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.purple.opacity(0.5))
                             }
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.vertical, 14)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        Color.purple.opacity(0.45).frame(height: 0.75)
                     }
                     .padding(.horizontal, 24)
+
+                    // Aeropuerto favorito
+                    favoriteAirportSection
 
                     // Conteo de territorios
                     VStack(alignment: .leading, spacing: 8) {
@@ -2670,6 +3360,10 @@ struct SettingsSheet: View {
 
                         HStack(spacing: 8) {
                             ForEach(CountingMode.allCases, id: \.self) { mode in
+                                let isSelected = countingMode == mode
+                                let bg: Color = isSelected ? .blue : Color(.systemGray5)
+                                let fg: Color = isSelected ? .white : .primary
+                                let weight: Font.Weight = isSelected ? .bold : .regular
                                 Button {
                                     countingModeRaw = mode.rawValue
                                     showCountingToast = true
@@ -2678,26 +3372,26 @@ struct SettingsSheet: View {
                                     }
                                 } label: {
                                     Text(mode.label)
-                                        .font(.palatino(.footnote, weight: countingMode == mode ? .bold : .regular))
+                                        .font(.palatino(.footnote, weight: weight))
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
-                                        .background(
-                                            countingMode == mode ? Color.blue : Color(.systemGray5),
-                                            in: RoundedRectangle(cornerRadius: 10)
-                                        )
-                                        .foregroundStyle(countingMode == mode ? .white : .primary)
+                                        .background(bg, in: RoundedRectangle(cornerRadius: 10))
+                                        .foregroundStyle(fg)
                                 }
                             }
                         }
-                        Button { showMultiContinent = true } label: {
+                        Button {
+                            if isRaskmapPro { showMultiContinent = true }
+                            else { showSubscription = true }
+                        } label: {
                             HStack {
                                 Text("Países en más de un continente")
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Image(systemName: "chevron.right")
+                                Image(systemName: isRaskmapPro ? "chevron.right" : "lock.fill")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(isRaskmapPro ? Color.secondary : Color.purple)
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
@@ -2709,30 +3403,8 @@ struct SettingsSheet: View {
                     .padding(.horizontal, 24)
 
                     // Posición del menú
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Posición del menú:")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 8) {
-                            ForEach([("top", "Arriba"), ("bottom", "Abajo")], id: \.0) { value, label in
-                                Button {
-                                    menuPositionRaw = value
-                                } label: {
-                                    Text(label)
-                                        .font(.palatino(.footnote, weight: menuPositionRaw == value ? .bold : .regular))
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(
-                                            menuPositionRaw == value ? Color.blue : Color(.systemGray5),
-                                            in: RoundedRectangle(cornerRadius: 10)
-                                        )
-                                        .foregroundStyle(menuPositionRaw == value ? .white : .primary)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 24)
+                    // Posición del menú
+                    menuPositionSection
 
 
                     // Contador próximo viaje
@@ -2747,9 +3419,21 @@ struct SettingsSheet: View {
                             Text("Mostrar contador")
                                 .font(.palatino(.body))
                             Spacer()
-                            Toggle("", isOn: $showCountdown)
-                                .labelsHidden()
-                                .tint(.blue)
+                            ZStack {
+                                Toggle("", isOn: $showCountdown)
+                                    .labelsHidden()
+                                    .tint(.blue)
+                                    .blur(radius: isRaskmapPro ? 0 : 6)
+                                    .allowsHitTesting(isRaskmapPro)
+                                if !isRaskmapPro {
+                                    Button { showSubscription = true } label: {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.purple)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
@@ -2757,61 +3441,87 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
 
-                    // Colores
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Colores")
+                    // Selección de colores
+                    colorPickerSection
+
+                    // Fuente de la aplicación
+                    fontPickerSection
+
+                    // Widgets
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Widgets")
                             .font(.palatino(.subheadline, weight: .bold))
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 24)
-
+                            .padding(.horizontal, 4)
                         VStack(spacing: 0) {
-                            ColorPickerRow(label: "Visitado",    color: $colorTheme.visitedColor)
-                            Divider().padding(.leading, 56)
-                            ColorPickerRow(label: "Quiero", color: $colorTheme.bucketListColor)
-                            Divider().padding(.leading, 56)
-                            ColorPickerRow(label: "Próximo",     color: $colorTheme.wantToVisitColor)
-                        }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal, 24)
-
-                        Button {
-                            colorTheme.resetToDefaults()
-                            showResetToast = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                showResetToast = false
+                            settingsRow(label: "Pantalla principal", icon: "rectangle.grid.3x2") { showWidgetHome = true }
+                            Divider().padding(.leading, 16)
+                            settingsRowLocked(label: "Pantalla de bloqueo", icon: "lock.display") { showWidgetLockScreen = true }
+                            Divider().padding(.leading, 16)
+                            HStack {
+                                Label("Live Activities", systemImage: "dot.radiowaves.left.and.right")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                ZStack {
+                                    Toggle("", isOn: $liveActivityEnabled)
+                                        .labelsHidden()
+                                        .tint(.blue)
+                                        .blur(radius: isRaskmapPro ? 0 : 6)
+                                        .allowsHitTesting(isRaskmapPro)
+                                    if !isRaskmapPro {
+                                        Button { showSubscription = true } label: {
+                                            Image(systemName: "lock.fill")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(.purple)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
                             }
-                        } label: {
-                            Text("Restablecer colores predeterminados")
-                                .font(.palatino(.footnote, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(.white)
-                                .background(Color.red, in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .contentShape(Rectangle())
+                            Divider().padding(.leading, 16)
+                            settingsRowLocked(label: "Apple Watch", icon: "applewatch") { showWidgetWatch = true }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 4)
-                    }
-
-                    // Contacto
-                    Button { showContact = true } label: {
-                        HStack {
-                            Label("Contacto", systemImage: "envelope")
-                                .font(.palatino(.body))
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal, 24)
-                    .contentShape(Rectangle())
 
-                    .padding(.bottom, 32)
+                    // Ayuda
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Ayuda")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        VStack(spacing: 0) {
+                            settingsRow(label: "Contacto", icon: "envelope") { showContact = true }
+                            Divider().padding(.leading, 16)
+                            settingsRow(label: "FAQ", icon: "questionmark.circle") { showFAQ = true }
+                            Divider().padding(.leading, 16)
+                            settingsRow(label: "Novedades", icon: "sparkles") { showNovedades = true }
+                        }
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.horizontal, 24)
+
+                    #if DEBUG
+                    // ── Dev: simular suscripción Pro ──
+                    Toggle(isOn: $isRaskmapPro) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "wrench.and.screwdriver")
+                                .foregroundStyle(.orange)
+                            Text("Raskmap Pro (DEV)")
+                                .font(.palatino(.footnote, weight: .bold))
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 4)
+                    #endif
+
+                    Color.clear.frame(height: 32)
                 }
                 .padding(.top, 20)
             }
@@ -2890,6 +3600,24 @@ struct SettingsSheet: View {
         }
         .sheet(isPresented: $showFavoriteAirportPicker) {
             FavoriteAirportPickerSheet(selected: $favoriteAirport)
+        }
+        .sheet(isPresented: $showSubscription) {
+            SubscriptionSheet()
+        }
+        .sheet(isPresented: $showFAQ) {
+            SettingsInfoSheet(title: "FAQ", icon: "questionmark.circle", content: "Aquí irán las preguntas frecuentes sobre Raskmap.\n\nPróximamente.")
+        }
+        .sheet(isPresented: $showNovedades) {
+            SettingsInfoSheet(title: "Novedades", icon: "sparkles", content: "Aquí aparecerán las novedades de cada versión de Raskmap.\n\nPróximamente.")
+        }
+        .sheet(isPresented: $showWidgetLockScreen) {
+            SettingsInfoSheet(title: "Pantalla de bloqueo", icon: "lock.display", content: "Cómo añadir el widget de Raskmap a tu pantalla de bloqueo.\n\nPróximamente.")
+        }
+        .sheet(isPresented: $showWidgetHome) {
+            WidgetHomeColorSheet()
+        }
+        .sheet(isPresented: $showWidgetWatch) {
+            SettingsInfoSheet(title: "Apple Watch", icon: "applewatch", content: "Cómo usar Raskmap en tu Apple Watch.\n\nPróximamente.")
         }
         .appColorScheme()
     }
@@ -2998,6 +3726,167 @@ struct ContactSheet: View {
                     isPresented: $showMailComposer,
                     onFinish: { dismiss() }
                 )
+            }
+        }
+        .presentationDetents([.medium])
+        .appColorScheme()
+    }
+}
+
+// MARK: - Info sheet genérica (FAQ, Novedades, Widgets)
+// MARK: - Color hex helper
+
+extension Color {
+    init(hex: String) {
+        let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: clean).scanHexInt64(&int)
+        let r = Double((int >> 16) & 0xFF) / 255
+        let g = Double((int >> 8)  & 0xFF) / 255
+        let b = Double(int & 0xFF)          / 255
+        self.init(red: r, green: g, blue: b)
+    }
+}
+
+// MARK: - Widget home color picker
+
+struct WidgetHomeColorSheet: View {
+    @AppStorage("widgetBgColorHex") private var savedHex: String = "#EE6E7D"
+    @State private var selectedHex: String = "#EE6E7D"
+    @Environment(\.dismiss) private var dismiss
+
+    private let palette: [(name: String, hex: String)] = [
+        ("Rosa",      "#EE6E7D"),
+        ("Azul",      "#53A3FE"),
+        ("Verde mar", "#1ABC9C"),
+        ("Morado",    "#9B59B6"),
+        ("Naranja",   "#E67E22"),
+        ("Verde",     "#27AE60"),
+        ("Rojo",      "#C0392B"),
+        ("Índigo",    "#3949AB"),
+        ("Marino",    "#2C3E50"),
+        ("Negro",     "#1C1C1E"),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 32) {
+                // Mini widget preview
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(Color(hex: selectedHex))
+                        .frame(width: 160, height: 160)
+                        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+                    VStack(spacing: 0) {
+                        Spacer()
+                        Text("42")
+                            .font(.custom("Palatino-Bold", size: 56))
+                            .foregroundStyle(.white)
+                            .minimumScaleFactor(0.5)
+                            .lineLimit(1)
+                        Spacer().frame(height: 4)
+                        Text("Países visitados")
+                            .font(.custom("Palatino", size: 12))
+                            .foregroundStyle(.white.opacity(0.9))
+                        Spacer()
+                        Text("ONU")
+                            .font(.custom("Palatino", size: 10))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .padding(.bottom, 12)
+                    }
+                    .padding(.horizontal, 14)
+                }
+                .padding(.top, 16)
+                .animation(.easeInOut(duration: 0.2), value: selectedHex)
+
+                // Color palette
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 18) {
+                    ForEach(palette, id: \.hex) { item in
+                        Button {
+                            selectedHex = item.hex
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(hex: item.hex))
+                                    .frame(width: 52, height: 52)
+                                    .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 2)
+                                if selectedHex == item.hex {
+                                    Circle()
+                                        .strokeBorder(.white, lineWidth: 3)
+                                        .frame(width: 52, height: 52)
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                Spacer()
+
+                Button {
+                    savedHex = selectedHex
+                    WidgetDataWriter.syncColor(hex: selectedHex)
+                    dismiss()
+                } label: {
+                    Text("Guardar")
+                        .font(.palatino(.body, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+            }
+            .navigationTitle("Pantalla principal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+        }
+        .onAppear { selectedHex = savedHex }
+        .appColorScheme()
+    }
+}
+
+// MARK: - SettingsInfoSheet
+
+struct SettingsInfoSheet: View {
+    let title: String
+    let icon: String
+    let content: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    Image(systemName: icon)
+                        .font(.system(size: 48))
+                        .foregroundStyle(.blue)
+                        .padding(.top, 32)
+                    Text(content)
+                        .font(.palatino(.body))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    Spacer(minLength: 48)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
             }
         }
         .presentationDetents([.medium])
@@ -3229,6 +4118,7 @@ struct AllCountriesSheet: View {
     let visitedIsoCodes: Set<String>
     let countries: [Country]
     let trips: [Trip]
+    var onCountryDeleted: ((String) -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var editingVisitCount: Country? = nil
@@ -3359,22 +4249,58 @@ private extension AllCountriesSheet {
             get: { confirmDeleteCountry != nil },
             set: { if !$0 { confirmDeleteCountry = nil } }
         )
-        v.confirmationDialog(
+        v.alert(
             "¿Eliminar este territorio?",
             isPresented: isPresented,
             presenting: confirmDeleteCountry
         ) { country in
             Button("Eliminar", role: .destructive) {
+                var processedGroupIDs = Set<String>()
+                var seenIDs = Set<ObjectIdentifier>()
+                var allToDelete: [Trip] = []
+                for trip in trips where trip.isoCode == country.isoCode {
+                    if let gid = trip.segmentGroupID, !processedGroupIDs.contains(gid) {
+                        processedGroupIDs.insert(gid)
+                        let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.segmentGroupID == gid })
+                        for t in (try? modelContext.fetch(desc)) ?? [trip] {
+                            if seenIDs.insert(ObjectIdentifier(t)).inserted { allToDelete.append(t) }
+                        }
+                    } else if trip.segmentGroupID == nil {
+                        if seenIDs.insert(ObjectIdentifier(trip)).inserted { allToDelete.append(trip) }
+                    }
+                }
+                let siblingIsos = Set(allToDelete.map { $0.isoCode }).subtracting([country.isoCode])
                 country.status = .none
                 country.hasLived = false
                 country.plannedDate = nil
                 country.plannedDateTo = nil
                 country.transport = nil
                 country.visitCount = 0
-                for trip in trips where trip.isoCode == country.isoCode {
-                    modelContext.delete(trip)
+                for t in allToDelete { modelContext.delete(t) }
+                try? modelContext.save()
+                for iso in siblingIsos {
+                    let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
+                    guard let c = try? modelContext.fetch(cd).first else { continue }
+                    guard c.status == .visited || c.status == .lived else { continue }
+                    let td = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                    let remaining = (try? modelContext.fetch(td)) ?? []
+                    let today = Calendar.current.startOfDay(for: Date())
+                    let hasPast = remaining.contains { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+                    let hasFuture = remaining.contains { Calendar.current.startOfDay(for: $0.dateFrom) > today }
+                    guard !hasPast && c.visitCount == 0 else { continue }
+                    if c.plannedDate != nil || hasFuture {
+                        c.status = .wantToVisit
+                    } else {
+                        c.status = .none
+                        c.hasLived = false
+                        c.plannedDate = nil
+                        c.plannedDateTo = nil
+                        c.transport = nil
+                        c.plannedTitle = nil
+                    }
                 }
                 try? modelContext.save()
+                onCountryDeleted?(country.isoCode)
                 confirmDeleteCountry = nil
             }
             Button("Cancelar", role: .cancel) { confirmDeleteCountry = nil }
@@ -3446,12 +4372,14 @@ private struct AllCountriesRowView: View {
                                 .padding(.vertical, 3)
                                 .background(Color(.systemGray5), in: Capsule())
                         }
-                        Text("\(visitCount)x")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(.systemGray5), in: Capsule())
+                        if visitCount > 0 {
+                            Text("\(visitCount)x")
+                                .font(.palatino(.subheadline, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color(.systemGray5), in: Capsule())
+                        }
                     }
                 }
                 .contentShape(Rectangle())
@@ -3564,6 +4492,74 @@ struct AirlineConfirmEntry: Identifiable {
     var count: Int
 }
 
+// MARK: - Achievement toast (UIWindow, aparece sobre modales)
+final class AchievementToastController {
+    static let shared = AchievementToastController()
+    private var toastWindow: UIWindow?
+
+    func show(_ toasts: [AchievementKind], menuPositionIsTop: Bool, isRaskmapPro: Bool) {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        toastWindow?.isHidden = true
+        toastWindow = nil
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = .alert + 1
+        window.backgroundColor = .clear
+        window.isUserInteractionEnabled = false
+        let view = AchievementToastView(toasts: toasts, menuPositionIsTop: menuPositionIsTop, isRaskmapPro: isRaskmapPro)
+        let host = UIHostingController(rootView: view)
+        host.view.backgroundColor = .clear
+        window.rootViewController = host
+        window.isHidden = false
+        toastWindow = window
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            self?.toastWindow?.isHidden = true
+            self?.toastWindow = nil
+        }
+    }
+}
+
+private struct AchievementToastView: View {
+    let toasts: [AchievementKind]
+    let menuPositionIsTop: Bool
+    let isRaskmapPro: Bool
+
+    var body: some View {
+        VStack {
+            if menuPositionIsTop { Spacer() }
+            HStack {
+                Spacer()
+                VStack(alignment: .trailing, spacing: 6) {
+                    ForEach(toasts, id: \.title) { kind in
+                        HStack(spacing: 8) {
+                            Text(kind.title)
+                                .font(.custom("Palatino", size: 15).weight(.semibold))
+                                .foregroundStyle(.white)
+                            Text(kind.medal).font(.title3)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 14))
+                        .overlay {
+                            if !isRaskmapPro {
+                                RoundedRectangle(cornerRadius: 14)
+                                    .fill(.ultraThinMaterial)
+                                    .overlay {
+                                        Image(systemName: "lock.fill")
+                                            .foregroundStyle(.purple)
+                                            .font(.title3)
+                                    }
+                            }
+                        }
+                    }
+                }
+                .padding(.trailing, 16)
+                .padding(.top, menuPositionIsTop ? 0 : 55)
+                .padding(.bottom, menuPositionIsTop ? 110 : 0)
+            }
+            if !menuPositionIsTop { Spacer() }
+        }
+    }
+}
+
 // MARK: - Añadir viaje
 struct AddTripSheet: View {
     let isoCode: String
@@ -3594,7 +4590,12 @@ struct AddTripSheet: View {
         tripSegments.map(\.dateFrom).min() ?? Calendar.current.startOfDay(for: Date())
     }
     private var calculatedDateTo: Date? {
-        tripSegments.compactMap(\.dateTo).max()
+        // Fecha explícita si existe; si no, la dateFrom más tardía que supere la de inicio
+        let explicit = tripSegments.compactMap(\.dateTo).max()
+        if let e = explicit { return e }
+        let latestFrom = tripSegments.map(\.dateFrom).max()
+        guard let latest = latestFrom, latest > calculatedDateFrom else { return nil }
+        return latest
     }
 
     private func segmentCountryNames(_ seg: TripSegment) -> String {
@@ -3624,9 +4625,11 @@ struct AddTripSheet: View {
             return a.name < b.name
         }
         let apSeg = tripSegments.first(where: { $0.transport == "✈️" && $0.airports?.isEmpty == false })
+        // Deduplicar: si el mismo aeropuerto aparece en ida y vuelta, cuenta 1 (ajustable en la card)
         var apC: [String: Int] = [:]
-        for ap in apSeg?.airports ?? [] { apC[ap.iata, default: 0] += 1 }
-        for ap in apSeg?.returnAirports ?? [] { apC[ap.iata, default: 0] += 1 }
+        for ap in (apSeg?.airports ?? []) + (apSeg?.returnAirports ?? []) {
+            apC[ap.iata] = max(apC[ap.iata, default: 0], ap.count)
+        }
         confirmAirports = apC.map { AirportConfirmEntry(iata: $0.key, count: $0.value) }.sorted { $0.iata < $1.iata }
         confirmAirlines = (apSeg?.airlines ?? []).map { AirlineConfirmEntry(name: $0.name, count: $0.count) }
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -3667,14 +4670,28 @@ struct AddTripSheet: View {
                 countForIso[isoCode] = max(countForIso[isoCode, default: 0], 1)
             }
             // Extra visits for main country (main trip = 1, extras = count-1)
+            let segsForMain = tripSegments.filter { $0.isoCodes.contains(isoCode) }
             let mainCount = countForIso[isoCode] ?? 1
-            for _ in 0..<(mainCount - 1) {
+            for i in 0..<(mainCount - 1) {
+                let extraSeg = (i + 1) < segsForMain.count ? segsForMain[i + 1] : segsForMain.last
+                let extraTransport = extraSeg?.transport ?? transport
+                var extraAps: [TripAirport] = []
+                var extraAls: [TripAirline] = []
+                if extraSeg?.transport == "✈️" {
+                    var apC3: [String: Int] = [:]
+                    for ap in extraSeg?.airports ?? [] { apC3[ap.iata, default: 0] += 1 }
+                    for ap in extraSeg?.returnAirports ?? [] { apC3[ap.iata, default: 0] += 1 }
+                    extraAps = apC3.map { TripAirport(iata: $0.key, count: $0.value) }
+                    extraAls = extraSeg?.airlines ?? []
+                }
                 let extra = Trip(isoCode: isoCode, title: trimmed.isEmpty ? nil : trimmed,
-                                dateFrom: calculatedDateFrom, dateTo: calculatedDateTo,
-                                transport: transport, tripAirports: finalAirports, tripAirlines: finalAirlines)
-                extra.hasLayover = airplaneSeg?.hasLayover ?? false
+                                dateFrom: extraSeg?.dateFrom ?? calculatedDateFrom,
+                                dateTo: extraSeg?.dateTo ?? calculatedDateTo,
+                                transport: extraTransport, tripAirports: extraAps, tripAirlines: extraAls)
+                extra.hasLayover = extraSeg?.hasLayover ?? false
                 extra.segmentGroupID = groupID
                 extra.isSegmentChild = true
+                if let seg = extraSeg { extra.tripSegments = [seg] }
                 modelContext.insert(extra)
             }
             // Children for other countries, one per confirmed visit using the matching segment
@@ -3699,6 +4716,7 @@ struct AddTripSheet: View {
                     child.hasLayover = seg?.hasLayover ?? false
                     child.segmentGroupID = groupID
                     child.isSegmentChild = true
+                    if let seg { child.tripSegments = [seg] }
                     modelContext.insert(child)
                 }
                 // Mark visited + toast (use first segment's date)
@@ -3832,7 +4850,7 @@ struct AddTripSheet: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.hidden)
-        .interactiveDismissDisabled(false)
+        .interactiveDismissDisabled(showSaveConfirmation)
         .onDisappear {
             if !didSave { onCancel?() }
         }
@@ -3841,107 +4859,135 @@ struct AddTripSheet: View {
                 tripSegments.append(seg)
             }
         }
-        .overlay {
-            if showSaveConfirmation {
-                ZStack {
-                    Color.black.opacity(0.4)
+        .fullScreenCover(isPresented: $showSaveConfirmation) {
+            visitConfirmCard(onSave: { showSaveConfirmation = false; saveTrip() },
+                             onCancel: { showSaveConfirmation = false })
+        }
+        .appColorScheme()
+    }
+
+    @ViewBuilder
+    private func visitConfirmCard(onSave: @escaping () -> Void, onCancel: @escaping () -> Void) -> some View {
+        ZStack {
+            Color.black.opacity(0.5).ignoresSafeArea()
+            VStack(spacing: 0) {
+                Text("Se han detectado estas visitas a estos países, modifícalo a tu gusto o acéptalo.")
+                    .font(.palatino(.subheadline, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
+                Divider()
+                ScrollView {
                     VStack(spacing: 0) {
-                        Text("Se han detectado estas visitas a estos países, modifícalo a tu gusto o acéptalo.")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
-                        Divider()
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                ForEach($confirmVisits) { $entry in
-                                    HStack(spacing: 10) {
-                                        if !entry.flagEmoji.isEmpty { Text(entry.flagEmoji).font(.title3) }
-                                        Text(entry.name).font(.palatino(.body)).lineLimit(1)
-                                        Spacer()
-                                        HStack(spacing: 12) {
-                                            Button { if entry.count > 0 { entry.count -= 1 } } label: {
-                                                Image(systemName: "minus.circle.fill")
-                                                    .foregroundStyle(entry.count > 0 ? .red : Color(.systemGray4)).font(.title3)
-                                            }.buttonStyle(.plain)
-                                            Text("\(entry.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
-                                            Button { entry.count += 1 } label: {
-                                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.title3)
-                                            }.buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(.horizontal, 16).padding(.vertical, 10)
-                                    Divider().padding(.leading, 16)
-                                }
-                                if !confirmAirports.isEmpty {
-                                    HStack { Text("AEROPUERTOS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
-                                        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
-                                    ForEach($confirmAirports) { $ap in
-                                        HStack(spacing: 10) {
-                                            Text("✈️ \(ap.iata)").font(.palatino(.body, weight: .bold))
-                                            Spacer()
-                                            HStack(spacing: 12) {
-                                                Button { if ap.count > 0 { ap.count -= 1 } } label: {
-                                                    Image(systemName: "minus.circle.fill")
-                                                        .foregroundStyle(ap.count > 0 ? .red : Color(.systemGray4)).font(.title3)
-                                                }.buttonStyle(.plain)
-                                                Text("\(ap.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
-                                                Button { ap.count += 1 } label: {
-                                                    Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.title3)
-                                                }.buttonStyle(.plain)
-                                            }
-                                        }
-                                        .padding(.horizontal, 16).padding(.vertical, 8)
-                                        Divider().padding(.leading, 16)
-                                    }
-                                }
-                                if !confirmAirlines.isEmpty {
-                                    HStack { Text("AEROLÍNEAS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
-                                        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
-                                    ForEach($confirmAirlines) { $al in
-                                        HStack(spacing: 10) {
-                                            Text(al.name).font(.palatino(.body)).lineLimit(1)
-                                            Spacer()
-                                            HStack(spacing: 12) {
-                                                Button { if al.count > 0 { al.count -= 1 } } label: {
-                                                    Image(systemName: "minus.circle.fill")
-                                                        .foregroundStyle(al.count > 0 ? .red : Color(.systemGray4)).font(.title3)
-                                                }.buttonStyle(.plain)
-                                                Text("\(al.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
-                                                Button { al.count += 1 } label: {
-                                                    Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.title3)
-                                                }.buttonStyle(.plain)
-                                            }
-                                        }
-                                        .padding(.horizontal, 16).padding(.vertical, 8)
-                                        Divider().padding(.leading, 16)
-                                    }
+                        HStack { Text("PAÍSES").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                        ForEach($confirmVisits) { $entry in
+                            HStack(spacing: 10) {
+                                if !entry.flagEmoji.isEmpty { Text(entry.flagEmoji).font(.title3) }
+                                Text(entry.name).font(.palatino(.body)).lineLimit(1)
+                                Spacer()
+                                HStack(spacing: 12) {
+                                    Button { if entry.count > 0 { entry.count -= 1 } } label: {
+                                        ZStack {
+                                            Circle().fill(Color(.systemGray4))
+                                            Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                        }.frame(width: 28, height: 28)
+                                    }.buttonStyle(.plain)
+                                    Text("\(entry.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                    Button { entry.count += 1 } label: {
+                                        ZStack {
+                                            Circle().fill(Color(.systemGray4))
+                                            Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                        }.frame(width: 28, height: 28)
+                                    }.buttonStyle(.plain)
                                 }
                             }
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            Divider().padding(.leading, 16)
                         }
-                        .frame(maxHeight: 280)
-                        Divider()
-                        Button {
-                            withAnimation { showSaveConfirmation = false }
-                            saveTrip()
-                        } label: {
-                            Text("Aceptar")
-                                .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
-                                .foregroundStyle(.white)
+                        if !confirmAirports.isEmpty {
+                            HStack { Text("AEROPUERTOS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                            ForEach($confirmAirports) { $ap in
+                                HStack(spacing: 10) {
+                                    Text("✈️ \(ap.iata)").font(.palatino(.body, weight: .bold))
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button { if ap.count > 0 { ap.count -= 1 } } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                        Text("\(ap.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                        Button { ap.count += 1 } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                Divider().padding(.leading, 16)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        if !confirmAirlines.isEmpty {
+                            HStack { Text("AEROLÍNEAS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                            ForEach($confirmAirlines) { $al in
+                                HStack(spacing: 10) {
+                                    Text(al.name).font(.palatino(.body)).lineLimit(1)
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button { if al.count > 0 { al.count -= 1 } } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                        Text("\(al.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                        Button { al.count += 1 } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                if al.id != confirmAirlines.last?.id { Divider().padding(.leading, 16) }
+                            }
+                        }
                     }
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-                    .padding(.horizontal, 12)
-                    .shadow(radius: 20)
                 }
-                .transition(.opacity)
+                .frame(maxHeight: 300)
+                Divider()
+                HStack(spacing: 12) {
+                    Button { onCancel() } label: {
+                        Text("Cancelar")
+                            .font(.palatino(.body)).frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    Button { onSave() } label: {
+                        Text("Guardar")
+                            .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 20)
+            .shadow(radius: 20)
         }
-        .animation(.easeInOut(duration: 0.2), value: showSaveConfirmation)
-        .appColorScheme()
+        .presentationBackground(.clear)
+        .interactiveDismissDisabled(true)
     }
 }
 
@@ -3951,6 +4997,7 @@ struct YearTravelView: View {
     let countries: [Country]
     let features: [CountryFeature]
     let trips: [Trip]
+    var onProximosTap: (() -> Void)? = nil
 
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
 
@@ -4078,15 +5125,21 @@ struct YearTravelView: View {
                         }
                     }.frame(maxWidth: .infinity)
                     Divider()
-                    VStack(alignment: .center, spacing: 6) {
-                        Text("Próximos").font(.palatino(.caption, weight: .bold)).foregroundStyle(.secondary)
-                        if proximos.isEmpty {
-                            Text("–").font(.palatino(.caption)).foregroundStyle(.secondary)
-                        } else {
-                            let flagged = proximos.compactMap { flagEmoji(for: $0) }
-                            FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: false)
-                        }
-                    }.frame(maxWidth: .infinity)
+                    Button {
+                        onProximosTap?()
+                    } label: {
+                        VStack(alignment: .center, spacing: 6) {
+                            Text("Próximos").font(.palatino(.caption, weight: .bold)).foregroundStyle(onProximosTap != nil ? .blue : .secondary)
+                            if proximos.isEmpty {
+                                Text("–").font(.palatino(.caption)).foregroundStyle(.secondary)
+                            } else {
+                                let flagged = proximos.compactMap { flagEmoji(for: $0) }
+                                FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: false)
+                            }
+                        }.frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(onProximosTap == nil)
                 }.padding(.horizontal, 24)
             } else {
                 VStack(alignment: .center, spacing: 6) {
@@ -4254,6 +5307,10 @@ struct PlannedDatePickerSheet: View {
     @State private var selectedAirlines: [TripAirline] = []
     @State private var hasLayover: Bool = false
     @State private var showRoutePicker = false
+    @State private var showConfirmation = false
+    @State private var confirmVisits: [VisitEntry] = []
+    @State private var confirmAirports: [AirportConfirmEntry] = []
+    @State private var confirmAirlines: [AirlineConfirmEntry] = []
 
     static let transports: [(emoji: String, label: String)] = [
         ("✈️", "Avión"), ("🚗", "Coche"), ("🚂", "Tren"), ("🚌", "Bus"), ("🚢", "Barco"), ("🚶🏻", "Andando")
@@ -4397,10 +5454,7 @@ struct PlannedDatePickerSheet: View {
 
                 let canSave = selectedTransport != nil
                 Button {
-                    let title: String? = tripTitle.trimmingCharacters(in: .whitespaces).isEmpty ? nil
-                        : tripTitle.trimmingCharacters(in: .whitespaces)
-                    onSave(dateFrom, dateTo, selectedTransport, title, selectedAirports, selectedAirlines)
-                    dismiss()
+                    prepareConfirmation()
                 } label: {
                     Text(isEditing ? "Guardar cambios" : "Añadir a Próximos")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
@@ -4426,6 +5480,161 @@ struct PlannedDatePickerSheet: View {
             RouteWizardSheet(airports: $selectedAirports, returnAirports: $selectedReturnAirports,
                              airlines: $selectedAirlines, hasLayover: $hasLayover, onDone: {})
         }
+        .fullScreenCover(isPresented: $showConfirmation) {
+            plannedConfirmCard(
+                onSave: {
+                    showConfirmation = false
+                    let title: String? = tripTitle.trimmingCharacters(in: .whitespaces).isEmpty ? nil
+                        : tripTitle.trimmingCharacters(in: .whitespaces)
+                    let airports = confirmAirports.map { TripAirport(iata: $0.iata, count: $0.count) }
+                    let airlines = confirmAirlines.map { TripAirline(name: $0.name, count: $0.count) }
+                    onSave(dateFrom, dateTo, selectedTransport, title, airports, airlines)
+                    dismiss()
+                },
+                onCancel: { showConfirmation = false }
+            )
+        }
+    }
+
+    private func prepareConfirmation() {
+        confirmVisits = [VisitEntry(isoCode: "", flagEmoji: flagEmoji, name: countryName, count: 1)]
+        if selectedTransport == "✈️" {
+            var apC: [String: Int] = [:]
+            for ap in selectedAirports + selectedReturnAirports {
+                apC[ap.iata] = max(apC[ap.iata, default: 0], ap.count)
+            }
+            confirmAirports = apC.map { AirportConfirmEntry(iata: $0.key, count: $0.value) }.sorted { $0.iata < $1.iata }
+            confirmAirlines = selectedAirlines.map { AirlineConfirmEntry(name: $0.name, count: $0.count) }
+        } else {
+            confirmAirports = []
+            confirmAirlines = []
+        }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        showConfirmation = true
+    }
+
+    @ViewBuilder
+    private func plannedConfirmCard(onSave: @escaping () -> Void, onCancel: @escaping () -> Void) -> some View {
+        ZStack {
+            Color.black.opacity(0.5).ignoresSafeArea()
+            VStack(spacing: 0) {
+                Text("Revisa los datos del viaje antes de guardar.")
+                    .font(.palatino(.subheadline, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
+                Divider()
+                ScrollView {
+                    VStack(spacing: 0) {
+                        HStack { Text("PAÍSES").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                        ForEach($confirmVisits) { $entry in
+                            HStack(spacing: 10) {
+                                if !entry.flagEmoji.isEmpty { Text(entry.flagEmoji).font(.title3) }
+                                Text(entry.name).font(.palatino(.body)).lineLimit(1)
+                                Spacer()
+                                HStack(spacing: 12) {
+                                    Button { if entry.count > 0 { entry.count -= 1 } } label: {
+                                        ZStack {
+                                            Circle().fill(Color(.systemGray4))
+                                            Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                        }.frame(width: 28, height: 28)
+                                    }.buttonStyle(.plain)
+                                    Text("\(entry.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                    Button { entry.count += 1 } label: {
+                                        ZStack {
+                                            Circle().fill(Color(.systemGray4))
+                                            Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                        }.frame(width: 28, height: 28)
+                                    }.buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            Divider().padding(.leading, 16)
+                        }
+                        if !confirmAirports.isEmpty {
+                            HStack { Text("AEROPUERTOS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                            ForEach($confirmAirports) { $ap in
+                                HStack(spacing: 10) {
+                                    Text("✈️ \(ap.iata)").font(.palatino(.body, weight: .bold))
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button { if ap.count > 0 { ap.count -= 1 } } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                        Text("\(ap.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                        Button { ap.count += 1 } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                Divider().padding(.leading, 16)
+                            }
+                        }
+                        if !confirmAirlines.isEmpty {
+                            HStack { Text("AEROLÍNEAS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                            ForEach($confirmAirlines) { $al in
+                                HStack(spacing: 10) {
+                                    Text(al.name).font(.palatino(.body)).lineLimit(1)
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button { if al.count > 0 { al.count -= 1 } } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                        Text("\(al.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                        Button { al.count += 1 } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                if al.id != confirmAirlines.last?.id { Divider().padding(.leading, 16) }
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 300)
+                Divider()
+                HStack(spacing: 12) {
+                    Button { onCancel() } label: {
+                        Text("Cancelar")
+                            .font(.palatino(.body)).frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    Button { onSave() } label: {
+                        Text("Guardar")
+                            .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 20)
+            .shadow(radius: 20)
+        }
+        .presentationBackground(.clear)
+        .interactiveDismissDisabled(true)
     }
 }
 
@@ -4439,6 +5648,8 @@ struct TransportStatsSheet: View {
     @State private var selectedTransportFilter: (String, String)? = nil
     @State private var showAirportStats = false
     @State private var showAirlineStats = false
+    @State private var showSubscription: Bool = false
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
 
     private let transports = PlannedDatePickerSheet.transports
 
@@ -4452,7 +5663,15 @@ struct TransportStatsSheet: View {
         let isoCodesWithPastTrips = Set(pastTrips.map { $0.isoCode })
         return transports.compactMap { t -> (emoji: String, label: String, count: Int)? in
             let matchEmojis: Set<String> = t.emoji == "🚶🏻" ? ["🚶🏻", "🚶"] : [t.emoji]
-            let fromTrips = pastTrips.filter { matchEmojis.contains($0.transport ?? "") }.count
+            // Contar viajes padre mirando todos sus segmentos, no solo el transporte principal
+            let fromTrips = pastTrips.filter { trip -> Bool in
+                guard !trip.isSegmentChild else {
+                    return matchEmojis.contains(trip.transport ?? "")
+                }
+                let segs = trip.tripSegments
+                if segs.isEmpty { return matchEmojis.contains(trip.transport ?? "") }
+                return segs.contains { matchEmojis.contains($0.transport) }
+            }.count
             let fromCountry = visitedCountries.filter { country -> Bool in
                 guard matchEmojis.contains(country.transport ?? "") else { return false }
                 guard !isoCodesWithPastTrips.contains(country.isoCode) else { return false }
@@ -4602,6 +5821,25 @@ struct TransportStatsSheet: View {
 
                     Spacer(minLength: 24)
                 }
+                .blur(radius: isRaskmapPro ? 0 : 10)
+                .allowsHitTesting(isRaskmapPro)
+                .overlay {
+                    if !isRaskmapPro {
+                        Button { showSubscription = true } label: {
+                            VStack(spacing: 10) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 36))
+                                    .foregroundStyle(.purple)
+                                Text("Función Pro")
+                                    .font(.palatino(.body, weight: .bold))
+                                    .foregroundStyle(.purple)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             .navigationTitle("Transporte")
             .navigationBarTitleDisplayMode(.inline)
@@ -4623,6 +5861,7 @@ struct TransportStatsSheet: View {
             .sheet(isPresented: $showAirlineStats) {
                 AirlineStatsSheet(airlines: topAirlines)
             }
+            .sheet(isPresented: $showSubscription) { SubscriptionSheet() }
         }
         .presentationDetents([.large])
         .appColorScheme()
@@ -4737,33 +5976,28 @@ struct CountryTripsSheet: View {
                     } else {
                         toDelete = [trip]
                     }
-                    // Collect all affected isoCodes before deleting
                     let affectedIsos = Set(toDelete.map { $0.isoCode })
-                    let deletedSet = Set(toDelete.map { ObjectIdentifier($0) })
                     for t in toDelete { modelContext.delete(t) }
                     try? modelContext.save()
-                    // For each affected country, check if it still has trips or manual count
-                    let allTripsDesc = FetchDescriptor<Trip>()
-                    let allRemainingTrips = (try? modelContext.fetch(allTripsDesc)) ?? []
                     for iso in affectedIsos {
-                        let countryDesc = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
-                        guard let affectedCountry = try? modelContext.fetch(countryDesc).first else { continue }
-                        guard affectedCountry.status == .visited || affectedCountry.status == .lived else { continue }
-                        let remainingForCountry = allRemainingTrips.filter {
-                            $0.isoCode == iso && !deletedSet.contains(ObjectIdentifier($0))
-                        }
-                        guard remainingForCountry.isEmpty && affectedCountry.visitCount == 0 else { continue }
-                        // No trips and no manual count — downgrade status
-                        if affectedCountry.plannedDate != nil {
-                            // Has a planned/próximo date → keep as wantToVisit
-                            affectedCountry.status = .wantToVisit
+                        let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
+                        guard let c = try? modelContext.fetch(cd).first else { continue }
+                        guard c.status == .visited || c.status == .lived else { continue }
+                        let td = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                        let remaining = (try? modelContext.fetch(td)) ?? []
+                        let today = Calendar.current.startOfDay(for: Date())
+                        let hasPast = remaining.contains { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
+                        let hasFuture = remaining.contains { Calendar.current.startOfDay(for: $0.dateFrom) > today }
+                        guard !hasPast && c.visitCount == 0 else { continue }
+                        if c.plannedDate != nil || hasFuture {
+                            c.status = .wantToVisit
                         } else {
-                            affectedCountry.status = .none
-                            affectedCountry.hasLived = false
-                            affectedCountry.plannedDate = nil
-                            affectedCountry.plannedDateTo = nil
-                            affectedCountry.transport = nil
-                            affectedCountry.plannedTitle = nil
+                            c.status = .none
+                            c.hasLived = false
+                            c.plannedDate = nil
+                            c.plannedDateTo = nil
+                            c.transport = nil
+                            c.plannedTitle = nil
                         }
                     }
                     try? modelContext.save()
@@ -4810,28 +6044,46 @@ struct CountryTripsSheet: View {
         .presentationDetents([.large])
     }
 
+    // Devuelve el trip padre de un child, o nil si no aplica
+    private func resolvedParent(for trip: Trip) -> Trip? {
+        guard trip.isSegmentChild, let groupID = trip.segmentGroupID else { return nil }
+        let desc = FetchDescriptor<Trip>(predicate: #Predicate { t in t.segmentGroupID == groupID && !t.isSegmentChild })
+        return try? modelContext.fetch(desc).first
+    }
+
     @ViewBuilder
     private func tripRow(_ trip: Trip) -> some View {
+        // Para trips hijo (isSegmentChild), mostrar y editar siempre desde el padre
+        let display = resolvedParent(for: trip) ?? trip
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 12) {
-                Text(trip.transport ?? "🌐").font(.title3)
+                Text(display.transport ?? "🌐").font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    if let t = trip.title, !t.isEmpty {
+                    if let t = display.title, !t.isEmpty {
                         Text(t).font(.palatino(.body, weight: .bold))
                     }
                     HStack(spacing: 4) {
-                        Text(Self.fmt.string(from: trip.dateFrom))
+                        Text(Self.fmt.string(from: display.dateFrom))
                             .font(.palatino(.caption)).foregroundStyle(.secondary)
-                        if let to = trip.dateTo {
+                        if let to = display.dateTo {
                             Text("→").font(.palatino(.caption)).foregroundStyle(.secondary)
                             Text(Self.fmt.string(from: to))
                                 .font(.palatino(.caption)).foregroundStyle(.secondary)
                         }
+                        let tripDay = Calendar.current.startOfDay(for: display.dateFrom)
+                        let todayDay = Calendar.current.startOfDay(for: Date())
+                        if tripDay > todayDay {
+                            let days = Calendar.current.dateComponents([.day], from: todayDay, to: tripDay).day ?? 0
+                            Text("\(days)d")
+                                .font(.palatino(.caption, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color.blue, in: Capsule())
+                        }
                     }
-                    if trip.transport == "✈️" {
-                        let flightSeg = trip.tripSegments.first(where: { $0.transport == "✈️" && $0.airports?.isEmpty == false })
+                    if display.transport == "✈️" {
+                        let flightSeg = display.tripSegments.first(where: { $0.transport == "✈️" && $0.airports?.isEmpty == false })
                         if let seg = flightSeg, let aps = seg.airports, !aps.isEmpty {
-                            // Show ordered route from segment
                             Text(aps.map(\.iata).joined(separator: " → "))
                                 .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue)
                             if let retAps = seg.returnAirports, !retAps.isEmpty {
@@ -4839,14 +6091,13 @@ struct CountryTripsSheet: View {
                                     .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue.opacity(0.65))
                             }
                         } else {
-                            // Fallback for legacy trips without segments
-                            let aps = trip.airports
+                            let aps = display.airports
                             if !aps.isEmpty {
                                 Text(aps.joined(separator: " · "))
                                     .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue)
                             }
                         }
-                        let als = trip.airlines
+                        let als = display.airlines
                         if !als.isEmpty {
                             Text(als.joined(separator: ", "))
                                 .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
@@ -4859,7 +6110,7 @@ struct CountryTripsSheet: View {
                 }
                 .buttonStyle(.plain).frame(width: 28)
             }
-            Button { editingTrip = trip } label: {
+            Button { editingTrip = display } label: {
                 Label("Editar viaje", systemImage: "pencil.circle")
                     .font(.palatino(.caption)).foregroundStyle(.blue)
             }
@@ -4931,9 +6182,13 @@ struct TransportTripsListSheet: View {
     private var sorted: [Trip] {
         let today = Calendar.current.startOfDay(for: Date())
         let matchEmojis: Set<String> = transportEmoji == "🚶🏻" ? ["🚶🏻", "🚶"] : [transportEmoji]
-        return trips.filter { matchEmojis.contains($0.transport ?? "") &&
-            Calendar.current.startOfDay(for: $0.dateFrom) <= today }
-             .sorted { $0.dateFrom > $1.dateFrom }
+        return trips.filter { trip in
+            guard Calendar.current.startOfDay(for: trip.dateFrom) <= today else { return false }
+            if trip.isSegmentChild { return matchEmojis.contains(trip.transport ?? "") }
+            let segs = trip.tripSegments
+            if segs.isEmpty { return matchEmojis.contains(trip.transport ?? "") }
+            return segs.contains { matchEmojis.contains($0.transport) }
+        }.sorted { $0.dateFrom > $1.dateFrom }
     }
 
     private func countryName(for isoCode: String) -> String {
@@ -5015,7 +6270,11 @@ struct EditTripSheet: View {
         tripSegments.map(\.dateFrom).min() ?? trip.dateFrom
     }
     private var calculatedDateTo: Date? {
-        tripSegments.compactMap(\.dateTo).max()
+        let explicit = tripSegments.compactMap(\.dateTo).max()
+        if let e = explicit { return e }
+        let latestFrom = tripSegments.map(\.dateFrom).max()
+        guard let latest = latestFrom, latest > calculatedDateFrom else { return nil }
+        return latest
     }
 
     private func segmentCountryNames(_ seg: TripSegment) -> String {
@@ -5055,10 +6314,18 @@ struct EditTripSheet: View {
         }
         let apSeg = tripSegments.first(where: { $0.transport == "✈️" && $0.airports?.isEmpty == false })
         var apC: [String: Int] = [:]
-        for ap in apSeg?.airports ?? [] { apC[ap.iata, default: 0] += 1 }
-        for ap in apSeg?.returnAirports ?? [] { apC[ap.iata, default: 0] += 1 }
+        for ap in (apSeg?.airports ?? []) + (apSeg?.returnAirports ?? []) {
+            apC[ap.iata] = max(apC[ap.iata, default: 0], ap.count)
+        }
         confirmAirports = apC.map { AirportConfirmEntry(iata: $0.key, count: $0.value) }.sorted { $0.iata < $1.iata }
         confirmAirlines = (apSeg?.airlines ?? []).map { AirlineConfirmEntry(name: $0.name, count: $0.count) }
+        // fallback: viajes guardados antes del sistema de segmentos
+        if confirmAirports.isEmpty {
+            confirmAirports = trip.tripAirports.map { AirportConfirmEntry(iata: $0.iata, count: $0.count) }
+        }
+        if confirmAirlines.isEmpty {
+            confirmAirlines = trip.tripAirlines.map { AirlineConfirmEntry(name: $0.name, count: $0.count) }
+        }
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         withAnimation { showSaveConfirmation = true }
     }
@@ -5069,7 +6336,7 @@ struct EditTripSheet: View {
         if !trip.isSegmentChild {
             trip.dateFrom = calculatedDateFrom
             trip.dateTo = calculatedDateTo
-            trip.transport = selectedTransport ?? "🌍"
+            trip.transport = tripSegments.isEmpty ? "🌍" : (tripSegments.first?.transport ?? "🌍")
             let airplaneSeg = tripSegments.first(where: { $0.transport == "✈️" && ($0.airports?.isEmpty == false) })
             if !confirmAirports.isEmpty || !confirmAirlines.isEmpty {
                 trip.tripAirports = confirmAirports.map { TripAirport(iata: $0.iata, count: $0.count) }
@@ -5099,15 +6366,28 @@ struct EditTripSheet: View {
                     countForIso[trip.isoCode] = max(countForIso[trip.isoCode, default: 0], 1)
                 }
                 // Extra visits for main country
+                let segsForMain = tripSegments.filter { $0.isoCodes.contains(trip.isoCode) }
                 let mainCount = countForIso[trip.isoCode] ?? 1
-                for _ in 0..<(mainCount - 1) {
+                for i in 0..<(mainCount - 1) {
+                    let extraSeg = (i + 1) < segsForMain.count ? segsForMain[i + 1] : segsForMain.last
+                    let extraTransport = extraSeg?.transport ?? trip.transport
+                    var extraAps: [TripAirport] = []
+                    var extraAls: [TripAirline] = []
+                    if extraSeg?.transport == "✈️" {
+                        var apC3: [String: Int] = [:]
+                        for ap in extraSeg?.airports ?? [] { apC3[ap.iata, default: 0] += 1 }
+                        for ap in extraSeg?.returnAirports ?? [] { apC3[ap.iata, default: 0] += 1 }
+                        extraAps = apC3.map { TripAirport(iata: $0.key, count: $0.value) }
+                        extraAls = extraSeg?.airlines ?? []
+                    }
                     let extra = Trip(isoCode: trip.isoCode, title: trimmedTitle.isEmpty ? nil : trimmedTitle,
-                                    dateFrom: calculatedDateFrom, dateTo: calculatedDateTo,
-                                    transport: trip.transport,
-                                    tripAirports: trip.tripAirports, tripAirlines: trip.tripAirlines)
-                    extra.hasLayover = airplaneSeg?.hasLayover ?? false
+                                    dateFrom: extraSeg?.dateFrom ?? calculatedDateFrom,
+                                    dateTo: extraSeg?.dateTo ?? calculatedDateTo,
+                                    transport: extraTransport, tripAirports: extraAps, tripAirlines: extraAls)
+                    extra.hasLayover = extraSeg?.hasLayover ?? false
                     extra.segmentGroupID = groupID
                     extra.isSegmentChild = true
+                    if let seg = extraSeg { extra.tripSegments = [seg] }
                     modelContext.insert(extra)
                 }
                 // Children for other countries
@@ -5131,6 +6411,7 @@ struct EditTripSheet: View {
                         child.hasLayover = seg?.hasLayover ?? false
                         child.segmentGroupID = groupID
                         child.isSegmentChild = true
+                        if let seg { child.tripSegments = [seg] }
                         modelContext.insert(child)
                         if Calendar.current.startOfDay(for: d) <= today {
                             let countryIso = iso
@@ -5257,112 +6538,141 @@ struct EditTripSheet: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled(showSaveConfirmation)
         .sheet(isPresented: $showAddSegment, onDismiss: { editingSegment = nil }) {
             AddSegmentSheet(features: features, isForFuture: isForFuture, initialSegment: editingSegment) { seg in
                 tripSegments.append(seg)
             }
         }
-        .overlay {
-            if showSaveConfirmation {
-                ZStack {
-                    Color.black.opacity(0.4)
+        .fullScreenCover(isPresented: $showSaveConfirmation) {
+            editVisitConfirmCard(onSave: { showSaveConfirmation = false; performEditSave() },
+                                 onCancel: { showSaveConfirmation = false })
+        }
+        .appColorScheme()
+    }
+
+    @ViewBuilder
+    private func editVisitConfirmCard(onSave: @escaping () -> Void, onCancel: @escaping () -> Void) -> some View {
+        ZStack {
+            Color.black.opacity(0.5).ignoresSafeArea()
+            VStack(spacing: 0) {
+                Text("Se han detectado estas visitas a estos países, modifícalo a tu gusto o acéptalo.")
+                    .font(.palatino(.subheadline, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
+                Divider()
+                ScrollView {
                     VStack(spacing: 0) {
-                        Text("Se han detectado estas visitas a estos países, modifícalo a tu gusto o acéptalo.")
-                            .font(.palatino(.subheadline, weight: .bold))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
-                        Divider()
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                ForEach($confirmVisits) { $entry in
-                                    HStack(spacing: 10) {
-                                        if !entry.flagEmoji.isEmpty { Text(entry.flagEmoji).font(.title3) }
-                                        Text(entry.name).font(.palatino(.body)).lineLimit(1)
-                                        Spacer()
-                                        HStack(spacing: 12) {
-                                            Button { if entry.count > 0 { entry.count -= 1 } } label: {
-                                                Image(systemName: "minus.circle.fill")
-                                                    .foregroundStyle(entry.count > 0 ? .red : Color(.systemGray4)).font(.title3)
-                                            }.buttonStyle(.plain)
-                                            Text("\(entry.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
-                                            Button { entry.count += 1 } label: {
-                                                Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.title3)
-                                            }.buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(.horizontal, 16).padding(.vertical, 10)
-                                    Divider().padding(.leading, 16)
-                                }
-                                if !confirmAirports.isEmpty {
-                                    HStack { Text("AEROPUERTOS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
-                                        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
-                                    ForEach($confirmAirports) { $ap in
-                                        HStack(spacing: 10) {
-                                            Text("✈️ \(ap.iata)").font(.palatino(.body, weight: .bold))
-                                            Spacer()
-                                            HStack(spacing: 12) {
-                                                Button { if ap.count > 0 { ap.count -= 1 } } label: {
-                                                    Image(systemName: "minus.circle.fill")
-                                                        .foregroundStyle(ap.count > 0 ? .red : Color(.systemGray4)).font(.title3)
-                                                }.buttonStyle(.plain)
-                                                Text("\(ap.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
-                                                Button { ap.count += 1 } label: {
-                                                    Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.title3)
-                                                }.buttonStyle(.plain)
-                                            }
-                                        }
-                                        .padding(.horizontal, 16).padding(.vertical, 8)
-                                        Divider().padding(.leading, 16)
-                                    }
-                                }
-                                if !confirmAirlines.isEmpty {
-                                    HStack { Text("AEROLÍNEAS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
-                                        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
-                                    ForEach($confirmAirlines) { $al in
-                                        HStack(spacing: 10) {
-                                            Text(al.name).font(.palatino(.body)).lineLimit(1)
-                                            Spacer()
-                                            HStack(spacing: 12) {
-                                                Button { if al.count > 0 { al.count -= 1 } } label: {
-                                                    Image(systemName: "minus.circle.fill")
-                                                        .foregroundStyle(al.count > 0 ? .red : Color(.systemGray4)).font(.title3)
-                                                }.buttonStyle(.plain)
-                                                Text("\(al.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
-                                                Button { al.count += 1 } label: {
-                                                    Image(systemName: "plus.circle.fill").foregroundStyle(.blue).font(.title3)
-                                                }.buttonStyle(.plain)
-                                            }
-                                        }
-                                        .padding(.horizontal, 16).padding(.vertical, 8)
-                                        Divider().padding(.leading, 16)
-                                    }
+                        HStack { Text("PAÍSES").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                        ForEach($confirmVisits) { $entry in
+                            HStack(spacing: 10) {
+                                if !entry.flagEmoji.isEmpty { Text(entry.flagEmoji).font(.title3) }
+                                Text(entry.name).font(.palatino(.body)).lineLimit(1)
+                                Spacer()
+                                HStack(spacing: 12) {
+                                    Button { if entry.count > 0 { entry.count -= 1 } } label: {
+                                        ZStack {
+                                            Circle().fill(Color(.systemGray4))
+                                            Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                        }.frame(width: 28, height: 28)
+                                    }.buttonStyle(.plain)
+                                    Text("\(entry.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                    Button { entry.count += 1 } label: {
+                                        ZStack {
+                                            Circle().fill(Color(.systemGray4))
+                                            Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                        }.frame(width: 28, height: 28)
+                                    }.buttonStyle(.plain)
                                 }
                             }
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            Divider().padding(.leading, 16)
                         }
-                        .frame(maxHeight: 280)
-                        Divider()
-                        Button {
-                            withAnimation { showSaveConfirmation = false }
-                            performEditSave()
-                        } label: {
-                            Text("Aceptar")
-                                .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
-                                .foregroundStyle(.white)
+                        if !confirmAirports.isEmpty {
+                            HStack { Text("AEROPUERTOS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                            ForEach($confirmAirports) { $ap in
+                                HStack(spacing: 10) {
+                                    Text("✈️ \(ap.iata)").font(.palatino(.body, weight: .bold))
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button { if ap.count > 0 { ap.count -= 1 } } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                        Text("\(ap.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                        Button { ap.count += 1 } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                Divider().padding(.leading, 16)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        if !confirmAirlines.isEmpty {
+                            HStack { Text("AEROLÍNEAS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary); Spacer() }
+                                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 2)
+                            ForEach($confirmAirlines) { $al in
+                                HStack(spacing: 10) {
+                                    Text(al.name).font(.palatino(.body)).lineLimit(1)
+                                    Spacer()
+                                    HStack(spacing: 12) {
+                                        Button { if al.count > 0 { al.count -= 1 } } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "minus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                        Text("\(al.count)").font(.palatino(.body, weight: .bold)).frame(minWidth: 24, alignment: .center)
+                                        Button { al.count += 1 } label: {
+                                            ZStack {
+                                                Circle().fill(Color(.systemGray4))
+                                                Image(systemName: "plus").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.white)
+                                            }.frame(width: 28, height: 28)
+                                        }.buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                if al.id != confirmAirlines.last?.id { Divider().padding(.leading, 16) }
+                            }
+                        }
                     }
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-                    .padding(.horizontal, 12)
-                    .shadow(radius: 20)
                 }
-                .transition(.opacity)
+                .frame(maxHeight: 300)
+                Divider()
+                HStack(spacing: 12) {
+                    Button { onCancel() } label: {
+                        Text("Cancelar")
+                            .font(.palatino(.body)).frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    Button { onSave() } label: {
+                        Text("Guardar")
+                            .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 20)
+            .shadow(radius: 20)
         }
-        .animation(.easeInOut(duration: 0.2), value: showSaveConfirmation)
-        .appColorScheme()
+        .presentationBackground(.clear)
+        .interactiveDismissDisabled(true)
     }
 }
 
@@ -5422,7 +6732,9 @@ struct MapExportSheet: View {
     @State private var quadrantToEdit: MapQuadrant? = nil
     @State private var isEditingQuadrants: Bool = false
     @State private var quadrantToDelete: MapQuadrant? = nil
+    @State private var showResetConfirm: Bool = false
     @AppStorage("mapQuadrantsData") private var mapQuadrantsData: String = "{}"
+    @AppStorage("didInsertDefaultQuadrants") private var didInsertDefaultQuadrants: Bool = false
 
     private var allQuadrants: [String: [MapQuadrant]] {
         guard let data = mapQuadrantsData.data(using: .utf8),
@@ -5479,6 +6791,76 @@ struct MapExportSheet: View {
         if let data = try? JSONEncoder().encode(all), let str = String(data: data, encoding: .utf8) {
             mapQuadrantsData = str
         }
+    }
+    private func insertDefaultsIfNeeded(zone: ExportZone, defaults: [(pos: Int, title: String, codes: [String])]) {
+        var all = allQuadrants
+        var list = all[zone.rawValue] ?? []
+        // Normalize legacy positions (position == -1) before checking
+        if list.contains(where: { $0.position < 0 || $0.position >= 4 }) {
+            for i in list.indices { list[i].position = i }
+        }
+        let occupied = Set(list.filter { $0.position >= 0 && $0.position < 4 }.map { $0.position })
+        var changed = false
+        for d in defaults where !occupied.contains(d.pos) {
+            list.append(MapQuadrant(title: d.title, candidateIsoCodes: d.codes, position: d.pos))
+            changed = true
+        }
+        if changed {
+            all[zone.rawValue] = list
+            if let data = try? JSONEncoder().encode(all), let str = String(data: data, encoding: .utf8) {
+                mapQuadrantsData = str
+            }
+        }
+    }
+    private func insertZoneDefaultsIfNeeded() {
+        guard !didInsertDefaultQuadrants else { return }
+        insertDefaultsIfNeeded(zone: .europa, defaults: [
+            (0, "Unión Europea 🇪🇺", ["AUT","BEL","BGR","HRV","CYP","CZE","DNK","EST","FIN","FRA",
+                                       "DEU","GRC","HUN","IRL","ITA","LVA","LTU","LUX","MLT","NLD",
+                                       "POL","PRT","ROU","SVK","SVN","ESP","SWE"]),
+            (1, "Microestados 🌐",   ["AND","LIE","MCO","SMR","VAT","MLT"]),
+            (2, "Países nórdicos ❄️", ["NOR","SWE","DNK","FIN","ISL","FRO","ALD"])
+        ])
+        insertDefaultsIfNeeded(zone: .asia, defaults: [
+            (0, "Asia Central 🏔️",  ["KAZ","KGZ","TJK","TKM","UZB","AFG"]),
+            (1, "Asia Este 🏯",      ["CHN","JPN","PRK","KOR","MNG","TWN","HKG","MAC"]),
+            (2, "Asia Sur 🌺",       ["IND","PAK","BGD","LKA","NPL","BTN","MDV","IOT"])
+        ])
+        insertDefaultsIfNeeded(zone: .africa, defaults: [
+            (0, "Insulares 🏝️",  ["CPV","COM","MDG","MUS","STP","SYC","SHN"]),
+            (1, "Safari 🦁",     ["KEN","TZA","ZAF","BWA","NAM","ZWE","UGA","RWA",
+                                   "ETH","MOZ","ZMB","MWI","TCD","GAB","CMR"]),
+            (2, "Sahel ☀️",      ["MRT","SEN","GMB","MLI","BFA","NER","NGA","TCD",
+                                   "SDN","SSD","ERI","SAH"])
+        ])
+        insertDefaultsIfNeeded(zone: .america, defaults: [
+            (0, "Norteamérica 🦅",    ["MEX","CAN","USA","GRL","SPM"]),
+            (1, "Centroamérica 🌴",   ["BLZ","GTM","SLV","HND","NIC","CRI","PAN",
+                                        "ATG","BHS","BRB","CUB","DMA","DOM","GRD",
+                                        "HTI","JAM","KNA","LCA","VCT","TTO",
+                                        "ABW","AIA","BMU","VGB","CYM","CUW",
+                                        "MSR","PRI","BLM","MAF","SXM","TCA","VIR"]),
+            (2, "Sudamérica 🌎",      ["ARG","BOL","BRA","CHL","COL","ECU","GUY",
+                                        "PRY","PER","SUR","URY","VEN","FLK"])
+        ])
+        insertDefaultsIfNeeded(zone: .medioOriente, defaults: [
+            (0, "Petroleros 🛢️",    ["SAU","ARE","IRQ","IRN","KWT","QAT","BHR","OMN"]),
+            (1, "Históricos 🏛️",   ["IRQ","ISR","JOR","LBN","SYR","IRN","TUR",
+                                      "PSE","YEM","OMN","SAU"]),
+            (2, "F1 GP 🏎️",        ["BHR","SAU","ARE","QAT"])
+        ])
+        insertDefaultsIfNeeded(zone: .oceania, defaults: [
+            (0, "Una isla 🏝️",        ["NRU","NIU","GUM","NFK"]),
+            (1, "Commonwealth 👑",     ["AUS","NZL","PNG","FJI","SLB","VUT","TON",
+                                         "WSM","KIR","NRU","TUV","COK","NIU","NFK","PCN"]),
+            (2, "Comparten isla 🌊",   ["PNG","IDN"])
+        ])
+        didInsertDefaultQuadrants = true
+    }
+    private func resetToDefaults() {
+        mapQuadrantsData = "{}"
+        didInsertDefaultQuadrants = false
+        insertZoneDefaultsIfNeeded()
     }
     @discardableResult
     private func swapQuadrant(idStr: String?, toIndex: Int) -> Bool {
@@ -5646,8 +7028,13 @@ struct MapExportSheet: View {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { isEditingQuadrants.toggle() } label: {
-                        Image(systemName: isEditingQuadrants ? "checkmark" : "pencil")
+                    HStack(spacing: 16) {
+                        Button { showResetConfirm = true } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                        }
+                        Button { isEditingQuadrants.toggle() } label: {
+                            Image(systemName: isEditingQuadrants ? "checkmark" : "pencil")
+                        }
                     }
                 }
             }
@@ -5676,8 +7063,15 @@ struct MapExportSheet: View {
             } message: {
                 if let q = quadrantToDelete { Text("Se eliminará «\(q.title)».") }
             }
+            .alert("Restablecer cuadrantes", isPresented: $showResetConfirm) {
+                Button("Restablecer", role: .destructive) { resetToDefaults() }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se borrarán todos los cuadrantes actuales y se restaurarán los predeterminados.")
+            }
         }
         .appColorScheme()
+        .onAppear { insertZoneDefaultsIfNeeded() }
     }
 
     @ViewBuilder
@@ -6017,7 +7411,9 @@ struct MedalleroSheet: View {
     @State private var editingSpot: ProfileSheet.TopSpot? = nil
     @State private var editingAward: PersonalAwardModel? = nil
     @State private var showAlphabet: Bool = false
+    @State private var showSubscription: Bool = false
     @AppStorage("countingMode") private var countingModeRaw: String = CountingMode.all.rawValue
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
 
     private func tableDict() -> [String: String] {
         guard let data = topTable.data(using: .utf8),
@@ -6152,6 +7548,25 @@ struct MedalleroSheet: View {
                 .padding(.top, 4)
                 }
                 .padding(.top, 16)
+                .blur(radius: isRaskmapPro ? 0 : 10)
+                .allowsHitTesting(isRaskmapPro)
+                .overlay {
+                    if !isRaskmapPro {
+                        Button { showSubscription = true } label: {
+                            VStack(spacing: 10) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 36))
+                                    .foregroundStyle(.purple)
+                                Text("Función Pro")
+                                    .font(.palatino(.body, weight: .bold))
+                                    .foregroundStyle(.purple)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             .navigationTitle("Premios")
             .navigationBarTitleDisplayMode(.inline)
@@ -6173,6 +7588,9 @@ struct MedalleroSheet: View {
                 visitedIsoCodes: visitedIsoCodes,
                 countingModeRaw: countingModeRaw
             )
+        }
+        .sheet(isPresented: $showSubscription) {
+            SubscriptionSheet()
         }
         .sheet(item: $editingSpot) { spot in
             TableFlagPickerSheet(
@@ -6300,6 +7718,8 @@ struct FlagAlphabetSheet: View {
     let countingModeRaw: String
 
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
+    @State private var showSubscription: Bool = false
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
@@ -6363,6 +7783,25 @@ struct FlagAlphabetSheet: View {
                     }
                 }
                 .padding(.vertical, 16)
+                .blur(radius: isRaskmapPro ? 0 : 10)
+                .allowsHitTesting(isRaskmapPro)
+                .overlay {
+                    if !isRaskmapPro {
+                        Button { showSubscription = true } label: {
+                            VStack(spacing: 10) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 36))
+                                    .foregroundStyle(.purple)
+                                Text("Función Pro")
+                                    .font(.palatino(.body, weight: .bold))
+                                    .foregroundStyle(.purple)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             .navigationTitle(countingMode == .all ? "Territorios visitados" : "Países visitados")
             .navigationBarTitleDisplayMode(.inline)
@@ -6373,6 +7812,7 @@ struct FlagAlphabetSheet: View {
                 }
             }
         }
+        .sheet(isPresented: $showSubscription) { SubscriptionSheet() }
         .presentationDetents([.large])
         .appColorScheme()
     }
@@ -6468,7 +7908,7 @@ struct MultiContinentSheet: View {
                 }
             }
         }
-        .presentationDetents([.fraction(0.70)])
+        .presentationDetents([.fraction(0.60), .large])
         .appColorScheme()
     }
 }
@@ -6626,6 +8066,16 @@ extension Font {
         case .caption2:    size = 11
         @unknown default:  size = 17
         }
+        let family = UserDefaults.standard.string(forKey: "appFontFamily") ?? "satoshi"
+        if family == "satoshi" {
+            // Satoshi weight mapping — añade los archivos Satoshi-*.ttf al bundle y en Info.plist
+            switch weight {
+            case .bold, .semibold: return .custom("Satoshi-Bold", size: size)
+            case .medium:          return .custom("Satoshi-Medium", size: size)
+            case .light:           return .custom("Satoshi-Light", size: size)
+            default:               return .custom("Satoshi-Regular", size: size)
+            }
+        }
         switch weight {
         case .bold:        return .custom("Palatino-Bold", size: size)
         case .semibold:    return .custom("Palatino-Bold", size: size)
@@ -6679,6 +8129,7 @@ struct RouteWizardSheet: View {
         case returnDeparture, returnLayoverChoice, returnLayoverList
         case returnLayoverAddAirport, returnLayoverAddAirline
         case returnFinalDest, returnFinalAirline
+        case returnSameRouteAirline  // aerolínea por tramo para misma ruta de vuelta con escalas
     }
 
     @State private var step: Step = .departure
@@ -6689,6 +8140,7 @@ struct RouteWizardSheet: View {
     @State private var finalAirline = ""
     @State private var returnAirlineDraft = ""
     @State private var returnDepartureIata = ""
+    @State private var returnSameRouteAirlineIdx: Int = 0  // índice del tramo de vuelta en curso
     @State private var returnLayoverStops: [(iata: String, airline: String)] = []
     @State private var returnPendingLayoverIata = ""
     @State private var returnFinalIata = ""
@@ -6721,10 +8173,24 @@ struct RouteWizardSheet: View {
         case .returnLayoverAddAirline: return .returnLayoverAddAirport
         case .returnFinalDest:        return returnLayoverStops.isEmpty ? .returnLayoverChoice : .returnLayoverList
         case .returnFinalAirline:     return .returnFinalDest
+        case .returnSameRouteAirline: return .returnAirlineChoice  // se usa solo si idx==0; goBack() lo gestiona
         }
     }
 
     private func goBack() {
+        if step == .returnSameRouteAirline {
+            if returnSameRouteAirlineIdx > 0 {
+                returnSameRouteAirlineIdx -= 1
+                if returnSameRouteAirlineIdx < returnLayoverStops.count {
+                    returnLayoverStops[returnSameRouteAirlineIdx].airline = ""
+                } else {
+                    returnFinalAirline = ""
+                }
+                query = ""; return
+            } else {
+                query = ""; step = .returnAirlineChoice; return
+            }
+        }
         guard let prev = backStep else { dismiss(); return }
         if step == .layoverAddAirline { pendingLayoverIata = "" }
         if step == .returnLayoverAddAirline { returnPendingLayoverIata = "" }
@@ -6781,6 +8247,9 @@ struct RouteWizardSheet: View {
         case .returnLayoverAddAirline: return "Vuelta · Aerolínea del tramo"
         case .returnFinalDest:        return "Vuelta · Destino"
         case .returnFinalAirline:     return "Vuelta · Aerolínea"
+        case .returnSameRouteAirline:
+            let total = returnLayoverStops.count + 1
+            return "Vuelta · Aerolínea \(returnSameRouteAirlineIdx + 1)/\(total)"
         }
     }
 
@@ -6918,6 +8387,20 @@ struct RouteWizardSheet: View {
                 returnFinalAirline = name; query = ""
                 buildAndSaveWithReturnRoute()
             }
+        case .returnSameRouteAirline:
+            // Pide aerolínea para cada tramo de vuelta (misma ruta, aerolíneas distintas)
+            airlineSearch(hint: "Aerolínea") { name in
+                if returnSameRouteAirlineIdx < returnLayoverStops.count {
+                    returnLayoverStops[returnSameRouteAirlineIdx].airline = name
+                    returnSameRouteAirlineIdx += 1
+                    query = ""
+                    // El step no cambia — el índice actualizado re-renderiza el título
+                } else {
+                    returnFinalAirline = name
+                    query = ""
+                    buildAndSaveWithReturnRoute()
+                }
+            }
         }
     }
 
@@ -6925,21 +8408,58 @@ struct RouteWizardSheet: View {
     private var returnAirlineChoiceView: some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("¿Misma aerolínea a la vuelta?")
-                .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
-            if !finalAirline.isEmpty {
-                Text(finalAirline).font(.palatino(.subheadline)).foregroundStyle(.secondary)
+            if layoverStops.isEmpty {
+                // Vuelo directo: misma o diferente aerolínea
+                Text("¿Misma aerolínea a la vuelta?")
+                    .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
+                if !finalAirline.isEmpty {
+                    Text(finalAirline).font(.palatino(.subheadline)).foregroundStyle(.secondary)
+                }
+            } else {
+                // Vuelo con escalas: mostrar resumen de tramos de ida
+                Text("¿Mismas aerolíneas en todos los tramos?")
+                    .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(layoverStops.indices, id: \.self) { i in
+                        let prev = i == 0 ? departureIata : layoverStops[i - 1].iata
+                        let stop = layoverStops[i]
+                        HStack(spacing: 4) {
+                            Text("\(prev) → \(stop.iata)").font(.palatino(.caption, weight: .bold))
+                            if !stop.airline.isEmpty {
+                                Text("· \(stop.airline)").font(.palatino(.caption)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    let lastFrom = layoverStops.last?.iata ?? departureIata
+                    HStack(spacing: 4) {
+                        Text("\(lastFrom) → \(finalIata)").font(.palatino(.caption, weight: .bold))
+                        if !finalAirline.isEmpty {
+                            Text("· \(finalAirline)").font(.palatino(.caption)).foregroundStyle(.secondary)
+                        }
+                    }
+                }.padding(.horizontal, 32)
             }
             VStack(spacing: 12) {
                 Button { buildAndSave(isReturn: true) } label: {
-                    Text("Sí, la misma")
+                    Text("Sí, las mismas")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
                         .foregroundStyle(.white)
                 }
-                Button { query = ""; step = .returnAirline } label: {
-                    Text("No, diferente aerolínea")
+                Button {
+                    if layoverStops.isEmpty {
+                        query = ""; step = .returnAirline
+                    } else {
+                        // Flujo secuencial: pre-poblar la ruta de vuelta invertida y pedir aerolínea por tramo
+                        returnDepartureIata = finalIata
+                        returnFinalIata = departureIata
+                        returnLayoverStops = layoverStops.reversed().map { (iata: $0.iata, airline: "") }
+                        returnSameRouteAirlineIdx = 0
+                        query = ""; step = .returnSameRouteAirline
+                    }
+                } label: {
+                    Text(layoverStops.isEmpty ? "No, diferente aerolínea" : "No, introduzco tramo a tramo")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
@@ -6955,7 +8475,7 @@ struct RouteWizardSheet: View {
     private func airportSearch(hint: String, showFavorite: Bool = false, onSelect: @escaping (String) -> Void) -> some View {
         let airports = airportListForStep(showFavorite: showFavorite)
         let fav = favoriteAirport
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             searchBar(placeholder: hint)
             Divider()
             List(airports, id: \.iata) { ap in
@@ -7025,15 +8545,15 @@ struct RouteWizardSheet: View {
             Text("¿El vuelo tiene escala?")
                 .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
             VStack(spacing: 12) {
-                Button { query = ""; step = .layoverAddAirport } label: {
-                    Text("🔄  Con escala(s)")
+                Button { query = ""; step = .finalDest } label: {
+                    Text("✈️  Vuelo directo")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
                         .foregroundStyle(.white)
                 }
-                Button { query = ""; step = .finalDest } label: {
-                    Text("✈️  Vuelo directo")
+                Button { query = ""; step = .layoverAddAirport } label: {
+                    Text("🔄  Con escala(s)")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
@@ -7112,11 +8632,8 @@ struct RouteWizardSheet: View {
                 .font(.palatino(.title3, weight: .bold))
             VStack(spacing: 12) {
                 Button {
-                    if layoverStops.isEmpty {
-                        query = ""; step = .returnAirlineChoice
-                    } else {
-                        buildAndSave(isReturn: true)
-                    }
+                    // Siempre pasa por returnAirlineChoice para preguntar la aerolínea
+                    query = ""; step = .returnAirlineChoice
                 } label: {
                     Text("↩️  Sí, ida y vuelta (×2)")
                         .font(.palatino(.body, weight: .bold))
@@ -7158,15 +8675,15 @@ struct RouteWizardSheet: View {
             Text("¿El vuelo de vuelta tiene escala?")
                 .font(.palatino(.title3, weight: .bold)).multilineTextAlignment(.center)
             VStack(spacing: 12) {
-                Button { query = ""; step = .returnLayoverAddAirport } label: {
-                    Text("🔄  Con escala(s)")
+                Button { query = ""; step = .returnFinalDest } label: {
+                    Text("✈️  Vuelo directo")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
                         .foregroundStyle(.white)
                 }
-                Button { query = ""; step = .returnFinalDest } label: {
-                    Text("✈️  Vuelo directo")
+                Button { query = ""; step = .returnLayoverAddAirport } label: {
+                    Text("🔄  Con escala(s)")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
                         .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
@@ -7526,5 +9043,220 @@ struct AirlineStatsSheet: View {
         }
         .presentationDetents([.large])
         .appColorScheme()
+    }
+}
+
+// MARK: - Raskmap Pro
+// ID del producto en App Store Connect. Cámbialo cuando crees la suscripción.
+private let raskmapProProductID = "com.raskmap.pro.monthly"
+
+struct SubscriptionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
+
+    @State private var product: Product? = nil
+    @State private var isLoading: Bool = true
+    @State private var isPurchasing: Bool = false
+    @State private var isSubscribed: Bool = false
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 32) {
+
+                    // Hero
+                    VStack(spacing: 14) {
+                        Text("✈️")
+                            .font(.system(size: 64))
+                        Text("Raskmap Pro")
+                            .font(.palatino(.largeTitle, weight: .bold))
+                            .foregroundStyle(.purple)
+                        Text("Apoya el desarrollo de Raskmap\ny desbloquea funciones exclusivas")
+                            .font(.palatino(.body))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, 36)
+
+                    // Beneficios
+                    VStack(alignment: .leading, spacing: 18) {
+                        proBenefitRow(icon: "map.fill",        text: "Exportación del mapa sin marca de agua")
+                        proBenefitRow(icon: "chart.bar.fill",  text: "Estadísticas avanzadas de transporte")
+                        proBenefitRow(icon: "crown.fill",      text: "Insignia Pro en tu perfil")
+                        proBenefitRow(icon: "icloud.fill",     text: "Sincronización iCloud prioritaria")
+                        proBenefitRow(icon: "heart.fill",      text: "Apoyas el desarrollo independiente")
+                    }
+                    .padding(.horizontal, 36)
+
+                    // Estado / botón
+                    if isLoading {
+                        ProgressView()
+                            .padding(.top, 8)
+                    } else if isSubscribed {
+                        VStack(spacing: 12) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 44))
+                                .foregroundStyle(.purple)
+                            Text("Suscripción activa")
+                                .font(.palatino(.title3, weight: .bold))
+                                .foregroundStyle(.purple)
+                            Text("¡Gracias por apoyar Raskmap!")
+                                .font(.palatino(.body))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        VStack(spacing: 12) {
+                            Button {
+                                Task { await purchase() }
+                            } label: {
+                                Group {
+                                    if isPurchasing {
+                                        ProgressView()
+                                            .progressViewStyle(.circular)
+                                            .tint(.white)
+                                    } else {
+                                        let price = product?.displayPrice ?? "2,00 €"
+                                        Text("Suscribirse por \(price)/mes")
+                                            .font(.palatino(.body, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    (isPurchasing || product == nil)
+                                        ? Color.purple.opacity(0.4)
+                                        : Color.purple,
+                                    in: RoundedRectangle(cornerRadius: 14)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isPurchasing || product == nil)
+
+                            Button {
+                                Task { await restorePurchases() }
+                            } label: {
+                                Text("Restaurar compra")
+                                    .font(.palatino(.footnote))
+                                    .foregroundStyle(.purple)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isPurchasing)
+                        }
+                        .padding(.horizontal, 32)
+
+                        if let error = errorMessage {
+                            Text(error)
+                                .font(.palatino(.caption))
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                    }
+
+                    // Legal
+                    Text("La suscripción se renueva automáticamente cada mes al precio indicado. Puedes cancelarla en cualquier momento desde Ajustes > [tu nombre] > Suscripciones en tu iPhone.")
+                        .font(.palatino(.caption2))
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 48)
+                }
+            }
+            .navigationTitle("Raskmap Pro")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }
+                        .font(.palatino(.body))
+                }
+            }
+        }
+        .appColorScheme()
+        .task {
+            await loadProduct()
+            await checkSubscriptionStatus()
+        }
+    }
+
+    @ViewBuilder
+    private func proBenefitRow(icon: String, text: String) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundStyle(.purple)
+                .frame(width: 22, alignment: .center)
+            Text(text)
+                .font(.palatino(.body))
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func loadProduct() async {
+        isLoading = true
+        do {
+            let products = try await Product.products(for: [raskmapProProductID])
+            product = products.first
+            if product == nil {
+                errorMessage = "La suscripción no está disponible todavía."
+            }
+        } catch {
+            errorMessage = "No se pudo cargar la suscripción. Comprueba tu conexión."
+        }
+        isLoading = false
+    }
+
+    private func checkSubscriptionStatus() async {
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let tx) = result, tx.productID == raskmapProProductID {
+                isSubscribed = true
+                isRaskmapPro = true
+                return
+            }
+        }
+        isSubscribed = false
+        isRaskmapPro = false
+    }
+
+    private func purchase() async {
+        guard let product else { return }
+        isPurchasing = true
+        errorMessage = nil
+        do {
+            let result = try await product.purchase()
+            switch result {
+            case .success(let verification):
+                if case .verified(_) = verification {
+                    await checkSubscriptionStatus()
+                }
+            case .userCancelled:
+                break
+            case .pending:
+                errorMessage = "Compra pendiente de aprobación parental."
+            @unknown default:
+                break
+            }
+        } catch {
+            errorMessage = "Error al procesar el pago. Inténtalo de nuevo."
+        }
+        isPurchasing = false
+    }
+
+    private func restorePurchases() async {
+        isPurchasing = true
+        errorMessage = nil
+        do {
+            try await AppStore.sync()
+            await checkSubscriptionStatus()
+            if !isSubscribed {
+                errorMessage = "No se encontró ninguna compra anterior."
+            }
+        } catch {
+            errorMessage = "No se pudieron restaurar las compras."
+        }
+        isPurchasing = false
     }
 }

@@ -7,10 +7,14 @@ import WidgetKit
 import SwiftUI
 import AppIntents
 
-// MARK: - iCloud KV helper
+private let appGroupID = "group.com.jaime.raskmap"
 
-func intFromKV(_ key: String) -> Int {
-    Int(NSUbiquitousKeyValueStore.default.longLong(forKey: key))
+private var sharedDefaults: UserDefaults? { UserDefaults(suiteName: appGroupID) }
+
+// MARK: - App Group helpers
+
+func intFromShared(_ key: String) -> Int {
+    sharedDefaults?.integer(forKey: key) ?? 0
 }
 
 // MARK: - Modo de conteo
@@ -65,6 +69,7 @@ struct RaskmapEntry: TimelineEntry {
     let date: Date
     let mode: WCountingMode
     let visited: Int
+    let bgColor: Color
 }
 
 // MARK: - Provider
@@ -74,7 +79,7 @@ struct RaskmapProvider: AppIntentTimelineProvider {
     typealias Entry  = RaskmapEntry
 
     func placeholder(in context: Context) -> RaskmapEntry {
-        RaskmapEntry(date: .now, mode: .un, visited: 42)
+        RaskmapEntry(date: .now, mode: .un, visited: 42, bgColor: colorFromShared())
     }
 
     func snapshot(for configuration: RaskmapIntent, in context: Context) async -> RaskmapEntry {
@@ -89,16 +94,28 @@ struct RaskmapProvider: AppIntentTimelineProvider {
 
     private func makeEntry(_ configuration: RaskmapIntent) -> RaskmapEntry {
         let mode = WCountingMode(rawValue: configuration.mode.rawValue) ?? .un
-        let visited = intFromKV("widget_visited_\(mode.rawValue)")
-        return RaskmapEntry(date: .now, mode: mode, visited: visited)
+        let visited = intFromShared("widget_visited_\(mode.rawValue)")
+        return RaskmapEntry(date: .now, mode: mode, visited: visited, bgColor: colorFromShared())
     }
+}
+
+// MARK: - Color helper
+
+private func colorFromShared() -> Color {
+    let hex = sharedDefaults?.string(forKey: "widget_bg_color") ?? "#EE6E7D"
+    let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    var int: UInt64 = 0
+    Scanner(string: clean).scanHexInt64(&int)
+    let r = Double((int >> 16) & 0xFF) / 255
+    let g = Double((int >> 8)  & 0xFF) / 255
+    let b = Double(int & 0xFF)          / 255
+    return Color(red: r, green: g, blue: b)
 }
 
 // MARK: - View
 
 struct RaskmapWidgetView: View {
     let entry: RaskmapEntry
-    let bg = Color(red: 238/255, green: 110/255, blue: 125/255)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,7 +139,7 @@ struct RaskmapWidgetView: View {
                 .padding(.bottom, 12)
         }
         .padding(.horizontal, 14)
-        .containerBackground(bg, for: .widget)
+        .containerBackground(entry.bgColor, for: .widget)
     }
 }
 
@@ -148,7 +165,7 @@ struct RaskmapWidget: Widget {
 #Preview(as: .systemSmall) {
     RaskmapWidget()
 } timeline: {
-    RaskmapEntry(date: .now, mode: .un,     visited: 14)
-    RaskmapEntry(date: .now, mode: .unPlus, visited: 15)
-    RaskmapEntry(date: .now, mode: .all,    visited: 18)
+    RaskmapEntry(date: .now, mode: .un,     visited: 14, bgColor: colorFromShared())
+    RaskmapEntry(date: .now, mode: .unPlus, visited: 15, bgColor: colorFromShared())
+    RaskmapEntry(date: .now, mode: .all,    visited: 18, bgColor: colorFromShared())
 }

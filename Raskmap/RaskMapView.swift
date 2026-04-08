@@ -350,7 +350,7 @@ struct RaskMapView: UIViewRepresentable {
                 renderer.strokeColor = highlighted
                     ? UIColor.black.withAlphaComponent(0.85)
                     : UIColor.black.withAlphaComponent(0.35)
-                renderer.lineWidth   = highlighted ? 1.5 : 0.5
+                renderer.lineWidth   = highlighted ? 1.0 : 0.5
             }
         }
     }

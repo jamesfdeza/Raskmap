@@ -14,7 +14,10 @@ Raskmap/
 
 Archivos Swift en `Raskmap/`:
 `AddSegmentSheet`, `ColorThemeManager`, `ContentView`, `Country`, `CountingMode`,
-`GeoJSONLoader`, `LocationManager`, `RaskMapView`, `RaskmapApp`, `SplashView`, `Trip`, `WidgetDataWriter`
+`GeoJSONLoader`, `LocationManager`, `RaskMapView`, `RaskmapApp`, `RaskmapActivityAttributes`, `SplashView`, `Trip`, `WidgetDataWriter`
+
+Archivos Swift en `RaskmapWidget/`:
+`RaskmapActivityAttributes`, `RaskmapLiveActivity`, `RaskmapWidget`, `RaskmapWidgetBundle`, `RaskmapWidgetControl`
 
 ---
 
@@ -91,6 +94,8 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 ### Fuente
 - Siempre `.font(.palatino(.body))`, `.font(.palatino(.title3, weight: .bold))`, etc.
 - Extensión custom `Font.palatino(_:weight:)` — NO usar `.fontDesign(.serif)` ni `Font.custom`
+- La extensión lee `UserDefaults.standard.string(forKey: "appFontFamily")` en tiempo de render → el cambio de fuente es live (sin restart). Default: `"satoshi"`.
+- `ContentView` tiene `@AppStorage("appFontFamily") private var _appFontFamily: String` para forzar re-render al cambiar.
 
 ### Persistencia de preferencias
 ```swift
@@ -103,6 +108,10 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 @AppStorage("multiContinentRaw")  // JSON — asignación continente de países pluricontinentales
 @AppStorage("didShowLocationToast") // Bool — toast solo la primera vez
 @AppStorage("favoriteAirport")    // String IATA — aeropuerto favorito (vacío = ninguno)
+@AppStorage("isRaskmapPro")       // Bool — activa funciones Pro
+@AppStorage("appFontFamily")      // "satoshi" (default) | "palatino"
+@AppStorage("widgetBgColorHex")   // String hex — color de fondo del widget (default "#EE6E7D")
+@AppStorage("liveActivityEnabled") // Bool — Live Activity del próximo viaje activa
 ```
 
 ### Defaults primera ejecución
@@ -113,7 +122,7 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 ---
 
 ## Dependencias externas
-**Ninguna.** Solo frameworks nativos: SwiftUI, SwiftData, MapKit, CoreLocation, WidgetKit, CloudKit, MessageUI, Photos, Combine.
+**Ninguna.** Solo frameworks nativos: SwiftUI, SwiftData, MapKit, CoreLocation, WidgetKit, ActivityKit, CloudKit, MessageUI, Photos, Combine.
 
 ---
 
@@ -123,8 +132,14 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 - `countries.geojson` (Natural Earth) cargado una vez al arrancar
 - Simplificación Ramer-Douglas-Peucker adaptativa por área del polígono:
   - >500°² → 0.05°, >50°² → 0.02°, >5°² → 0.01°, >0.01°² → 0.002°, ≤0.01°² → 0.0
-- Solo ZAF (Sudáfrica) tiene hueco real (Lesoto)
+- ZAF (Sudáfrica) tiene hueco real (Lesoto) vía rings del GeoJSON. ITA (Italia) tiene hueco del Vaticano inyectado manualmente en `loadCountries()` tras cargar el GeoJSON: se busca el polígono continental de mayor bounding box, se extrae con `getCoordinates`, y se recrea con `vaticanRing` (36 pts exactos del GeoJSON) como interior polygon (hole)
 - Musandam (Omán) no está en el GeoJSON → polígono hardcodeado en `GeoJSONLoader`
+- Tras cargar el GeoJSON, varios países tienen sus polígonos reemplazados por anillos hardcodeados de alta precisión en `GeoJSONLoader.loadCountries()`:
+  - **MCO** (Mónaco): 865 pts cosidos desde OSM Overpass relation 36990 (29 outer ways)
+  - **AND** (Andorra): 45 pts de geo-countries, RDP(0.001°)
+  - **MAR** (Marruecos): 345 pts — polígono MAR de geo-countries partido a 27.6667°N (norte de esa línea)
+  - **ESH** (Sáhara Occidental): 211 pts — mismo polígono MAR partido a 27.6667°N (sur de esa línea)
+- `applyStyle` usa `lineWidth = highlighted ? 1.0 : 0.5` para todos los polígonos (coloreados y no coloreados). No hay distinción por tamaño — garantiza borde uniforme en exclaves pequeños como Musandam
 
 **Conteo de visitas**
 - 1 `Trip` record = 1 visita. `country.visitCount` son visitas manuales extra.
@@ -143,7 +158,7 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 
 **Sheets y toolbar**
 - Todos los NavigationStack en sheets tienen `.toolbarBackground(.visible, for: .navigationBar)` excepto `ProfileSheet`, que usa `.hidden` para preservar el efecto liquid glass de iOS 26.
-- `ProfileSheet` usa `.presentationDetents([.fraction(0.70)])` + `.presentationDragIndicator(.visible)`.
+- `ProfileSheet` usa `.presentationDetents([.fraction(0.70), .large])` + `.presentationDragIndicator(.visible)`. Dos detents → se puede deslizar a pantalla completa. Sin ScrollView interno. `.toolbarBackground(.hidden)` para preservar liquid glass de iOS 26.
 - Bug bucle infinito en `TransportStatsSheet`: `TransportFilter.id` debe ser determinístico (`emoji + label`), nunca `UUID()`.
 - `CountryTripsSheet` tiene botón de ordenación (↑/↓ por `dateFrom`) y toggle "He vivido aquí" (`country.hasLived`).
 
@@ -152,6 +167,33 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 - `TripSegment.returnAirports` = ruta vuelta (ordenada, nil = solo ida)
 - Destino = `airports.last`, escalas = intermedios de cada ruta por separado
 - Estadísticas globales combinan ida + vuelta en `Trip.airportsRaw`
+- En `AddSegmentSheet` paso 3, el resumen de ruta (códigos IATA + aerolínea) está alineado al **centro** (`VStack(alignment: .center)` + `.frame(maxWidth: .infinity, alignment: .center)`)
+- En `AddSegmentSheet`, el paso de escala muestra primero "✈️ Vuelo directo" (azul, acción primaria) y luego "🔄 Con escala(s)" (gris). Aplica tanto al vuelo de ida como al de vuelta.
+
+**Confirm cards (visitConfirmCard / plannedConfirmCard / editVisitConfirmCard)**
+- Presentadas como `.fullScreenCover` (no `.sheet`) para evitar flickering al estar dentro de sheets parciales.
+- Tienen `.presentationBackground(.clear)` + `.interactiveDismissDisabled(true)`.
+- Estructura de secciones: PAÍSES → (Divider) → AEROPUERTOS → AEROLÍNEAS. La última aerolínea NO lleva divider inferior (verificado con `al.id != confirmAirlines.last?.id`).
+- `EditTripSheet` tiene fallback a `trip.tripAirports`/`trip.tripAirlines` para viajes pre-segmentos.
+
+**Raskmap Pro — features bloqueadas**
+- `@AppStorage("isRaskmapPro") var isRaskmapPro: Bool = false` presente en cada struct que lo necesita.
+- Patrón de bloqueo: `View.blur(radius: isRaskmapPro ? 0 : N).allowsHitTesting(isRaskmapPro)` + `Image(systemName: "lock.fill")` en ZStack overlay.
+- Features Pro activas:
+  - Toggle "Mostrar contador" en Ajustes (solo el toggle blur, el label queda legible)
+  - Banner countdown "Quedan X días para" en pantalla principal (blur + lock capsule)
+  - Toasts de logros: si no es Pro, no se muestran (sin toasts en absoluto)
+  - Toggle "Live Activities" en Ajustes → Widgets (blur + candado morado)
+- Si se revoca el Pro y `liveActivityEnabled` estaba activo, `onChange(of: isRaskmapPro)` termina todas las Live Activities activas
+
+**Toasts de logros (achievements)**
+- Implementados via `AchievementToastController.shared.show(...)` → crea un `UIWindow` con `windowLevel = .alert + 1` para aparecer sobre cualquier modal/sheet.
+- Posición: arriba-derecha si menú está abajo (default), abajo-derecha si menú está arriba.
+- Se disparan en `ContentView.checkAndShowAchievementToasts()`, llamada en 3 `onChange`: `multiContinentRaw`, `trips.count`, `mapQuadrantsData`. También en `autoMarkIfNeeded` (auto-marca por ubicación, sin trip).
+- **NO** hay `onChange(of: visitedIsoSet)` — los toasts se disparan al guardar el viaje (cuando `trips.count` cambia), no al marcar el país visitado. Esto evita que salten al tocar "Añadir viaje pasado".
+- `prevAchieved: Set<AchievementKind>?` (state en ContentView) guarda el estado anterior para detectar nuevos logros desbloqueados.
+- Si se consiguen varios a la vez se apilan verticalmente (ForEach en `AchievementToastView`).
+- Duración: 4 segundos, luego la UIWindow se oculta y se libera.
 
 **Widget**
 - `WidgetDataWriter` sincroniza conteos a `NSUbiquitousKeyValueStore` (iCloud KV)
@@ -161,7 +203,7 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 
 ## TODOs / Bugs conocidos
 - Los viajes antiguos (pre-`returnAirports`) solo tienen `airports` (ruta ida). La UI hace fallback legacy correctamente.
-- Al editar un trip hijo (`isSegmentChild = true`), solo se actualiza el título — no se recrean los hijos para evitar borrado en cadena.
+- Los trips hijos (`isSegmentChild = true`) se resuelven al padre en `CountryTripsSheet.tripRow` via `resolvedParent(for:)` — la UI siempre muestra y edita el padre. Editar desde cualquier país del grupo modifica el padre y regenera los hijos en `performEditSave`.
 - `PersonalAwardModel` existe en SwiftData pero su gestión UI está en `ContentView.swift`.
 
 ---
@@ -169,6 +211,7 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 ## ❌ NO hacer
 
 - **No filtrar `iso != isoCode`** al crear trips hijos — ese era el bug que impedía contar visitas múltiples del mismo país en un viaje.
+- **No abrir EditTripSheet directamente con un trip hijo** — usar siempre `resolvedParent(for:) ?? trip` para garantizar que se edita el padre y los cambios se propagan a todos los países del viaje.
 - **No mezclar `isoA2` e `isoCode` (A3)** al buscar países — las búsquedas en `features` usan A3, los emojis y Locale usan A2.
 - **No simplificar a tolerance `0.005°` o más** polígonos pequeños (Andorra quedaba con solo 17 puntos); el mínimo actual es `0.002°`.
 - **No usar `Set<[String]>` directo** para inicializar `seen` en `deriveFlightCountries` — hay que hacer `.compactMap { $0 }` antes.
@@ -179,3 +222,9 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 - **No usar `UUID()` como `id` en structs Identifiable** usados en `Binding<Optional>` para `.sheet(item:)` — SwiftUI re-evalúa el binding en cada render y un nuevo UUID causa bucle infinito de presentación/cierre.
 - **No poner `.toolbarBackground(.visible)` en ProfileSheet** — elimina el efecto liquid glass de iOS 26 en sheets parciales. Usar `.hidden` en su lugar.
 - **No resetear `hasLived` solo en `.visited`** — también hay que resetearlo en `default` (bucketList/lived/etc) al eliminar el país de la lista.
+- **No usar `polyArea > 1e12` para el lineWidth** — se eliminó esa distinción; ahora siempre `highlighted ? 1.0 : 0.5` para garantizar borde uniforme en todos los países y exclaves.
+- **No hardcodear polígonos aproximados** para MCO/AND/MAR/ESH/VAT — usar los anillos de alta precisión ya en `GeoJSONLoader` (OSM + geo-countries + GeoJSON exacto).
+- **No añadir `vaticanRing` como polígono exterior de VAT** — ya existe como polígono propio de Vaticano en el GeoJSON. El ring solo se usa como interior hole de ITA en `loadCountries()`.
+- **No usar `.sheet` para confirm cards** (visitConfirmCard, plannedConfirmCard, editVisitConfirmCard) — usar `.fullScreenCover` para evitar flickering al estar dentro de sheets parciales.
+- **No usar `achievementToasts` como `@State` en ContentView** — los toasts de logros van via `AchievementToastController.shared` (UIWindow). No recuperar el overlay inline en ContentView.
+- **No olvidar disparar `checkAndShowAchievementToasts()` en los 3 onChange** — `multiContinentRaw`, `visitedIsoSet`, `trips.count`.
