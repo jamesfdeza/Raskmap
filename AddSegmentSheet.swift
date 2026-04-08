@@ -322,7 +322,7 @@ struct AddSegmentSheet: View {
 
                 // Show route summary for airplane segments
                 if transport == "✈️" && !segmentAirports.isEmpty {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .center, spacing: 3) {
                         Text(segmentAirports.map { $0.iata }.joined(separator: " → "))
                             .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue)
                         if !segmentReturnAirports.isEmpty {
@@ -334,7 +334,7 @@ struct AddSegmentSheet: View {
                                 .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 16).padding(.bottom, 12)
 
                     // Destination auto-mark label
