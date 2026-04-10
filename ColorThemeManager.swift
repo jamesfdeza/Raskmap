@@ -101,7 +101,9 @@ class ColorThemeManager: ObservableObject {
     struct Scheme: ViewModifier {
         @ObservedObject fileprivate var mgr = ColorThemeManager.shared
         func body(content: Content) -> some View {
-            content.preferredColorScheme(mgr.isDarkMode ? .dark : .light)
+            content
+                .preferredColorScheme(mgr.isDarkMode ? .dark : .light)
+                .presentationBackground(Color(.systemGroupedBackground))
         }
     }
 

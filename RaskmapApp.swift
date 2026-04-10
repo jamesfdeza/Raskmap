@@ -69,7 +69,7 @@ struct RaskmapApp: App {
                         dismissSplashIfReady()
                     })
                     .modelContainer(sharedModelContainer)
-                    .environment(\.font, .custom("Palatino", size: 16))
+                    .environment(\.font, .custom("Satoshi-Regular", size: 16))
                     .environmentObject(colorTheme)
 
                 if showSplash {

@@ -15,7 +15,7 @@ struct SplashView: View {
                 .ignoresSafeArea()
 
             Text("Raskmap")
-                .font(.custom("Palatino-Bold", size: 52))
+                .font(.custom("Satoshi-Bold", size: 52))
                 .foregroundStyle(.white)
                 .scaleEffect(scale)
                 .opacity(opacity)
@@ -26,12 +26,18 @@ struct SplashView: View {
                     }
                 }
 
-            VStack {
+            VStack(spacing: 4) {
                 Spacer()
                 let year = Calendar.current.component(.year, from: Date())
                 Text("\(String(year))–\(String(year + 1))")
-                    .font(.custom("Palatino", size: 13))
+                    .font(.custom("Satoshi-Regular", size: 13))
                     .foregroundStyle(.white.opacity(0.45))
+                Text("v.1.0")
+                    .font(.custom("Satoshi-Regular", size: 13))
+                    .foregroundStyle(.white.opacity(0.45))
+                Text("Todos los derechos reservados")
+                    .font(.custom("Satoshi-Regular", size: 11))
+                    .foregroundStyle(.white.opacity(0.35))
                     .padding(.bottom, 48)
             }
             .opacity(opacity)

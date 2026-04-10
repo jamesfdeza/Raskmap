@@ -40,8 +40,28 @@ struct WidgetDataWriter {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    static func syncNextTrip(flag: String?, days: Int?, name: String? = nil) {
+        guard let store = UserDefaults(suiteName: appGroupID) else { return }
+        store.set(flag ?? "", forKey: "widget_next_flag")
+        store.set(days ?? -1, forKey: "widget_next_days")
+        store.set(name ?? "", forKey: "widget_next_name")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     static func syncFontFamily(_ family: String) {
         guard let store = UserDefaults(suiteName: appGroupID) else { return }
         store.set(family, forKey: "appFontFamily")
+    }
+
+    static func syncPro(_ isPro: Bool) {
+        guard let store = UserDefaults(suiteName: appGroupID) else { return }
+        store.set(isPro, forKey: "widget_is_pro")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    static func syncAllFlags(_ flags: String) {
+        guard let store = UserDefaults(suiteName: appGroupID) else { return }
+        store.set(flags, forKey: "widget_all_flags")
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
