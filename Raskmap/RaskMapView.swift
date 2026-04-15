@@ -384,6 +384,12 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         func refreshRendererColors() {
+            guard let mv = mapView else { return }
+            let visibleRect = mv.visibleMapRect
+            let visibleISOs = Set(parent.features
+                .filter { $0.boundingMapRect.intersects(visibleRect) }
+                .map { $0.isoCode })
+
             for (_, renderer) in rendererCache {
                 guard let polygon = renderer.polygon as? CountryPolygon else { continue }
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
@@ -394,7 +400,12 @@ struct RaskMapView: UIViewRepresentable {
                                        highlighted: isHighlighted,
                                        showBucketList: parent.showBucketList,
                                        isUserHere: isUserHere)
-                renderer.setNeedsDisplay()
+                // Only force immediate redraw for currently visible polygons.
+                // Non-visible ones have their fillColor updated and will render
+                // with the new color when the user pans to them.
+                if visibleISOs.contains(polygon.isoCode) {
+                    renderer.setNeedsDisplay()
+                }
             }
         }
 
@@ -411,9 +422,7 @@ struct RaskMapView: UIViewRepresentable {
             if let cached = rendererCache[pid] { return cached }
             // Fallback — debería estar en cache desde el precalentado
             let renderer = MKPolygonRenderer(polygon: polygon)
-            let status = lastKnownStatus[polygon.isoCode]
-                      ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status
-                      ?? .none
+            let status = lastKnownStatus[polygon.isoCode] ?? .none
             RaskMapView.applyStyle(status: status, to: renderer,
                                    highlighted: polygon.isoCode == lastHighlighted,
                                    showBucketList: parent.showBucketList,

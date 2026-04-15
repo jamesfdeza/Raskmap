@@ -11,6 +11,7 @@
 		0266FBF92F644BBE003EF8D6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0266FBF82F644BBE003EF8D6 /* SwiftUI.framework */; };
 		0266FC062F644BBF003EF8D6 /* RaskmapWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0266FBF42F644BBE003EF8D6 /* RaskmapWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		027BD9612F64723C00CEE4CA /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 027BD9602F64723C00CEE4CA /* AppIntents.framework */; };
+		02C342042F87072800380795 /* RaskmapWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 02C341E42F87072600380795 /* RaskmapWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +36,27 @@
 			remoteGlobalIDString = 02A198742F5F383C0057AA98;
 			remoteInfo = Raskmap;
 		};
+		02C341F12F87072800380795 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 02A1986D2F5F383C0057AA98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 02C341E32F87072600380795;
+			remoteInfo = "RaskmapWatch Watch App";
+		};
+		02C341FB2F87072800380795 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 02A1986D2F5F383C0057AA98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 02C341E32F87072600380795;
+			remoteInfo = "RaskmapWatch Watch App";
+		};
+		02C342022F87072800380795 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 02A1986D2F5F383C0057AA98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 02C341E32F87072600380795;
+			remoteInfo = "RaskmapWatch Watch App";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -49,6 +71,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		02C342082F87072800380795 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				02C342042F87072800380795 /* RaskmapWatch Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +93,9 @@
 		027640A92F61C407000FC517 /* RaskmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		027640AA2F61C407000FC517 /* RaskmapUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RaskmapUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		027BD9602F64723C00CEE4CA /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		02C341E42F87072600380795 /* RaskmapWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RaskmapWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		02C341F02F87072800380795 /* RaskmapWatch Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "RaskmapWatch Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		02C341FA2F87072800380795 /* RaskmapWatch Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "RaskmapWatch Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -106,6 +142,21 @@
 			path = RaskmapUITests;
 			sourceTree = "<group>";
 		};
+		02C341E52F87072600380795 /* RaskmapWatch Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "RaskmapWatch Watch App";
+			sourceTree = "<group>";
+		};
+		02C341F32F87072800380795 /* RaskmapWatch Watch AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "RaskmapWatch Watch AppTests";
+			sourceTree = "<group>";
+		};
+		02C341FD2F87072800380795 /* RaskmapWatch Watch AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "RaskmapWatch Watch AppUITests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -140,6 +191,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		02C341E12F87072600380795 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341ED2F87072800380795 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341F72F87072800380795 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -165,7 +237,13 @@
 				027640AA2F61C407000FC517 /* RaskmapUITests.xctest */,
 				0266FBF42F644BBE003EF8D6 /* RaskmapWidgetExtension.appex */,
 				0266FBFA2F644BBE003EF8D6 /* RaskmapWidget */,
+				02C341E52F87072600380795 /* RaskmapWatch Watch App */,
+				02C341F32F87072800380795 /* RaskmapWatch Watch AppTests */,
+				02C341FD2F87072800380795 /* RaskmapWatch Watch AppUITests */,
 				0266FBF52F644BBE003EF8D6 /* Frameworks */,
+				02C341E42F87072600380795 /* RaskmapWatch Watch App.app */,
+				02C341F02F87072800380795 /* RaskmapWatch Watch AppTests.xctest */,
+				02C341FA2F87072800380795 /* RaskmapWatch Watch AppUITests.xctest */,
 			);
 			sourceTree = "<group>";
 		};
@@ -202,11 +280,13 @@
 				02A198722F5F383C0057AA98 /* Frameworks */,
 				02A198732F5F383C0057AA98 /* Resources */,
 				0266FC072F644BBF003EF8D6 /* Embed Foundation Extensions */,
+				02C342082F87072800380795 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				0266FC052F644BBF003EF8D6 /* PBXTargetDependency */,
+				02C342032F87072800380795 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				02A198772F5F383C0057AA98 /* Raskmap */,
@@ -264,6 +344,74 @@
 			productReference = 027640AA2F61C407000FC517 /* RaskmapUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		02C341E32F87072600380795 /* RaskmapWatch Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 02C342052F87072800380795 /* Build configuration list for PBXNativeTarget "RaskmapWatch Watch App" */;
+			buildPhases = (
+				02C341E02F87072600380795 /* Sources */,
+				02C341E12F87072600380795 /* Frameworks */,
+				02C341E22F87072600380795 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				02C341E52F87072600380795 /* RaskmapWatch Watch App */,
+			);
+			name = "RaskmapWatch Watch App";
+			packageProductDependencies = (
+			);
+			productName = "RaskmapWatch Watch App";
+			productReference = 02C341E42F87072600380795 /* RaskmapWatch Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		02C341EF2F87072800380795 /* RaskmapWatch Watch AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 02C342092F87072800380795 /* Build configuration list for PBXNativeTarget "RaskmapWatch Watch AppTests" */;
+			buildPhases = (
+				02C341EC2F87072800380795 /* Sources */,
+				02C341ED2F87072800380795 /* Frameworks */,
+				02C341EE2F87072800380795 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				02C341F22F87072800380795 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				02C341F32F87072800380795 /* RaskmapWatch Watch AppTests */,
+			);
+			name = "RaskmapWatch Watch AppTests";
+			packageProductDependencies = (
+			);
+			productName = "RaskmapWatch Watch AppTests";
+			productReference = 02C341F02F87072800380795 /* RaskmapWatch Watch AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		02C341F92F87072800380795 /* RaskmapWatch Watch AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 02C3420C2F87072800380795 /* Build configuration list for PBXNativeTarget "RaskmapWatch Watch AppUITests" */;
+			buildPhases = (
+				02C341F62F87072800380795 /* Sources */,
+				02C341F72F87072800380795 /* Frameworks */,
+				02C341F82F87072800380795 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				02C341FC2F87072800380795 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				02C341FD2F87072800380795 /* RaskmapWatch Watch AppUITests */,
+			);
+			name = "RaskmapWatch Watch AppUITests";
+			packageProductDependencies = (
+			);
+			productName = "RaskmapWatch Watch AppUITests";
+			productReference = 02C341FA2F87072800380795 /* RaskmapWatch Watch AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -271,7 +419,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2630;
+				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					0266FBF32F644BBE003EF8D6 = {
@@ -287,6 +435,17 @@
 					02A1988F2F5F383D0057AA98 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 02A198742F5F383C0057AA98;
+					};
+					02C341E32F87072600380795 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					02C341EF2F87072800380795 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 02C341E32F87072600380795;
+					};
+					02C341F92F87072800380795 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 02C341E32F87072600380795;
 					};
 				};
 			};
@@ -308,6 +467,9 @@
 				02A198852F5F383D0057AA98 /* RaskmapTests */,
 				02A1988F2F5F383D0057AA98 /* RaskmapUITests */,
 				0266FBF32F644BBE003EF8D6 /* RaskmapWidgetExtension */,
+				02C341E32F87072600380795 /* RaskmapWatch Watch App */,
+				02C341EF2F87072800380795 /* RaskmapWatch Watch AppTests */,
+				02C341F92F87072800380795 /* RaskmapWatch Watch AppUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -335,6 +497,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		02A1988E2F5F383D0057AA98 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341E22F87072600380795 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341EE2F87072800380795 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341F82F87072800380795 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -372,6 +555,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		02C341E02F87072600380795 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341EC2F87072800380795 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		02C341F62F87072800380795 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -389,6 +593,21 @@
 			isa = PBXTargetDependency;
 			target = 02A198742F5F383C0057AA98 /* Raskmap */;
 			targetProxy = 02A198912F5F383D0057AA98 /* PBXContainerItemProxy */;
+		};
+		02C341F22F87072800380795 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 02C341E32F87072600380795 /* RaskmapWatch Watch App */;
+			targetProxy = 02C341F12F87072800380795 /* PBXContainerItemProxy */;
+		};
+		02C341FC2F87072800380795 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 02C341E32F87072600380795 /* RaskmapWatch Watch App */;
+			targetProxy = 02C341FB2F87072800380795 /* PBXContainerItemProxy */;
+		};
+		02C342032F87072800380795 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 02C341E32F87072600380795 /* RaskmapWatch Watch App */;
+			targetProxy = 02C342022F87072800380795 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -738,6 +957,162 @@
 			};
 			name = Release;
 		};
+		02C342062F87072800380795 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = RaskmapWatch;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = RealDev.Raskmap;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = RealDev.Raskmap.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		02C342072F87072800380795 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = RaskmapWatch;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = RealDev.Raskmap;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = RealDev.Raskmap.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
+		02C3420A2F87072800380795 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "RealDev.RaskmapWatch-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RaskmapWatch Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RaskmapWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		02C3420B2F87072800380795 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "RealDev.RaskmapWatch-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RaskmapWatch Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RaskmapWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
+		02C3420D2F87072800380795 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "RealDev.RaskmapWatch-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "RaskmapWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Debug;
+		};
+		02C3420E2F87072800380795 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A23MXP6JL9;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "RealDev.RaskmapWatch-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "RaskmapWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -782,6 +1157,33 @@
 			buildConfigurations = (
 				02A198A22F5F383D0057AA98 /* Debug */,
 				02A198A32F5F383D0057AA98 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		02C342052F87072800380795 /* Build configuration list for PBXNativeTarget "RaskmapWatch Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				02C342062F87072800380795 /* Debug */,
+				02C342072F87072800380795 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		02C342092F87072800380795 /* Build configuration list for PBXNativeTarget "RaskmapWatch Watch AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				02C3420A2F87072800380795 /* Debug */,
+				02C3420B2F87072800380795 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		02C3420C2F87072800380795 /* Build configuration list for PBXNativeTarget "RaskmapWatch Watch AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				02C3420D2F87072800380795 /* Debug */,
+				02C3420E2F87072800380795 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

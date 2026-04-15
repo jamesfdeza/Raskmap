@@ -33,10 +33,10 @@ enum CountryStatus: String, Codable, Identifiable {
     var label: String {
         switch self {
         case .none:        return "Sin marcar"
-        case .visited:     return "✅ Visitados"
-        case .wantToVisit: return "Próximos"
+        case .visited:     return "✅"
+        case .wantToVisit: return "🔜"
         case .lived:       return "Vivido"
-        case .bucketList:  return "Quiero"
+        case .bucketList:  return "📝"
         }
     }
 }

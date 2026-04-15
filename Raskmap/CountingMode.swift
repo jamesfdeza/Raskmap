@@ -10,7 +10,7 @@ import Foundation
 enum CountingMode: String, CaseIterable {
     case un        = "un"          // 193 miembros ONU
     case unPlus    = "unPlus"      // 195: ONU + 2 observadores
-    case all       = "all"         // 244: todos los territorios
+    case all       = "all"         // 249: todos los territorios
 
     var label: String {
         switch self {
@@ -24,7 +24,7 @@ enum CountingMode: String, CaseIterable {
         switch self {
         case .un:     return 193
         case .unPlus: return 195
-        case .all:    return 244
+        case .all:    return 249
         }
     }
 

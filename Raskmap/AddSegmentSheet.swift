@@ -19,6 +19,10 @@ struct AddSegmentSheet: View {
     let isForFuture: Bool
     let onAdd: (TripSegment) -> Void
 
+    // Pre-sorted once at init; normalized names for fast diacritic-insensitive search
+    private let sortedFeatures: [CountryFeature]
+    private let normalizedNames: [String: String]  // isoCode → folded name
+
     @Environment(\.dismiss) private var dismiss
     @State private var step: Int = 1
     @State private var selectedTransport: String? = nil
@@ -38,6 +42,7 @@ struct AddSegmentSheet: View {
     // Layover / destination prompts (✈️ only)
     @State private var layoverChoices: [LayoverChoice] = []
     @State private var destinationIso: String? = nil  // auto-marked unless return flight
+    @State private var segmentFlightInfo = FlightInfo()
 
     // When editing an existing segment
     @State private var didSetupInitial = false
@@ -55,6 +60,14 @@ struct AddSegmentSheet: View {
         self.isForFuture = isForFuture
         self.initialSegment = initialSegment
         self.onAdd = onAdd
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        let sorted = features.sorted { $0.localizedName.compare($1.localizedName, options: opts) == .orderedAscending }
+        self.sortedFeatures = sorted
+        var names = [String: String](minimumCapacity: sorted.count)
+        for f in sorted {
+            names[f.isoCode] = f.localizedName.folding(options: opts, locale: .current)
+        }
+        self.normalizedNames = names
         let today = Calendar.current.startOfDay(for: Date())
         let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
         if let seg = initialSegment {
@@ -67,19 +80,22 @@ struct AddSegmentSheet: View {
                 _segmentReturnAirports = State(initialValue: seg.returnAirports ?? [])
                 _segmentAirlines = State(initialValue: seg.airlines ?? [])
                 _segmentHasLayover = State(initialValue: seg.hasLayover ?? false)
+                _segmentFlightInfo = State(initialValue: seg.flightInfo ?? FlightInfo())
             } else {
                 _selectedIsoCodes = State(initialValue: Set(seg.isoCodes))
             }
         } else {
-            _dateFrom = State(initialValue: isForFuture ? tomorrow : today)
+            let from = isForFuture ? tomorrow : today
+            _dateFrom = State(initialValue: from)
+            _dateTo = State(initialValue: Calendar.current.date(byAdding: .day, value: 1, to: from)!)
         }
     }
 
     private var filteredFeatures: [CountryFeature] {
-        let sorted = features.sorted { $0.localizedName < $1.localizedName }
-        guard !searchQuery.isEmpty else { return sorted }
-        return sorted.filter {
-            $0.localizedName.localizedCaseInsensitiveContains(searchQuery) ||
+        guard !searchQuery.isEmpty else { return sortedFeatures }
+        let q = searchQuery.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        return sortedFeatures.filter {
+            (normalizedNames[$0.isoCode] ?? "").contains(q) ||
             $0.isoCode.localizedCaseInsensitiveContains(searchQuery)
         }
     }
@@ -188,6 +204,14 @@ struct AddSegmentSheet: View {
                       let f = featureByA2(a2),
                       seen.insert(f.isoCode).inserted else { continue }
                 layoverChoices.append(LayoverChoice(id: f.isoCode, flag: f.flagEmoji, name: f.localizedName, checked: false))
+            }
+        }
+
+        // Restore checked state when editing
+        if let visitedISOs = initialSegment?.visitedLayoverISOs {
+            let visitedSet = Set(visitedISOs)
+            for i in layoverChoices.indices {
+                layoverChoices[i].checked = visitedSet.contains(layoverChoices[i].id)
             }
         }
     }
@@ -355,14 +379,14 @@ struct AddSegmentSheet: View {
                             Text(isForFuture ? "¿Harás parada en...?" : "¿Visitaste alguna escala?")
                                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                                 .padding(.horizontal, 16)
-                            ForEach(layoverChoices) { choice in
-                                let idx = layoverChoices.firstIndex(where: { $0.id == choice.id })!
+                            ForEach(layoverChoices.indices, id: \.self) { idx in
+                                let choice = layoverChoices[idx]
                                 Button {
                                     layoverChoices[idx].checked.toggle()
                                 } label: {
                                     HStack(spacing: 10) {
-                                        Image(systemName: layoverChoices[idx].checked ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(layoverChoices[idx].checked ? .blue : .secondary)
+                                        Image(systemName: choice.checked ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(choice.checked ? .blue : .secondary)
                                         Text(choice.flag ?? "🌐")
                                         Text(choice.name)
                                             .font(.palatino(.body)).foregroundStyle(.primary)
@@ -377,6 +401,10 @@ struct AddSegmentSheet: View {
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
                         .padding(.horizontal, 16).padding(.bottom, 12)
                     }
+                }
+
+                if transport == "✈️" {
+                    FlightInfoSection(info: $segmentFlightInfo)
                 }
 
                 HStack(spacing: 0) {
@@ -397,7 +425,8 @@ struct AddSegmentSheet: View {
 
                 Button {
                     let isos = finalIsoCodes
-                    let segment = TripSegment(
+                    let visitedISOs = layoverChoices.filter { $0.checked }.map { $0.id }
+                    var segment = TripSegment(
                         transport: selectedTransport ?? "🌍",
                         isoCodes: Array(isos),
                         dateFrom: dateFrom,
@@ -405,8 +434,10 @@ struct AddSegmentSheet: View {
                         airports: segmentAirports.isEmpty ? nil : segmentAirports,
                         returnAirports: segmentReturnAirports.isEmpty ? nil : segmentReturnAirports,
                         airlines: segmentAirlines.isEmpty ? nil : segmentAirlines,
-                        hasLayover: (segmentHasLayover || segmentAirports.count > 2 || segmentReturnAirports.count > 2) ? true : nil
+                        hasLayover: (segmentHasLayover || segmentAirports.count > 2 || segmentReturnAirports.count > 2) ? true : nil,
+                        visitedLayoverISOs: visitedISOs.isEmpty ? nil : visitedISOs
                     )
+                    if segmentFlightInfo.hasAnyData { segment.flightInfo = segmentFlightInfo }
                     onAdd(segment)
                     dismiss()
                 } label: {

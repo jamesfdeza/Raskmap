@@ -10,6 +10,10 @@ import SwiftUI
 struct RaskmapWidgetBundle: WidgetBundle {
     var body: some Widget {
         RaskmapWidget()
+        RaskmapLockPctWidget()
+        RaskmapLockNextWidget()
+        RaskmapLockInlineWidget()
+        RaskmapWatchFlagsWidget()
         RaskmapWidgetControl()
         RaskmapLiveActivity()
     }

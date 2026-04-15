@@ -7,31 +7,44 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-// MARK: - Font helper
+// MARK: - Helpers
 
 private func liveActivityFont(size: CGFloat, bold: Bool) -> Font {
-    let family = UserDefaults(suiteName: "group.com.jaime.raskmap")?.string(forKey: "appFontFamily") ?? "satoshi"
-    if family == "palatino" {
-        return .custom(bold ? "Palatino-Bold" : "Palatino", size: size)
-    }
     return .system(size: size, weight: bold ? .bold : .regular)
 }
+
 
 // MARK: - Widget
 
 struct RaskmapLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RaskmapTripAttributes.self) { context in
-            HStack(spacing: 12) {
+            HStack(spacing: 0) {
                 Text(context.state.flagEmoji)
-                    .font(liveActivityFont(size: 32, bold: false))
-                Text("Quedan \(context.state.daysRemaining) \(context.state.daysRemaining == 1 ? "día" : "días")")
-                    .font(liveActivityFont(size: 17, bold: true))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 40))
+                    .frame(width: 64)
+                    .padding(.leading, 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(context.state.tripName)
+                        .font(liveActivityFont(size: 14, bold: true))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text("Quedan \(context.state.daysRemaining) \(context.state.daysRemaining == 1 ? "día" : "días")")
+                        .font(liveActivityFont(size: 18, bold: true))
+                        .foregroundStyle(.white)
+                }
+                .padding(.leading, 8)
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 16)
-            .containerBackground(.clear, for: .widget)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .containerBackground(
+                LinearGradient(
+                    colors: [Color(red: 0.08, green: 0.06, blue: 0.20), Color(red: 0.93, green: 0.43, blue: 0.49)],
+                    startPoint: .leading, endPoint: .trailing
+                ),
+                for: .widget
+            )
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -42,30 +55,31 @@ struct RaskmapLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("\(context.state.daysRemaining)")
-                            .font(.custom("Palatino-Bold", size: 30))
+                            .font(.system(size: 30, weight: .bold))
                             .monospacedDigit()
                         Text(context.state.daysRemaining == 1 ? "día" : "días")
-                            .font(.custom("Palatino", size: 11))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     Text(context.state.tripName)
-                        .font(.custom("Palatino-Bold", size: 14))
+                        .font(.system(size: 14, weight: .bold))
                         .lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text("Próximo viaje")
-                        .font(.custom("Palatino", size: 11))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             } compactLeading: {
                 Text(context.state.flagEmoji)
                     .font(.system(size: 16))
             } compactTrailing: {
-                Text("\(context.state.daysRemaining)d")
-                    .font(.custom("Palatino-Bold", size: 13))
+                let days = context.state.daysRemaining
+                Text(days > 99 ? "+\(days / 30)m" : "\(days)d")
+                    .font(.system(size: 13, weight: .bold))
                     .monospacedDigit()
             } minimal: {
                 Text(context.state.flagEmoji)
