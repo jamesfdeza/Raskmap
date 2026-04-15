@@ -5,17 +5,26 @@
 import Foundation
 import SwiftData
 
-struct TripAirport: Codable, Hashable {
+struct FlightInfo: Codable, Equatable {
+    var bookingRef: String = ""
+    var seatNumber: String = ""
+    var seatPosition: String = ""  // "" | "pasillo" | "medio" | "ventana"
+    var cabinClass: String = ""    // "" | "turista" | "economy+" | "business" | "first"
+
+    var hasAnyData: Bool { !bookingRef.isEmpty || !seatNumber.isEmpty || !seatPosition.isEmpty || !cabinClass.isEmpty }
+}
+
+struct TripAirport: Codable, Hashable, Sendable {
     let iata: String
     var count: Int
 }
 
-struct TripAirline: Codable, Hashable {
+struct TripAirline: Codable, Hashable, Sendable {
     let name: String
     var count: Int
 }
 
-struct TripSegment: Codable, Identifiable {
+struct TripSegment: Codable, Identifiable, Sendable {
     var id: UUID = UUID()
     var transport: String
     var isoCodes: [String]
@@ -25,6 +34,8 @@ struct TripSegment: Codable, Identifiable {
     var returnAirports: [TripAirport]?   // Return route airports (ordered, nil = one-way) — ✈️ only
     var airlines: [TripAirline]?         // Only for ✈️ segments
     var hasLayover: Bool?                // Only for ✈️ segments
+    var visitedLayoverISOs: [String]?    // ISO A3 codes of visited layover countries
+    var flightInfo: FlightInfo?          // Optional booking/seat/class info — ✈️ only
 }
 
 @Model
@@ -43,6 +54,7 @@ class Trip {
     var segmentsRaw: String?      // JSON-encoded [TripSegment]
     var segmentGroupID: String?   // Groups primary + child trips from same multi-transport save
     var isSegmentChild: Bool = false
+    var flightInfoRaw: String?    // JSON-encoded FlightInfo — only for non-segment ✈️ trips
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,
@@ -121,6 +133,17 @@ class Trip {
         set {
             segmentsRaw = newValue.isEmpty ? nil :
                 (try? JSONEncoder().encode(newValue)).flatMap { String(data: $0, encoding: .utf8) }
+        }
+    }
+
+    var flightDetails: FlightInfo? {
+        get {
+            guard let raw = flightInfoRaw, let data = raw.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(FlightInfo.self, from: data)
+        }
+        set {
+            guard let info = newValue, info.hasAnyData else { flightInfoRaw = nil; return }
+            flightInfoRaw = (try? JSONEncoder().encode(info)).flatMap { String(data: $0, encoding: .utf8) }
         }
     }
 

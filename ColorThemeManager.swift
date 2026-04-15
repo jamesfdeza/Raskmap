@@ -10,11 +10,12 @@ import SwiftUI
 import UIKit
 import Combine
 
+@MainActor
 class ColorThemeManager: ObservableObject {
     static let shared = ColorThemeManager()
     
     static let defaultVisited: Color     = Color(red: 0xEE/255, green: 0x6E/255, blue: 0x7D/255)
-    static let defaultWantToVisit: Color = Color(red: 0x32/255, green: 0xE9/255, blue: 0xEB/255)
+    static let defaultWantToVisit: Color = Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255)
     static let defaultLived: Color       = Color(red: 0x71/255, green: 0xEB/255, blue: 0x71/255)
     static let defaultBucketList: Color  = Color(red: 1.0, green: 0.6, blue: 0.2)
 

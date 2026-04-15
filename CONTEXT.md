@@ -54,7 +54,24 @@ var airlinesRaw: String?      // JSON [TripAirline]
 var segmentsRaw: String?      // JSON [TripSegment]
 var segmentGroupID: String?   // agrupa trip principal + hijos del mismo guardado
 var isSegmentChild: Bool      // true = creado automáticamente desde un segmento
+var flightInfoRaw: String?    // JSON FlightInfo — solo para trips no-segmento ✈️
+// computed: var flightDetails: FlightInfo?  (get/set desde flightInfoRaw)
 ```
+
+### `FlightInfo` (Codable, Equatable) — sin Sendable explícito
+```swift
+var bookingRef: String    // número de reserva, default ""
+var seatNumber: String    // asiento formato "19A", default ""
+var seatPosition: String  // "" | "pasillo" | "medio" | "ventana"
+var cabinClass: String    // "" | "turista" | "economy+" | "business" | "first"
+var hasAnyData: Bool      // true si algún campo no está vacío
+```
+- `Sendable` NO se declara explícitamente — Swift 6 lo infiere automáticamente (todos los campos son `String`). Declararlo explícitamente junto a `@Model` causa "Main actor-isolated conformance" error en Swift 6.
+- Para viajes con segmentos: almacenado en `TripSegment.flightInfo: FlightInfo?`
+- Para viajes sin segmentos (Próximos simples, legado): almacenado en `Trip.flightInfoRaw` vía `trip.flightDetails`
+- UI compartida: `FlightInfoSection(info: $flightInfo)` — solo aparece cuando transporte == "✈️"
+- Aparece en: `AddSegmentSheet` paso 3, `PlannedDatePickerSheet` (tras botón ruta), `EditTripSheet` (sección no-segmento ✈️)
+- Al editar segmento existente, `flightInfo` se precarga desde `seg.flightInfo ?? FlightInfo()`
 
 ### `TripSegment` (Codable, dentro de segmentsRaw)
 ```swift
@@ -66,6 +83,8 @@ var airports: [TripAirport]?        // ruta ida (ordenada) — solo ✈️
 var returnAirports: [TripAirport]?  // ruta vuelta (ordenada) — solo ✈️
 var airlines: [TripAirline]?
 var hasLayover: Bool?
+var visitedLayoverISOs: [String]?
+var flightInfo: FlightInfo?         // info opcional reserva/asiento/clase — solo ✈️
 ```
 
 ### `CountryStatus` (enum)
@@ -179,18 +198,47 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
 - En `AddSegmentSheet` paso 3, el resumen de ruta (códigos IATA + aerolínea) está alineado al **centro** (`VStack(alignment: .center)` + `.frame(maxWidth: .infinity, alignment: .center)`)
 - En `AddSegmentSheet`, el paso de escala muestra primero "✈️ Vuelo directo" (azul, acción primaria) y luego "🔄 Con escala(s)" (gris). Aplica tanto al vuelo de ida como al de vuelta.
 
+**Selector de rango de fechas (`RangeDatePicker`)**
+- Componente `UIViewRepresentable` sobre `UICalendarView` con `UICalendarSelectionSingleDate`.
+- Al elegir fecha de ida (DESDE), la vuelta (HASTA) se auto-establece al día siguiente por defecto. Si `maxDate` está definido (viajes pasados) y el día siguiente lo supera, dateTo queda nil.
+- Al cambiar de tab DESDE/HASTA, el calendario navega automáticamente al mes de la fecha relevante (`setVisibleDateComponents(_:animated:)`).
+- Al tocar una fecha en tab HASTA igual a dateFrom → dateTo = nil ("Sin vuelta"). Si es anterior a dateFrom → se convierte en nueva ida con vuelta al día siguiente.
+- `PlannedDatePickerSheet` init: cuando no hay fecha existente, `dateTo` se inicializa como `dateFrom + 1 día`.
+- `AddSegmentSheet` init: al crear segmento nuevo, `dateTo` se inicializa como `dateFrom + 1 día`.
+- `PlannedDatePickerSheet` tiene `minDate: tomorrow` (solo futuros). `AddSegmentSheet` usa `minDate: tomorrow` para futuros y `maxDate: today` para pasados.
+
+**Widgets en Ajustes**
+- "Pantalla de bloqueo" → abre `WidgetLockScreenSheet`: lista los 3 widgets (% del mundo circular, próximo viaje rectangular, cuenta atrás inline) con su descripción.
+- "Apple Watch" → abre `WidgetWatchSheet`: lista los 3 widgets (próximo viaje circular, próximo viaje rectangular, países visitados circular) con su descripción.
+- "Pantalla principal" (`WidgetHomeColorSheet`): preview del widget real (tamaño small) con layout idéntico al `RaskmapSmallView`. Paleta de 10 colores predefinidos. Debajo de la paleta hay una sección "Tamaños disponibles" (Pequeño / Mediano / Grande) con descripción de cada uno.
+- `RaskmapWidget` usa `.contentMarginsDisabled()` — elimina los márgenes del sistema (~11pt) para control manual. El pequeño usa `.padding(15)`, el grande `.padding(16)`.
+- Íconos en `WidgetLockScreenSheet` y `WidgetWatchSheet`: `.font(.system(size: 16)).frame(width: 24)` con `HStack(spacing: 12)` y `.padding(.horizontal, 24)` — idéntico a la sección "Tamaños disponibles" de `WidgetHomeColorSheet`. `Divider().padding(.leading, 60)` entre filas. NUNCA usar `.resizable().aspectRatio` aquí.
+- En `colorPickerSection` (Colores del mapa): botón "Cambiar colores" (azul) va por encima de "Restablecer colores predeterminados" (rojo).
+- Errores SourceKit de `accessoryCircular/Rectangular/Inline` en RaskmapWidget.swift son falsos positivos del indexado macOS — válidos en iOS/watchOS.
+
 **Confirm cards (visitConfirmCard / plannedConfirmCard / editVisitConfirmCard)**
-- Presentadas como `.fullScreenCover` (no `.sheet`) para evitar flickering al estar dentro de sheets parciales.
-- Tienen `.presentationBackground(.clear)` + `.interactiveDismissDisabled(true)`.
+- **NO usan `fullScreenCover`** — se muestran como overlay `ZStack` inline dentro del `body` de cada sheet (`AddTripSheet`, `PlannedDatePickerSheet`, `EditTripSheet`). Patrón: `if showXxx { confirmCard(...) }` dentro de un `ZStack { NavigationStack { ... } ... }`.
+- Razón: `fullScreenCover` evaluaba el contenido con estado stale en la primera presentación cuando se usaba desde dentro de otro modal (race condition UIKit vs SwiftUI).
+- `resignFirstResponder` se llama al **inicio** de cada `prepareXxxConfirmation()`, antes de asignar el estado, para evitar que el dismiss del teclado interfiera con la transacción SwiftUI.
 - Estructura de secciones: PAÍSES → (Divider) → AEROPUERTOS → AEROLÍNEAS. La última aerolínea NO lleva divider inferior (verificado con `al.id != confirmAirlines.last?.id`).
 - `EditTripSheet` tiene fallback a `trip.tripAirports`/`trip.tripAirlines` para viajes pre-segmentos.
+
+**Banner publicitario (AdMob)**
+- `BannerAdView.swift`: `UIViewRepresentable` wrapping `GADBannerView` 320×50. SDK: `GoogleMobileAds` via SPM (`https://github.com/googleads/swift-package-manager-google-mobile-ads`).
+- Posición: mismo espacio que el contador — arriba con `menuPosition == "bottom"`, abajo con `menuPosition == "top"`.
+- Lógica en ContentView:
+  - `!isRaskmapPro` → `BannerAdView()` visible siempre
+  - `isRaskmapPro && showCountdown && cachedNextBanner != nil` → contador
+  - `isRaskmapPro && !showCountdown` → nada
+- `kAdUnitID` en `BannerAdView.swift` línea 16: contiene el ID de prueba de Google. **Sustituir por el ID real antes de publicar.**
+- Requiere `GADApplicationIdentifier` en `Info.plist` (App ID de AdMob, distinto del Ad Unit ID).
 
 **Raskmap Pro — features bloqueadas**
 - `@AppStorage("isRaskmapPro") var isRaskmapPro: Bool = false` presente en cada struct que lo necesita.
 - Patrón de bloqueo: `View.blur(radius: isRaskmapPro ? 0 : N).allowsHitTesting(isRaskmapPro)` + `Image(systemName: "lock.fill")` en ZStack overlay.
 - Features Pro activas:
   - Toggle "Mostrar contador" en Ajustes (solo el toggle blur, el label queda legible)
-  - Banner countdown "Quedan X días para" en pantalla principal (blur + lock capsule)
+  - Banner countdown "Quedan X días para" en pantalla principal — solo visible con Pro (sin Pro se muestra el banner de AdMob)
   - Toasts de logros: si no es Pro, no se muestran (sin toasts en absoluto)
   - Toggle "Live Activities" en Ajustes → Widgets (blur + candado morado) — además `startOrUpdateLiveActivity()` guarda internamente `isRaskmapPro` en el guard, así que sin Pro no se lanza aunque el toggle esté activo
   - Widgets de pantalla de bloqueo (`LockPctWidget`, `LockNextWidget`, `WatchFlagsWidget`) — muestran `lock.fill` si `widget_is_pro == false` en App Group
@@ -215,18 +263,43 @@ Cargado desde `countries.geojson` por `GeoJSONLoader`. Tiene `isoCode` (A3), `is
   - `"appFontFamily"` — fuente (no usada en widget, se mantiene por compatibilidad)
   - `"widget_next_flag"` — emoji bandera del próximo viaje
   - `"widget_next_days"` — días hasta el próximo viaje (-1 = sin viaje)
-  - `"widget_next_name"` — nombre del próximo viaje (Trip.title o título del país)
+  - `"widget_next_name"` — nombre localizado del país del próximo viaje
+  - `"widget_next_title"` — título personalizado del viaje (`Trip.title` / `country.plannedTitle`); vacío = usar `widget_next_name`
+  - `"widget_next_transport"` — emoji del medio de transporte del próximo viaje
+  - `"widget_next_date"` — timestamp del próximo viaje (Double, TimeInterval)
   - `"widget_is_pro"` — Bool; escrito por `WidgetDataWriter.syncPro(_:)`
   - `"widget_all_flags"` — String concatenando emojis de todos los próximos viajes en orden de fecha; escrito por `WidgetDataWriter.syncAllFlags(_:)`
-- `WidgetDataWriter.syncColor(hex:)`, `.syncFontFamily(_:)`, `.syncNextTrip(flag:days:name:)`, `.syncPro(_:)`, `.syncAllFlags(_:)` — todos llaman a `WidgetCenter.shared.reloadAllTimelines()`
+- `WidgetDataWriter.syncColor(hex:)`, `.syncFontFamily(_:)`, `.syncNextTrip(flag:days:name:transport:dateFrom:bookingRef:title:)`, `.syncPro(_:)`, `.syncAllFlags(_:)`, `.syncCountingMode(_:)` — todos llaman a `WidgetCenter.shared.reloadAllTimelines()` (excepto `syncFontFamily` y `syncCountingMode`)
+- `widget_next_booking` — código de reserva del próximo viaje (String, "" = sin reserva)
+- `widget_counting_mode` — modo de conteo ("un" | "unPlus" | "all"); leído en `makeEntry()` para seleccionar la key `widget_visited_*` correcta
+- `onChange(of: countingModeRaw)` en SettingsSheet → `WidgetDataWriter.syncCountingMode(_:)`
 - Color se configura en Ajustes → Widgets → Pantalla principal (`WidgetHomeColorSheet`): paleta de 10 colores con preview del widget. Default: `#EE6E7D`
 - Fuente en el widget: SF Pro (Satoshi no está en el bundle del widget extension)
 - `Color(hex:)` extension en `ContentView.swift` convierte hex string a SwiftUI Color
 
+**Tamaños de `RaskmapWidget` (`.systemSmall`, `.systemMedium`, `.systemLarge`)**
+
+`RaskmapEntry` incluye:
+- `transport, tripFlag, tripName, tripTitle, daysRemaining, tripDateFrom, bgColor` — info próximo viaje
+- `tripTitle: String` — título personalizado del viaje; vacío = usar `tripName` (nombre del país)
+- `visitedCount: Int` — leído de `widget_visited_*` según modo
+- `upcomingFlags: String` — leído de `widget_all_flags`
+- `bookingRef: String` — leído de `widget_next_booking`
+- `countingMode: WCountingMode` — leído de `widget_counting_mode`
+
+`widgetDateFormatter`: locale `es_ES`, formato `"EEE, d MMM yyyy"` → "lun., 4 jul. 2026"
+
+Lógica de nombre mostrado en las vistas: `let displayName = entry.tripTitle.isEmpty ? entry.tripName : entry.tripTitle`
+
+`RaskmapWidgetView` despacha vía `@Environment(\.widgetFamily)`:
+- **Small** (`RaskmapSmallView`): `ZStack(alignment:.topLeading)` — transporte arriba-izquierda, si hay `bookingRef` muestra `#CODIGO` arriba-derecha (monospaced **13pt**, igual que el nombre del país), bandera+displayName(13pt semibold azul)+días(22pt medium)+fecha(12pt) abajo-izquierda. `.padding(15)`.
+- **Medium** (`RaskmapMediumView`): `ZStack(alignment:.topTrailing)` externo — interior `HStack`: columna izquierda 70pt con icono de transporte, divisor vertical, columna derecha con bandera+displayName(16pt)+días(32pt medium)+fecha(13pt). Si hay `bookingRef` aparece arriba-derecha (13pt monospaced) con `.padding(.trailing, 15)`. `.padding(5)`.
+- **Large** (`RaskmapLargeView`): `ZStack(alignment:.topTrailing)` externo — interior `VStack`: próximo viaje (transporte 32pt, gap `.padding(.top, 48)`, displayName 17pt, días 36pt medium, fecha 14pt) → divisor → progress bar países visitados con conteo dinámico → divisor → "Próximos destinos" con `upcomingFlags`. Si hay `bookingRef` aparece arriba-derecha. `.padding(16)`.
+
 **Widgets disponibles**
 | Widget | Kind | Familia | Target | Libre/Pro |
 |---|---|---|---|---|
-| `RaskmapWidget` | `"RaskmapWidget"` | `.systemSmall` | RaskmapWidget | Libre |
+| `RaskmapWidget` | `"RaskmapWidget"` | `.systemSmall, .systemMedium, .systemLarge` | RaskmapWidget | Libre |
 | `RaskmapLockPctWidget` | `"RaskmapLockPct"` | `.accessoryCircular` | RaskmapWidget | Pro |
 | `RaskmapLockNextWidget` | `"RaskmapLockNext"` | `.accessoryRectangular` | RaskmapWidget | Pro |
 | `RaskmapLockInlineWidget` | `"RaskmapLockInline"` | `.accessoryInline` | RaskmapWidget | Pro |
@@ -281,6 +354,15 @@ Sin licencia activa no se puede subir nada ni activar iCloud/CloudKit.
 - [ ] El texto ya está escrito en Ajustes → Legal → Política de privacidad
 - [ ] Pegar la URL en Xcode → Info y en App Store Connect (campo "Privacy Policy URL")
 
+### Paso 5 — Configurar AdMob (monetización con banner)
+- [ ] Crear cuenta en [admob.google.com](https://admob.google.com)
+- [ ] Registrar la app → obtener **App ID** (`ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX`)
+- [ ] Crear unidad de anuncio tipo **Banner** → obtener **Ad Unit ID** (`ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX`)
+- [ ] Añadir SDK en Xcode: `File → Add Package Dependencies` → `https://github.com/googleads/swift-package-manager-google-mobile-ads` → target `Raskmap`
+- [ ] Añadir en `Info.plist`: `GADApplicationIdentifier = <App ID>`
+- [ ] En `BannerAdView.swift` línea 16: sustituir el test ID por el **Ad Unit ID** real
+- [ ] Actualizar Política de Privacidad para mencionar el uso de publicidad y datos de AdMob (obligatorio tanto para Google como para Apple)
+
 ### Paso 5 — App Store Connect: ficha de la app
 - [ ] Rellenar cuestionario de privacidad (datos en iCloud del usuario, sin terceros, sin analíticas)
 - [ ] Nombre, subtítulo, descripción localizada
@@ -292,6 +374,131 @@ Sin licencia activa no se puede subir nada ni activar iCloud/CloudKit.
 ### Paso 6 — Probar con TestFlight antes del lanzamiento público
 - [ ] Archivar en Xcode → Product → Archive → Distribute App → TestFlight
 - [ ] Revisar que `v.1.0` en SplashView coincide con el Build/Version de Xcode
+
+---
+
+## Cambios relevantes recientes (sesión 2026-04-15)
+
+### Widget pantalla principal — mejoras visuales y de datos
+
+**`RaskmapEntry` — nuevo campo `tripTitle: String`**
+- Fuente: `ProximoRow.rowTitle` = `trip?.title ?? country.plannedTitle` para países wantToVisit; `trip.title` para visited con trip futuro.
+- `nextProximosBanner` devuelve ahora `title: String?` (campo añadido a la tupla). `cachedNextBanner` también actualizado.
+- `WidgetDataWriter.syncNextTrip(flag:days:name:transport:dateFrom:bookingRef:title:)` — nuevo parámetro `title`; escribe `widget_next_title`.
+- En todas las vistas del widget: `let displayName = entry.tripTitle.isEmpty ? entry.tripName : entry.tripTitle` — muestra el título del viaje si existe, si no el nombre del país.
+
+**Formato de fecha — día de la semana**
+- `widgetDateFormatter` usa formato `"EEE, d MMM yyyy"` con locale `es_ES` → "lun., 4 jul. 2026".
+- Anteriormente usaba `dateStyle: .medium` (sin día de la semana).
+
+**Número de reserva — tamaño unificado**
+- En Small, Medium y Large: `bookingRef` se muestra con font size **13** (monospaced semibold), igual que el nombre del país. Antes era 10pt solo en small.
+- Medium y Large: `bookingRef` añadido arriba-derecha usando `ZStack(alignment: .topTrailing)` externo.
+
+**Tamaños de fecha actualizados:** Small 11→12, Medium 12→13, Large 13→14.
+
+**Widget Large — más padding y espacio bajo el transporte**
+- `.padding` general: 10→16.
+- Gap entre emoji de transporte y la info del viaje: `.padding(.top, 36)` → `.padding(.top, 48)`.
+
+**Preview `WidgetHomeColorSheet`**
+- Sincronizada con `RaskmapSmallView` real: `.padding(15)`, `bookingRef` arriba-derecha (13pt), fecha con día de semana, `weight: .medium` en días, `font(.system(size: 13))` para nombre.
+
+**Íconos en `WidgetLockScreenSheet` y `WidgetWatchSheet`**
+- Unificados con `WidgetHomeColorSheet`: `.font(.system(size: 16)).frame(width: 24)`, `HStack(spacing: 12)`, `.padding(.horizontal, 24)`, `Divider().padding(.leading, 60)`. `Spacer()` en cada fila.
+
+---
+
+### Rendimiento del mapa — color change FPS fix (`RaskMapView.swift`)
+
+**`Coordinator.refreshRendererColors()`** — optimización crítica:
+- Antes: llamaba `renderer.setNeedsDisplay()` en TODOS los renderers cacheados (potencialmente 100s de polígonos), bloqueando el main thread y causando freeze al hacer pan.
+- Ahora: calcula `visibleISOs` via `mv.visibleMapRect` + `boundingMapRect.intersects`. Solo llama `setNeedsDisplay()` en polígonos visibles. Todos los demás reciben `applyStyle` (color actualizado en `fillColor`/`strokeColor`) sin forzar redibujado inmediato — MapKit los renderiza con el color nuevo cuando el usuario hace pan.
+
+**`mapView(_:rendererFor:)` fallback** — eliminada búsqueda O(n):
+- Antes: `lastKnownStatus[polygon.isoCode] ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status ?? .none`
+- Ahora: `lastKnownStatus[polygon.isoCode] ?? .none` — O(1), evita bloqueo del main thread al renderizar polígonos sin caché durante el pan.
+
+---
+
+### Botones de info en ajustes pluricontinentales/hemisféricos
+
+**`MultiContinentSheet`**
+- Botón `info.circle` en `.navigationBarTrailing`.
+- Overlay (mismo patrón que AllCountriesSheet): fondo semitransparente, tarjeta `.regularMaterial`, icono `info.circle.fill` azul, texto explicativo, botón "Entendido". Animado con `.spring(duration: 0.3)`.
+- Texto: explica que la elección afecta a estadísticas por regiones y logros de continentes completos.
+
+**`MultiHemisphereSheet`**
+- Mismo patrón.
+- Texto: explica que afecta al logro «Ambos hemisferios» y a los porcentajes de hemisferio en la pantalla de logros.
+
+---
+
+## Cambios relevantes recientes (sesión 2026-04-14, continuación)
+
+### Swift 6 — FlightInfo Sendable
+- Eliminado `Sendable` explícito de `FlightInfo`. Con `@Model` en el mismo fichero, Swift 6 infería `@MainActor` sobre la conformancia `Codable` sintetizada, causando error. `TripAirport`, `TripAirline`, `TripSegment` mantienen `Sendable` explícito porque se decodifican siempre como arrays (stdlib nonisolated), no directamente.
+
+### Widget pequeño — padding y márgenes
+- `RaskmapWidget` ahora usa `.contentMarginsDisabled()` (elimina los ~11pt de margen del sistema que añade `containerBackground` automáticamente).
+- Small view: `.padding(15)` explícito, dando control total sobre el espacio con el borde.
+
+### Widget días — sin negrita
+- Días restantes cambiados de `.bold` a `.medium` en los tres tamaños (small 22pt, medium 32pt, large 36pt).
+
+### Widget pequeño — código de reserva con `#`
+- `Text("#\(entry.bookingRef)")` arriba-derecha cuando no está vacío.
+
+### Widget grande — conteo dinámico por modo
+- `RaskmapEntry` incluye `countingMode: WCountingMode` leído de `widget_counting_mode`.
+- `RaskmapLargeView` muestra el conteo y denominador según el modo activo en Ajustes (no hardcodeado a ONU/193).
+- `WidgetDataWriter.syncCountingMode(_:)` escrito en `onChange(of: countingModeRaw)` de SettingsSheet.
+
+### Legal — pantalla completa
+- Las 5 secciones legales (Política de privacidad, Términos de uso, Aviso legal, RGPD, Atribuciones) ahora usan `.fullScreenCover` en lugar de `.sheet`.
+- Nuevo struct `LegalInfoSheet`: sin `presentationDetents`, título grande (`.navigationBarTitleDisplayMode(.large)`), texto alineado a la izquierda (`.multilineTextAlignment(.leading)`).
+- Contenido actualizado: fecha de última actualización (abril 2026), mención a compras integradas en Términos, dirección Apple en Aviso legal, instrucciones detalladas de borrado iCloud en RGPD, SF Symbols + SwiftData/CloudKit en Atribuciones.
+
+### Widget sheets — alineación de iconos (obsoleto, ver sesión 2026-04-15)
+- Se intentó `.resizable().aspectRatio(contentMode: .fit).frame(width: 24, height: 24).frame(width: 32)` — reemplazado en sesión posterior por el mismo patrón de `WidgetHomeColorSheet`.
+
+### Confirm cards — bug pantalla vacía primera vez
+- **Causa raíz**: `fullScreenCover` en iOS evalúa su clausura de contenido con el snapshot de estado anterior al render, especialmente al presentarse desde dentro de otro modal. En la primera presentación, `confirmVisits` aparecía vacío aunque se hubiera asignado en el mismo call.
+- **Fix**: los tres sheets (`AddTripSheet`, `PlannedDatePickerSheet`, `EditTripSheet`) envuelven su `NavigationStack` en un `ZStack`. La tarjeta de confirmación se muestra como `if showXxx { confirmCard(...) }` directamente en el ZStack, sin `fullScreenCover`.
+- `resignFirstResponder` movido al **inicio** de cada función `prepareXxxConfirmation()`, antes de cualquier asignación de estado.
+
+### SettingsSheet — showCountdown reactivo al revocar Pro
+- `showCountdown` en `SettingsSheet` cambiado de `@Binding` a `@AppStorage("showCountdown")`. `@Binding` no reacciona a escrituras externas (`onChange(of: isRaskmapPro)` en ContentView); `@AppStorage` sí.
+
+### TransportStatsSheet — estadísticas de asientos
+- Nuevos cuadrantes "Asiento favorito" y "Tipo de asiento" en `TransportStatsSheet`.
+- Computed vars `topSeats` y `topSeatPositions` iteran `trip.flightDetails` y `seg.flightInfo`.
+- `SeatStatsSheet` y `SeatPositionStatsSheet` con estado vacío ("Sin datos registrados") cuando no hay datos.
+
+---
+
+## Cambios relevantes recientes (sesión 2026-04-14)
+
+### Widgets pantalla principal — tamaños Mediano y Grande
+
+**`RaskmapEntry`** ampliado con dos nuevos campos:
+- `visitedCount: Int` — leído de `widget_visited_un` (modo ONU)
+- `upcomingFlags: String` — leído de `widget_all_flags`
+
+**`RaskmapProvider`**: `placeholder` y `makeEntry` actualizados para poblar los nuevos campos.
+
+**`RaskmapWidget.supportedFamilies`** → `[.systemSmall, .systemMedium, .systemLarge]`
+
+**Vistas** — el antiguo `RaskmapWidgetView` se divide en tres vistas privadas:
+- `RaskmapSmallView` — mismo layout de antes (transporte + bandera + días + fecha)
+- `RaskmapMediumView` — horizontal: icono transporte (70pt) | divisor | flag+nombre+días(32pt)+fecha
+- `RaskmapLargeView` — próximo viaje arriba + divisor + barra progreso países visitados + sección "Próximos destinos" con `upcomingFlags`
+
+`RaskmapWidgetView` ahora despacha con `@Environment(\.widgetFamily)`.
+
+Previews para los tres tamaños añadidas al final de `RaskmapWidget.swift`.
+
+**`WidgetHomeColorSheet`** actualizada: sección "Tamaños disponibles" debajo de la paleta de colores describe los tres tamaños (Pequeño / Mediano / Grande) con su contenido.
 
 ---
 
@@ -493,3 +700,83 @@ Funciones `isAchieved()`, `isPassportAchieved()`, `profileLastTripDate()`, el `v
 - **No llamar `startOrUpdateLiveActivity()` en el bloque síncrono del `.task`** — `features` no está cargado aún y la bandera saldrá 🌐. Llamarlo siempre dentro del callback de `GeoJSONLoader.loadCountriesAsync` o en el branch `else` (features ya en memoria).
 - **No usar `NSUbiquitousKeyValueStore`** para compartir datos con el widget — no está configurado. Usar siempre `UserDefaults(suiteName: "group.com.jaime.raskmap")`.
 - **No definir `RaskmapTripAttributes` solo en un target** — necesita existir en `Raskmap/RaskmapActivityAttributes.swift` Y en `RaskmapWidget/RaskmapActivityAttributes.swift` para que ActivityKit las relacione correctamente.
+- **No hardcodear `"🌍"` en `performEditSave` para trips sin segmentos** — usar `selectedTransport` del estado local del `EditTripSheet`.
+- **No usar `#Predicate { $0.isoCode == country.isoCode }` directamente** — SwiftData no puede usar keypaths de otro modelo en el predicado. Capturar primero en `let iso = country.isoCode` y luego `#Predicate { $0.isoCode == iso }`.
+- **No registrar dos `.sheet(item: $selectedCountry)` a la vez** — uno en `mapCore()` y otro en `mapWithSheets()` causa el warning "Currently, only presenting a single sheet is supported". El único autorizado es el de `mapWithSheets()`.
+- **No usar `.fontWeight()` sobre fuentes custom Satoshi** — el entorno global tiene Satoshi-Regular size 16; `.fontWeight()` intenta actualizar el descriptor de UIFont y falla silenciosamente con warning. Usar siempre `.font(.palatino(.body, weight: .bold))` etc.
+
+---
+
+## Cambios relevantes recientes (sesión 2026-04-13)
+
+### Próximos — múltiples viajes por país (`ProximoRow`)
+- `ProximoRow` struct (al final de ContentView, después de `VisitEntry`):
+  ```swift
+  struct ProximoRow: Identifiable {
+      let id: String          // "c_{iso}" sin trip, "{iso}_{createdAt}" con trip, "v_{iso}" visited
+      let country: Country
+      let trip: Trip?
+      var isoCode: String     { country.isoCode }
+      var dateFrom: Date?     { trip?.dateFrom ?? country.plannedDate }
+      var dateTo: Date?       { trip?.dateTo ?? country.plannedDateTo }
+      var transport: String?  { trip?.transport ?? country.transport }
+      var rowTitle: String?   { trip?.title ?? country.plannedTitle }
+  }
+  ```
+- `allProximoRows: [ProximoRow]` (computed en ContentView) reemplaza el antiguo `allProximos: [Country]`. Construye una fila por cada trip futuro de cada país `wantToVisit`; si no tiene trips futuros, una fila sin trip.
+- Al guardar un próximo, **siempre se inserta un `Trip`** con el transporte elegido. `country.plannedDate` apunta al más próximo.
+- `StatusListSheet` recibe `proximoRows: [ProximoRow]` y para el filtro `.wantToVisit` muestra filas agrupadas por mes/año con botón xmark por fila. Alert "¿Eliminar este próximo?" al borrar.
+- Al borrar una fila de próximo: si tenía trip, se borra el trip y se recalcula `country.plannedDate`/`transport` al siguiente más próximo; si no quedan, `country.status = .none`.
+
+### Próximos — sincronización de transporte
+- `performEditSave` en `EditTripSheet`: cuando `tripSegments.isEmpty`, `trip.transport = selectedTransport` (antes era `"🌍"` hardcodeado — bug que sobreescribía el transporte registrado).
+- `CountryTripsSheet.editingTrip` sheet tiene `onDismiss` que hace fetch de los trips futuros del país y sincroniza `country.transport`, `plannedDate`, `plannedDateTo`, `plannedTitle` al más próximo.
+- `editingFutureTrip` sheet (desde lista Próximos) tiene `onDismiss` idéntico + actualiza `cachedNextBanner` y llama `WidgetDataWriter.syncNextTrip`.
+- `bannerTappedCountry` sheet tiene `onDismiss` que recalcula `cachedNextBanner` y sincroniza widget.
+- `lastEditedFutureTripIso: String?` (`@State` en ContentView) captura el `isoCode` del trip que se abre en `editingFutureTrip` via `.onAppear`, para poder usarlo en `onDismiss` (que no recibe el item).
+
+### EditTripSheet — fecha y transporte editables
+- Para viajes **sin segmentos** (`tripSegments.isEmpty`), `EditTripSheet` ahora muestra:
+  - Sección **TRANSPORTE**: 6 botones (✈️🚗🚂🚌🚢🚶🏻), igual que `PlannedDatePickerSheet`
+  - Sección **FECHAS**: `DatePicker` compacto para "Desde" y "Hasta (opcional)"; "Hasta" se puede añadir/quitar; si se cambia "Desde" a posterior de "Hasta", "Hasta" se borra
+- `@State private var localDateFrom: Date` y `localDateTo: Date?` inicializados desde `trip.dateFrom`/`trip.dateTo` en `init`
+- `calculatedDateFrom`/`calculatedDateTo` usan los valores locales cuando no hay segmentos; cuando hay segmentos, siguen usando las fechas de los segmentos (sin cambio)
+- Presentación cambiada a `.presentationDetents([.large])` — pantalla completa siempre
+
+### Widget pantalla principal (`RaskmapWidget`) — rediseño
+- `RaskmapProvider` cambiado de `AppIntentTimelineProvider` a `TimelineProvider` (sin intent — configuración estática)
+- `RaskmapEntry` añade: `transport: String`, `tripDateFrom: Date?`; mantiene `tripFlag`, `tripName`, `daysRemaining`, `bgColor`
+- Keys nuevas en App Group: `widget_next_transport` (emoji transporte), `widget_next_date` (TimeInterval de la fecha de inicio del viaje)
+- `WidgetDataWriter.syncNextTrip` extendido con `transport: String?` y `dateFrom: Date?`; todos los callsites actualizados con `b?.transport` y `b?.dateFrom`
+- `nextProximosBanner` y `cachedNextBanner` extendidos a tupla `(days, flag, name, isoCode, transport, dateFrom)`
+- `daysLabel(_ days: Int) -> String`: "1 día", "X días" si ≤99, "+X meses" si >99 (X = days/30, mínimo 1)
+- Layout del widget: `ZStack(alignment: .topLeading)` — emoji transporte en esquina top-left; `VStack(alignment: .leading)` con `frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)` para flag+nombre azul, días grande, fecha gris — todo pegado a la esquina inferior izquierda
+- Fallback: si `transport` vacío → "✈️"; si `flag` vacío → "🌍"; si `daysRemaining < 0` → vista "Sin próximo viaje"
+
+### Pantalla de carga al arrancar
+- `ContentView.body` tiene overlay que muestra mientras `isLoadingFeatures == true`: fondo `Color(.systemBackground)`, emoji 🌍 (64pt), texto "Raskmap" bold, spinner. Transición `.opacity` con `.easeOut(0.4s)`.
+
+### Ajustes — Colores del mapa: estado pendiente + animación
+- Los tres `ColorPickerRow` ahora usan estado local pendiente (`pendingVisitedColor`, `pendingWantToVisitColor`, `pendingBucketListColor`) inicializado desde `colorTheme` en `.onAppear`. Los colores **no** se aplican al mapa hasta pulsar un botón.
+- Botón **"Cambiar colores"** (azul): aplica los pendientes a `colorTheme` + activa overlay de carga 5 s.
+- Botón **"Restablecer colores predeterminados"** (rojo): resetea pendientes y `colorTheme` a defaults + activa overlay de carga 5 s.
+- Ambos botones se deshabilitan durante `isApplyingColors`.
+- Overlay de carga: fondo semitransparente negro 45% sobre toda la pantalla + recuadro negro 75% redondeado (padding 40×32) con spinner blanco y texto "Actualizando colores…"
+
+### Corrección warning "multiple sheets"
+- Eliminado el bloque `// MARK: - Sheet país` dentro de `mapCore()` (líneas ~1027-1078 en la versión anterior). Era un `.sheet(item: $selectedCountry)` duplicado que coexistía con el de `mapWithSheets()`. Solo debe existir el de `mapWithSheets()`.
+
+### Búsqueda con tildes
+- `AddSegmentSheet.filteredFeatures`: búsqueda con `.folding(options: [.caseInsensitive, .diacriticInsensitive])` — insensible a tildes y mayúsculas.
+
+### Fix congelación scroll / borde país tras cerrar sheet
+- `highlightedIsoCode = nil` se ejecuta **inmediatamente** en `onDismiss` (sin delay) para que el borde negro desaparezca al instante al cerrar el sheet.
+- `recheckLocationIfNeeded()` sigue con delay de 0.1 s (sin cambios).
+
+### Fix mapa no actualiza color al cambiar status
+- `refreshTrigger: Bool` (`@State` en ContentView) se lee explícitamente en `mapCore()` con `let _ = refreshTrigger` dentro del ZStack. Sin esta lectura, el toggle no forzaba re-render de `RaskMapView`.
+
+### Fix "Revisa los datos" vacío al abrir por primera vez
+- Causa: SwiftUI batchea los cambios de estado; al asignar `confirmVisits`/`confirmAirports`/`confirmAirlines` y luego `showSaveConfirmation = true` de forma síncrona, el `fullScreenCover` se abre antes de que los arrays estén committed → pantalla vacía en la primera apertura.
+- Fix aplicado a **todos** los puntos donde se activa el confirm card: `AddTripSheet.prepareConfirmation()`, `EditTripSheet.prepareEditSaveConfirmation()` (dos paths: con y sin segmentos), y `PlannedDatePickerSheet.prepareConfirmation()`. En todos: `DispatchQueue.main.async { self.showSaveConfirmation = true }` (sin `withAnimation`).
+- **No usar `withAnimation { showSaveConfirmation = true }`** en estos puntos — no resuelve la race condition. Siempre `DispatchQueue.main.async`.
