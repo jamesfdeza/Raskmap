@@ -12,6 +12,9 @@ struct RaskMapView: UIViewRepresentable {
     var showBucketList: Bool = true
     var locationIsoCode: String? = nil  // country where user currently is
     var onReady: ((_ center: @escaping (String) -> Void) -> Void)? = nil
+    var flightMode: Bool = false
+    var flightRouteFilter: FlightRouteFilter = .past
+    var trips: [Trip] = []
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -98,6 +101,28 @@ struct RaskMapView: UIViewRepresentable {
 
 
         guard !features.isEmpty else { return }
+
+        // ── Flight mode toggle ──
+        if flightMode != coord.lastFlightMode {
+            coord.lastFlightMode = flightMode
+            coord.lastFlightRouteFilter = flightRouteFilter
+            if flightMode {
+                coord.enterFlightMode(mapView: mapView, trips: trips, filter: flightRouteFilter)
+            } else {
+                coord.exitFlightMode(mapView: mapView)
+            }
+            return
+        }
+        // Si estamos en modo vuelos y cambian filtro o trips, recalcular
+        if flightMode {
+            if flightRouteFilter != coord.lastFlightRouteFilter {
+                coord.lastFlightRouteFilter = flightRouteFilter
+                coord.rebuildFlightOverlays(mapView: mapView, trips: trips, filter: flightRouteFilter)
+            } else {
+                coord.refreshFlightOverlaysIfNeeded(mapView: mapView, trips: trips, filter: flightRouteFilter)
+            }
+            return
+        }
 
         // ── 1. Primera carga ──
         if !coord.initialLoadDone {
@@ -368,6 +393,17 @@ struct RaskMapView: UIViewRepresentable {
         private var colorCancellables = Set<AnyCancellable>()
         weak var mapView: MKMapView?
 
+        /// Fallback reutilizable para taps en la Antártida cuando aún no está en `parent.countries`.
+        static let antarcticaFallback = Country(name: "Antarctica", isoCode: "ATA")
+
+        // Flight mode
+        var lastFlightMode: Bool = false
+        var lastFlightRouteFilter: FlightRouteFilter = .past
+        var flightRouteOverlays: [MKGeodesicPolyline] = []
+        var airportAnnotations: [AirportDotAnnotation] = []
+        var lastFlightRoutes: Set<FlightRoutePair> = []
+        var lastFlightAirports: Set<String> = []
+
         init(parent: RaskMapView) { self.parent = parent }
 
         func subscribeToColorChanges() {
@@ -384,6 +420,12 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         func refreshRendererColors() {
+            guard let mv = mapView else { return }
+            let visibleRect = mv.visibleMapRect
+            let visibleISOs = Set(parent.features
+                .filter { $0.boundingMapRect.intersects(visibleRect) }
+                .map { $0.isoCode })
+
             for (_, renderer) in rendererCache {
                 guard let polygon = renderer.polygon as? CountryPolygon else { continue }
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
@@ -394,7 +436,12 @@ struct RaskMapView: UIViewRepresentable {
                                        highlighted: isHighlighted,
                                        showBucketList: parent.showBucketList,
                                        isUserHere: isUserHere)
-                renderer.setNeedsDisplay()
+                // Only force immediate redraw for currently visible polygons.
+                // Non-visible ones have their fillColor updated and will render
+                // with the new color when the user pans to them.
+                if visibleISOs.contains(polygon.isoCode) {
+                    renderer.setNeedsDisplay()
+                }
             }
         }
 
@@ -404,20 +451,39 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let route = overlay as? MKGeodesicPolyline,
+               flightRouteOverlays.contains(where: { $0 === route }) {
+                let renderer = MKPolylineRenderer(polyline: route)
+                let accent = UIColor(red: 64/255, green: 114/255, blue: 212/255, alpha: 1.0)
+                renderer.strokeColor = accent.withAlphaComponent(0.85)
+                renderer.lineWidth = 1.6
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                return renderer
+            }
             guard let polygon = overlay as? CountryPolygon else {
                 return MKOverlayRenderer(overlay: overlay)
             }
             let pid = ObjectIdentifier(polygon)
-            if let cached = rendererCache[pid] { return cached }
+            if let cached = rendererCache[pid] {
+                if parent.flightMode {
+                    cached.fillColor = .clear
+                    cached.strokeColor = .clear
+                }
+                return cached
+            }
             // Fallback — debería estar en cache desde el precalentado
             let renderer = MKPolygonRenderer(polygon: polygon)
-            let status = lastKnownStatus[polygon.isoCode]
-                      ?? parent.countries.first { $0.isoCode == polygon.isoCode }?.status
-                      ?? .none
-            RaskMapView.applyStyle(status: status, to: renderer,
-                                   highlighted: polygon.isoCode == lastHighlighted,
-                                   showBucketList: parent.showBucketList,
-                                   isUserHere: polygon.isoCode == parent.locationIsoCode)
+            if parent.flightMode {
+                renderer.fillColor = .clear
+                renderer.strokeColor = .clear
+            } else {
+                let status = lastKnownStatus[polygon.isoCode] ?? .none
+                RaskMapView.applyStyle(status: status, to: renderer,
+                                       highlighted: polygon.isoCode == lastHighlighted,
+                                       showBucketList: parent.showBucketList,
+                                       isUserHere: polygon.isoCode == parent.locationIsoCode)
+            }
             rendererCache[pid] = renderer
             return renderer
         }
@@ -432,6 +498,34 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if let airport = annotation as? AirportDotAnnotation {
+                let id = "airportDot"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
+                    ?? MKAnnotationView(annotation: airport, reuseIdentifier: id)
+                view.annotation = airport
+                view.canShowCallout = false
+                view.bounds = CGRect(x: 0, y: 0, width: 10, height: 10)
+                view.centerOffset = .zero
+                view.backgroundColor = .clear
+                view.isUserInteractionEnabled = false
+                // Reutilizar el dot si ya existe (evita churn de subviews al reusar celdas).
+                if view.subviews.isEmpty {
+                    let accent = UIColor(red: 64/255, green: 114/255, blue: 212/255, alpha: 1.0)
+                    let dot = UIView(frame: view.bounds)
+                    dot.tag = 1001
+                    dot.backgroundColor = .white
+                    dot.layer.cornerRadius = 5
+                    dot.layer.borderColor = accent.cgColor
+                    dot.layer.borderWidth = 2
+                    dot.layer.shadowColor = UIColor.black.cgColor
+                    dot.layer.shadowOpacity = 0.18
+                    dot.layer.shadowRadius = 2.5
+                    dot.layer.shadowOffset = CGSize(width: 0, height: 1)
+                    dot.isUserInteractionEnabled = false
+                    view.addSubview(dot)
+                }
+                return view
+            }
             guard let userLoc = annotation as? MKUserLocation else { return nil }
             userLoc.title = ""
             userLoc.subtitle = ""
@@ -453,7 +547,154 @@ struct RaskMapView: UIViewRepresentable {
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldReceive t: UITouch) -> Bool { true }
 
+        // MARK: - Flight mode
+
+        func enterFlightMode(mapView: MKMapView, trips: [Trip], filter: FlightRouteFilter) {
+            // Ocultar punto de ubicación del usuario
+            mapView.showsUserLocation = false
+            // Ocultar polígonos sin quitar overlays (más rápido)
+            for (_, renderer) in rendererCache {
+                renderer.fillColor   = .clear
+                renderer.strokeColor = .clear
+                renderer.setNeedsDisplay()
+            }
+            applyFlightOverlays(mapView: mapView, trips: trips, filter: filter)
+        }
+
+        func exitFlightMode(mapView: MKMapView) {
+            mapView.removeOverlays(flightRouteOverlays)
+            mapView.removeAnnotations(airportAnnotations)
+            flightRouteOverlays.removeAll()
+            airportAnnotations.removeAll()
+            lastFlightRoutes.removeAll()
+            lastFlightAirports.removeAll()
+            // Restaurar punto de ubicación
+            mapView.showsUserLocation = true
+            // Restaurar estilos
+            let showBucket = parent.showBucketList
+            for (_, renderer) in rendererCache {
+                guard let polygon = renderer.polygon as? CountryPolygon else { continue }
+                let status = lastKnownStatus[polygon.isoCode] ?? .none
+                let isHL = polygon.isoCode == lastHighlighted
+                let isHere = polygon.isoCode == parent.locationIsoCode
+                RaskMapView.applyStyle(status: status, to: renderer,
+                                       highlighted: isHL,
+                                       showBucketList: showBucket,
+                                       isUserHere: isHere)
+                renderer.setNeedsDisplay()
+            }
+            // Encajar la vista a los países visitados (paralelo al fit de aeropuertos
+            // que se hace al entrar en modo vuelos).
+            fitToVisitedCountries(mapView: mapView)
+        }
+
+        /// Ajusta la región del mapa para que se vean todos los países visitados
+        /// (o vividos). Si no hay ninguno o la región sería demasiado grande,
+        /// no hace nada y conserva la vista actual.
+        private func fitToVisitedCountries(mapView: MKMapView) {
+            let visitedSet = Set(
+                parent.countries
+                    .filter { $0.status == .visited || $0.status == .lived }
+                    .map { $0.isoCode }
+            )
+            guard !visitedSet.isEmpty else { return }
+            var rect = MKMapRect.null
+            for feature in parent.features where visitedSet.contains(feature.isoCode) {
+                rect = rect.union(feature.boundingMapRect)
+            }
+            guard !rect.isNull, rect.size.width > 0, rect.size.height > 0 else { return }
+            let padding = UIEdgeInsets(top: 80, left: 50, bottom: 80, right: 50)
+            mapView.setVisibleMapRect(rect, edgePadding: padding, animated: true)
+        }
+
+        func refreshFlightOverlaysIfNeeded(mapView: MKMapView, trips: [Trip], filter: FlightRouteFilter) {
+            let (routes, airports) = FlightRoutesBuilder.build(from: trips, filter: filter)
+            guard routes != lastFlightRoutes || airports != lastFlightAirports else { return }
+            mapView.removeOverlays(flightRouteOverlays)
+            mapView.removeAnnotations(airportAnnotations)
+            flightRouteOverlays.removeAll()
+            airportAnnotations.removeAll()
+            applyFlightOverlays(mapView: mapView, trips: trips, filter: filter)
+        }
+
+        /// Cambia el subfiltro (past/upcoming) — limpia y reconstruye siempre.
+        func rebuildFlightOverlays(mapView: MKMapView, trips: [Trip], filter: FlightRouteFilter) {
+            mapView.removeOverlays(flightRouteOverlays)
+            mapView.removeAnnotations(airportAnnotations)
+            flightRouteOverlays.removeAll()
+            airportAnnotations.removeAll()
+            lastFlightRoutes.removeAll()
+            lastFlightAirports.removeAll()
+            applyFlightOverlays(mapView: mapView, trips: trips, filter: filter)
+        }
+
+        private func applyFlightOverlays(mapView: MKMapView, trips: [Trip], filter: FlightRouteFilter) {
+            let (routes, airports) = FlightRoutesBuilder.build(from: trips, filter: filter)
+            lastFlightRoutes = routes
+            lastFlightAirports = airports
+
+            for pair in routes {
+                guard let a = AirportCoordinates.coordinate(for: pair.a),
+                      let b = AirportCoordinates.coordinate(for: pair.b) else { continue }
+                var pts = [a, b]
+                let line = MKGeodesicPolyline(coordinates: &pts, count: 2)
+                flightRouteOverlays.append(line)
+            }
+            mapView.addOverlays(flightRouteOverlays, level: .aboveRoads)
+
+            for iata in airports {
+                guard let c = AirportCoordinates.coordinate(for: iata) else { continue }
+                airportAnnotations.append(AirportDotAnnotation(iata: iata, coordinate: c))
+            }
+            mapView.addAnnotations(airportAnnotations)
+
+            // Encaja la región al conjunto UNIÓN (pasados + próximos) para que
+            // el viewport sea el MISMO al cambiar de filtro — así el usuario no
+            // pierde la referencia. Si el filtro actual tiene un subconjunto,
+            // los puntos/líneas cambian pero el encuadre es estable.
+            fitFlightRegion(mapView: mapView, trips: trips)
+        }
+
+        /// Encaja la vista del mapa a TODOS los aeropuertos implicados en
+        /// vuelos (pasados + próximos). Maneja el caso degenerado de 1 solo
+        /// aeropuerto con un span razonable — si no, `setVisibleMapRect` con
+        /// un MKMapRect 1×1 + padding zooma hasta nivel calle.
+        private func fitFlightRegion(mapView: MKMapView, trips: [Trip]) {
+            var iataSet = Set<String>()
+            for f in [FlightRouteFilter.past, FlightRouteFilter.upcoming] {
+                let (_, airports) = FlightRoutesBuilder.build(from: trips, filter: f)
+                iataSet.formUnion(airports)
+            }
+            guard !iataSet.isEmpty else { return }
+
+            let coords: [CLLocationCoordinate2D] = iataSet.compactMap {
+                AirportCoordinates.coordinate(for: $0)
+            }
+            guard !coords.isEmpty else { return }
+
+            // Caso 1 solo aeropuerto: usamos un span regional para no zoomar
+            // a nivel calle (≈ un país mediano de ancho).
+            if coords.count == 1 {
+                let region = MKCoordinateRegion(
+                    center: coords[0],
+                    span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+                )
+                mapView.setRegion(region, animated: true)
+                return
+            }
+
+            var rect = MKMapRect.null
+            for c in coords {
+                let p = MKMapPoint(c)
+                rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 1, height: 1))
+            }
+            guard !rect.isNull else { return }
+            let padding = UIEdgeInsets(top: 80, left: 50, bottom: 80, right: 50)
+            mapView.setVisibleMapRect(rect, edgePadding: padding, animated: true)
+        }
+
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            if parent.flightMode { return }
             guard let mapView = gesture.view as? MKMapView else { return }
             let tapLocation = gesture.location(in: mapView)
             let tapCoord = mapView.convert(tapLocation, toCoordinateFrom: mapView)
@@ -464,7 +705,7 @@ struct RaskMapView: UIViewRepresentable {
             // no other tappable territory exists below that latitude.
             if tapCoord.latitude < -60 {
                 let result = parent.countries.first { $0.isoCode == "ATA" }
-                          ?? Country(name: "Antarctica", isoCode: "ATA")
+                          ?? Coordinator.antarcticaFallback
                 parent.onCountryTapped(result)
                 return
             }
