@@ -1,5 +1,172 @@
 # CONTEXT.md — Raskmap
 
+## Cambios recientes (2026-04-26 · iteración 2)
+
+Segunda tanda del día, sobre los bugs anteriores: dedup de toggles de
+escala, ruta cronológica al guardar, animación simultánea en wrapped y
+ajustes de UX en la sección legal.
+
+### Task 8 — Persistencia + UI de escalas (refactor consolidado)
+
+**Bugs reportados:**
+1. Editar trip MAD-ARN ida + ARN-AMS-MAD vuelta y marcar Países Bajos como
+   escala visitada NO marcaba el país como visitado en el flujo legacy
+   non-segment. El segment-based sí funcionaba (children + `country.status`),
+   pero el path legacy solo persistía `trip.visitedLayoverISOs` y nada más.
+2. Al re-editar el mismo trip aparecían DOS toggles para el mismo país de
+   escala (uno bajo IDA y otro bajo VUELTA), confuso por diseño explícito
+   anterior.
+
+**Fix 1 — `AddSegmentSheet.deriveFlightCountries()`:**
+- Combina escalas de IDA + VUELTA en una sola lista deduplicada por ISO.
+  `outboundLayoverChoices` pasa a ser la lista única; `returnLayoverChoices`
+  queda como `@State` vacío para no romper call-sites externos.
+- `excludedISOs` usa `destinationISO` LOCAL (no `@State destinationIso`)
+  para evitar reads stale dentro del mismo render pass.
+- UI step 3: una sola sección **"¿Visitaste alguna escala?"** sin
+  separador IDA/VUELTA. `layoverSection(title:)` con title opcional
+  (nil omite el header).
+- Banderas de las escalas pasan a `FlagLabel` (Twemoji).
+
+**Fix 2 — `EditTripSheet` flujo legacy (mismo refactor):**
+- `legacyOutboundLayovers` deduplicada single source; `legacyReturnLayovers`
+  vacío. `legacyLayoverSection(title:)` con title opcional.
+- `deriveLegacyFlightCountries` combina IDA + VUELTA con `seen` set
+  excluyendo país de salida y destino.
+
+**Fix 3 — `EditTripSheet.performEditSave` legacy: child trips para escalas:**
+- Por cada escala marcada como visitada se crea un child Trip de 1 día
+  (`dateFrom = dateTo = trip.dateFrom`) con `segmentGroupID` y
+  `isSegmentChild=true`. Esto:
+    - Hace que la escala aparezca en la lista de viajes del país.
+    - Si el viaje es pasado (`dateFrom <= today`), fuerza
+      `country.status = .visited` y limpia `plannedDate*`.
+    - Combinado con `daysPerCountry` (que stake-a `t.visitedLayoverISOs`
+      con prio 50), suma exactamente 1 día en el contador.
+- Limpia children previos antes de re-crear → des-togglar elimina.
+- Se inserta DESPUÉS del bloque "Delete old children" para no auto-borrarse.
+
+**Cobertura final:**
+| Flujo | Antes | Después |
+|---|---|---|
+| AddSegmentSheet (nuevo) | toggle ✓ | toggle único deduplicado ✓ |
+| AddSegmentSheet (existente) | sin re-abrir wizard | tap card → wizard ✓ |
+| EditTripSheet legacy | sin toggle | toggle único + persistencia + child trips ✓ |
+| AddTripSheet | usa AddSegmentSheet | igual ✓ |
+
+### Task 9 — Aeropuertos en orden cronológico al guardar
+
+**Problema:** trips round-trip MAD-KWI-DXB se mostraban como "KWI-DXB-MAD"
+en pantallas que leen `trip.tripAirports` (legacyAirportRoute en
+FinalizadoTripDetailSheet, route preview en EditTripSheet legacy, etc.).
+
+**Diagnóstico:** al guardar, `trip.tripAirports` se construía desde:
+- `apC.map { ... }` → orden hash arbitrario del `Dictionary`, o
+- `confirmAirports.map { ... }` → orden alfabético del confirm-dialog UI.
+Ambos perdían la secuencia real del vuelo.
+
+**Fix (`Raskmap/ContentView.swift`):**
+- `AddTripSheet.saveTrip` (~6446) y `EditTripSheet.performEditSave` (~8829):
+  construir `apOrder` iterando segmentos por dateFrom y dentro de cada
+  segmento ida → vuelta. Primer iata visto gana (`seenIatas: Set<String>`).
+- Para legacy non-segment: usa `localAirports + localReturnAirports`
+  (orden del wizard, ya cronológico).
+- El confirm-dialog mantiene su orden alfabético solo para la UI del
+  diálogo (donde tiene sentido para que el user encuentre fácil). Al
+  guardar usamos los **counts** del dialog combinados con el **orden** de
+  `apOrder`. Defensivo: si el user añade un iata en el dialog que no
+  está en segments, se appendea al final.
+
+Resultado: `trip.tripAirports = [{MAD,2}, {KWI,2}, {DXB,2}]` →
+`legacyAirportRoute` rendea `"MAD → KWI → DXB  /  DXB → KWI → MAD"`.
+
+⚠️ Trips ya guardados con orden alfabético siguen así hasta re-guardar.
+
+### Task 10 — Bonus +1 al aeropuerto de escala visitada
+
+**Problema:** al marcar el toggle de escala visitada para SAW en MAD-SAW-KWI
+ida + KWI-SAW-MAD vuelta, el confirm-dialog mostraba SAW=2 (toques físicos
+ida + vuelta). El usuario quería **3** (toques + 1 bonus por la visita real).
+
+**Diagnóstico:** la lógica antigua (en `prepareConfirmation` y
+`prepareEditSaveConfirmation`) tenía un patrón confuso:
+```swift
+let sameLayIATAs = outInter.intersection(retInter)
+for ap in seg.airports { apC[ap.iata] += ap.count }
+for ap in seg.returnAirports {
+    if seg.visitedLayoverISOs != nil && sameLayIATAs.contains(ap.iata) {
+        let iso = ...
+        guard vlISOs.contains(iso) else { continue }  // ← skip si no visitado
+    }
+    apC[ap.iata] += ap.count
+}
+```
+Saltaba el toque de vuelta de un IATA si era escala-en-ambas-direcciones
+y el país NO estaba visitado. Resultado dependía del toggle de forma
+inconsistente: visitado=2, no-visitado=1.
+
+**Fix (`AddTripSheet.prepareConfirmation` ~6423 +
+`EditTripSheet.prepareEditSaveConfirmation` ~8795):**
+```swift
+// Toques naturales: cada aparición del IATA cuenta una vez.
+for ap in seg.airports       { apC[ap.iata, default: 0] += ap.count }
+for ap in seg.returnAirports { apC[ap.iata, default: 0] += ap.count }
+// Bonus +1 por cada IATA de escala cuyo país esté visitado. Un solo
+// bonus por IATA aunque aparezca en ida y vuelta.
+let outInter = seg.airports.dropFirst().dropLast().map(\.iata)
+let retInter = seg.returnAirports.dropFirst().dropLast().map(\.iata)
+var bonusedIATAs: Set<String> = []
+for iata in outInter + retInter where bonusedIATAs.insert(iata).inserted {
+    let a2 = ...
+    guard let iso = ..., vlISOs.contains(iso) else { continue }
+    apC[iata, default: 0] += 1
+}
+```
+
+Resultado:
+- SAW marcado: 2 toques + 1 bonus = **3** ✓
+- SAW no marcado: 2 toques + 0 bonus = **2** (consistente con toques reales,
+  antes daba 1 al saltar el lado de vuelta).
+
+### Task 11 — Wrapped: meses empatados aparecen a la vez
+
+**Problema:** en "TUS MESES MÁS VIAJEROS" (slide del wrapped anual),
+cuando varios meses estaban empatados al máximo, la animación tenía un
+delay escalonado `.delay(0.15 + Double(i) * 0.1)` que hacía que cada mes
+apareciera uno tras otro, dando sensación de "alternancia".
+
+**Fix (`YearWrappedSheet.swift` ~1218):**
+- Delay fijo `.delay(0.15)` para todos los meses. ForEach pasa a usar
+  `_, m` (no necesitamos el índice). Resultado: todos los meses aparecen
+  simultáneamente con la misma animación spring.
+
+### Task 12 — `LegalInfoSheet` con Twemoji + atribución
+
+**Helper nuevo `FlagAwareLongText` (`TwemojiFlag.swift`):**
+- Variante multi-línea de `FlagAwareText`. Usa interpolación
+  `Text(Image("flag_XX"))` para componer un único `Text` que respeta line
+  wrapping nativo de SwiftUI Text. La versión con `HStack` rompía párrafos.
+- API: `FlagAwareLongText(text:, font:, foreground:)`.
+- Si el texto no tiene banderas, cae a `Text` plano sin overhead.
+
+**`LegalInfoSheet`** (`Raskmap/ContentView.swift` ~5586):
+- `Text(content)` → `FlagAwareLongText(text: content, font: .palatino(.body))`.
+- Conserva `.multilineTextAlignment(.leading)` y `frame(maxWidth: .infinity, alignment: .leading)`.
+- Decisión final: el contenido legal **NO lleva banderas** (el user las
+  consideraba ruido visual). Las añadimos brevemente y luego se eliminaron.
+  El helper se queda preparado para futuras adiciones sin overhead.
+
+**Atribución Twemoji añadida al bloque "Atribuciones":**
+La licencia CC-BY 4.0 exige reconocer autoría + enlazar a la licencia.
+```
+· Iconos de banderas: Twemoji, originalmente © Twitter Inc. / X Corp.
+  y mantenido actualmente por la comunidad en github.com/jdecked/twemoji.
+  Distribuido bajo licencia CC-BY 4.0 (creativecommons.org/licenses/by/4.0).
+  Los gráficos de las banderas no han sido modificados.
+```
+Cubre: autor original (Twitter/X) + mantenedor actual (jdecked/twemoji) +
+licencia + indicación de no-modificación. App Store Review-ready.
+
 ## Cambios recientes (2026-04-26)
 
 Tanda de 6 bugs de QA — todos sobre flujos de edición de vuelos, rollout
