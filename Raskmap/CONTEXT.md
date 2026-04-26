@@ -1,5 +1,912 @@
 # CONTEXT.md — Raskmap
 
+## Cambios recientes (2026-04-26)
+
+Tanda de 6 bugs de QA — todos sobre flujos de edición de vuelos, rollout
+Twemoji y consistencia del contador de días.
+
+### Task 1 — Persistencia per-leg de asiento/clase en `EditTripSheet`
+
+**Problema reportado:** "Próximos → editar viaje → TRAMOS → chevron del segmento ✈️
+→ editores IDA y VUELTA separados → mete '12A ventanilla' en ida, '20C pasillo' en
+vuelta → guarda → reabre → solo veo una asignación, la otra desapareció."
+
+**Diagnóstico:**
+- `EditTripSheet.segmentFlightInfoBinding(for:)` (`ContentView.swift` ~8495)
+  filtra al setear: `tripSegments[idx].flightInfo = newValue.hasAnyData ? newValue : nil`.
+- Dentro de `FlightInfoSection`, `outboundBinding` / `returnBinding` (líneas
+  ~5387–5411) hacían DOS escrituras separadas a través del `@Binding info`:
+  ```swift
+  while info.outboundLegs.count <= idx { info.outboundLegs.append(FlightLegInfo()) }
+  info.outboundLegs[idx][keyPath: kp] = newValue
+  ```
+  Cada statement es un get-modify-set independiente. La primera escritura
+  pasaba un `FlightInfo` con `[FlightLegInfo()]` vacío → `hasAnyData == false`
+  → `tripSegments[idx].flightInfo = nil`. La segunda lectura veía `FlightInfo()`
+  vuelto a vacío y la mutación con keypath se perdía o crashaba.
+- `ensureLegsSized()` y `migrateLegacyAndResize()` tenían el mismo patrón:
+  varias mutaciones encadenadas a través de `info` que pasaban estados
+  intermedios "vacíos" por el filtro.
+
+**Fix (`Raskmap/ContentView.swift`):**
+- `outboundBinding`/`returnBinding` (~5387–5411): single round-trip pattern:
+  ```swift
+  set: { newValue in
+      var current = info
+      while current.outboundLegs.count <= idx { current.outboundLegs.append(FlightLegInfo()) }
+      current.outboundLegs[idx][keyPath: kp] = newValue
+      info = current
+  }
+  ```
+- `ensureLegsSized()` (~5353): trabaja sobre `var current = info`, escribe
+  `info = current` solo si cambia.
+- `migrateLegacyAndResize()` (~5365): inline ensure-size + migración legacy
+  → escala los escalares al primer leg → escribe una sola vez al final con
+  `if current != info { info = current }`.
+
+Resultado: el filtro `hasAnyData` se evalúa una sola vez por keystroke con el
+`FlightInfo` completo (incluyendo el seat recién tipeado), así que ambos
+asientos persisten correctamente al guardar.
+
+### Task 2 — Twemoji: rollout en perfil, wrapped, premios y cuadrantes
+
+**Problema reportado:** los twemojis no salen en preview de perfil
+(próximos/finalizados año actual + años pasados), premios personales, lista
+personal, títulos de cuadrante de Mi Mapa ni en el resumen anual.
+
+**Helper nuevo `FlagAwareText` (`Raskmap/TwemojiFlag.swift`):**
+
+Para títulos free-form (cuadrante, premio personal, lista personal) donde el
+usuario puede mezclar texto y banderas. Parsea el string en runs `[.flag(iso),
+.text(s), …]` por scalar regional-indicator y los renderiza en HStack mezclando
+`TwemojiFlag` y `Text(...).font(.foreground)`. API:
+
+```swift
+FlagAwareText(text: "🇪🇸 España",
+              font: .palatino(.caption, weight: .bold),
+              size: 14,
+              foreground: .secondary)
+```
+
+**Sites convertidos:**
+- `ContentView.swift` `FlowLayoutCentered` (~6923): `Text(emoji).font(.system(size: 22))`
+  → `FlagLabel(emoji: e, size: 22)`. Es el grid de banderas en la card "Finalizados/Próximos"
+  del perfil para el año seleccionado y para años pasados.
+- `ContentView.swift` `quadrantSlot` (~9502): `Text(q.title).font(.palatino(.caption, weight: .bold))`
+  → `FlagAwareText(text:, font:, size: 14)`. Permite que un cuadrante titulado
+  "🇪🇸 ibéricos" muestre la bandera como twemoji.
+- `ContentView.swift` `awardSlot` (~9981–10003): título + 3 medallas (oro/plata/bronce)
+  ahora usan `FlagAwareText` con `.palatino(.caption, weight: .bold)` (título) y
+  `.palatino(.caption2)` con `foreground: .secondary` (medallas).
+- `ContentView.swift` Lista personal row (~10104): `Label(list1Title, systemImage: ...)`
+  → HStack [systemImage + `FlagAwareText`] manual para que el título mezclado
+  letra+bandera renderice ambas.
+- `YearWrappedSheet.swift` 4 sites convertidos:
+  - `flagGlyph(...)` (~892) — usado en pantalla de hero del wrapped.
+  - "TU ESTANCIA MÁS LARGA" flag de país (~1251).
+  - Grid de "MIS BANDERAS" outro slim (~1424).
+  - Grid de "MIS BANDERAS" outro big (~1679).
+
+**Bandera de la UE (🇪🇺) añadida al set Twemoji:**
+- Síntoma: en el quadrante por defecto "Unión Europea 🇪🇺" (`ContentView.swift`
+  línea 9244) la bandera salía como 🌐 (fallback) o como emoji nativo del
+  sistema según el path de render — porque `flag_EU.imageset` no existía.
+- 🇪🇺 son los regional indicators E (1F1EA) + U (1F1FA). `flagEmojiToIso2`
+  ya devolvía "EU" correctamente; faltaba el asset.
+- **Fix:** descargar `1f1ea-1f1fa.png` (72×72, 560 B) desde el repo oficial
+  `jdecked/twemoji` y crear los imagesets en ambos targets:
+  - `Raskmap/Assets.xcassets/Twemoji/flag_EU.imageset/`
+  - `RaskmapWidget/Assets.xcassets/Twemoji/flag_EU.imageset/`
+- Cada imageset con `Contents.json` idéntico al resto (1x con `1f1ea-1f1fa.png`,
+  2x/3x vacíos para que `Image(...).interpolation(.high)` upscale el 72px).
+- Comando de descarga (re-aplicable si hace falta otra bandera no estándar):
+  ```bash
+  curl -L -o Raskmap/Assets.xcassets/Twemoji/flag_EU.imageset/1f1ea-1f1fa.png \
+      https://raw.githubusercontent.com/jdecked/twemoji/main/assets/72x72/1f1ea-1f1fa.png
+  cp -R Raskmap/Assets.xcassets/Twemoji/flag_EU.imageset \
+        RaskmapWidget/Assets.xcassets/Twemoji/flag_EU.imageset
+  ```
+
+**Spacing entre banderas:**
+- `FlowLayoutCentered`: `HStack spacing: 2 → 6`, `VStack spacing: 2 → 4`.
+- `RaskmapWidget/RaskmapWidget.swift` 3 sites: añadido `spacing:` a las llamadas
+  `FlagStrip(...)`:
+  - Línea ~314 (medium widget upcoming row): `spacing: 4`.
+  - Línea ~486 (large widget): `spacing: 4`.
+  - Línea ~743 (lock screen accessoryRectangular `RaskmapWatchFlagsWidget`): `spacing: 5`.
+
+### Task 3 — Una escala visitada cuenta exactamente 1 día
+
+**Problema reportado:** "verifica que una escala marcada como visitada cuenta
+como 1 día en ese país en el contador de días en un país."
+
+**Diagnóstico (`Trip.swift` `daysPerCountry`):**
+- El segmento ✈️ guarda `isoCodes = [destino + visitedLayoverISOs]` (mezclados).
+- El algoritmo elegía `currentIso` con `let candidates = isos.filter { $0 != currentIso }`
+  → si la escala estaba primero en el array (set order), pasaba a ser `currentIso`
+  y cobraba TODOS los días posteriores hasta el siguiente segmento. Caso real:
+  trip MAD-CDG-DUB ida+vuelta de 7 días → CDG cogía 6 días, IE 0 días, ES 1 día.
+
+**Fix (`Trip.swift` ~268–293):**
+- Excluir layovers de los candidatos a "stayed in":
+  ```swift
+  let layoverSet = Set(seg.visitedLayoverISOs ?? [])
+  let nonLayoverIsos = isos.filter { !layoverSet.contains($0) }
+  let candidates = nonLayoverIsos.filter { $0 != currentIso }
+  ```
+- Tras transicionar, stake explícito por cada layover en el día del segmento
+  (segStart) con prioridad **50** — gana sobre la prioridad 100 del "stay"
+  normal y sobre 1000+ del trip ambient:
+  ```swift
+  for layoverIso in layoverSet where !layoverIso.isEmpty {
+      stake(iso: layoverIso, from: segStart, to: segStart, priority: 50)
+  }
+  ```
+
+Resultado para trip a IE 7 días con FR como escala marcada en ida+vuelta
+(stored como UN segmento con `visitedLayoverISOs = ["FRA"]`):
+- Día 1 (vuelo ida): FR (escala, prio 50)
+- Días 2–7: IE (estancia, prio 100/1000)
+- FR = 1 día ✓ · IE = 6 días ✓
+
+### Task 4 — Bug MAD-ARN-ARN al editar vuelo directo
+
+**Problema reportado:** "Al editar un viaje le doy a vuelo directo MAD-ARN y
+me dice que he puesto MAD-ARN-ARN."
+
+**Diagnóstico (`RouteWizardSheet` en `ContentView.swift`):**
+- Prepopulate `.onAppear` (~11313) construye `layoverStops` desde el path
+  intermedio. Para legacy stored como `[MAD, ARN, MAD]` (round-trip directo
+  guardado en formato expandido), la heurística asignaba:
+  - `departureIata = MAD`, `finalIata = MAD` (último), `middle = [ARN]` →
+    `layoverStops = [(ARN, "")]`.
+- Al pulsar "Vuelo directo" en `layoverChoiceView` (~11540) se transicionaba
+  a `.finalDest` SIN limpiar `layoverStops`. El usuario re-tipea ARN como
+  destino → `finalIata = ARN`. En `returnView` (~11619):
+  `segments = [departureIata] + layoverStops.map(\.iata) + [finalIata]`
+  → `[MAD, ARN, ARN]` → renderiza "MAD → ARN → ARN".
+
+**Fix (`Raskmap/ContentView.swift`):**
+1. `layoverChoiceView` (~11540) y `returnLayoverChoiceView` (~11669): el
+   botón "Vuelo directo" limpia `layoverStops` (resp. `returnLayoverStops`)
+   antes de transicionar a `.finalDest` / `.returnFinalDest`. "Vuelo directo"
+   es por definición sin escalas, así que es seguro resetear.
+2. Prepopulate (~11313): trim defensivo del path antes de derivar
+   `departureIata`/`finalIata`/`middle`:
+   - Si `aps.first == aps.last` y `count >= 3`: round-trip expandido. Para
+     count impar quédate con `prefix(mid + 1)` (`[MAD, ARN, MAD] → [MAD, ARN]`).
+     Para count par quita el último (ambigüo).
+   - Dedupea consecutivos: `[MAD, ARN, ARN] → [MAD, ARN]`.
+
+Ambas medidas son defensivas: la (1) cubre legacy + cualquier estado
+inesperado; la (2) evita que el wizard arranque con basura visible.
+
+### Task 5 — Ruta de vuelo siempre visible en detalle de viaje finalizado
+
+**Problema reportado:** "En los detalles del vuelo finalizado le doy a un país
+y me muestra la ruta MAD-CPH y CPH-MAD pero en otro país no me muestra la ruta
+siendo también vuelo de ida y vuelta directo."
+
+**Diagnóstico (`FinalizadoTripDetailSheet` en `ContentView.swift`):**
+- Trips CON segmentos: `airportRoute(for: seg)` reconstruye desde
+  `seg.airports` + `seg.returnAirports` → "MAD → CPH  /  CPH → MAD". OK.
+- Trips SIN segmentos (legacy directos creados antes del flujo de segmentos):
+  el fallback rendea `FinalizadoSegmentRow(... airportRoute: nil)` (línea
+  ~2556 ANTES). La ruta no aparecía aunque `trip.tripAirports` la tuviera.
+
+**Fix (`Raskmap/ContentView.swift` ~2497):**
+- Nueva helper `legacyAirportRoute(for: Trip) -> String?`:
+  ```swift
+  let isLikelyRoundTrip = aps.count >= 2 && aps.allSatisfy { $0.count >= 2 } &&
+                          totalCount >= aps.count * 2
+  let outbound = iatas.joined(separator: " → ")
+  return isLikelyRoundTrip
+      ? outbound + "  /  " + iatas.reversed().joined(separator: " → ")
+      : outbound
+  ```
+- En el fallback (~2566): `airportRoute: row.trip.flatMap(legacyAirportRoute(for:))`.
+
+Para `[MAD(c=2), ARN(c=2)]` (round-trip directo legacy) renderea
+"MAD → ARN  /  ARN → MAD" igual que un segment-based trip.
+
+### Task 6 — Editor IDA + VUELTA en `EditTripSheet` para round-trips legacy
+
+**Problema reportado:** "Si le doy en el perfil a Próximos y le doy a editar un
+viaje, por qué si no es de solo ida solo me deja poner un asiento, pasillo,
+medio/ventana y una clase? Si son dos vuelos o más tiene que salir una opción
+de estas para cada vuelo."
+
+**Diagnóstico:**
+- `EditTripSheet` para trips sin segmentos (legacy round-trip directo) usa el
+  trip-level `FlightInfoSection(info: $localFlightInfo, ...)` (línea ~8903).
+- `_localAirports = State(initialValue: trip.tripAirports)` → para round-trip
+  legacy es `[MAD(c=2), ARN(c=2)]` (2 entradas, count=2 cada una).
+- `_localReturnAirports` se queda **siempre vacío** (Trip no tiene un campo
+  `returnAirports` a nivel trip — solo a nivel segmento).
+- Resultado: `outboundRoute = [MAD, ARN]`, `returnRoute = []` →
+  `outboundLegCount = 1`, `returnLegCount = 0` → **un solo `legEditor`** para
+  ida MAD→ARN. La vuelta ARN→MAD no tiene editor propio.
+
+**Fix (`Raskmap/ContentView.swift`):**
+- Nueva computed property `effectiveFlightRoutes: (outbound: [String], returnRt: [String])`
+  (~línea 8561) en `EditTripSheet`. Si `localReturnAirports` viene poblado
+  (segment-based o user re-pasó por el wizard) lo usa tal cual. Si está vacío
+  PERO `localAirports.count >= 2 && allSatisfy { $0.count >= 2 }` (heurística
+  round-trip legacy), sintetiza `returnRt = outbound.reversed()` solo para UI.
+- `FlightInfoSection(info: $localFlightInfo, outboundRoute: routes.outbound,
+  returnRoute: routes.returnRt)` (~línea 8903) usa los routes efectivos →
+  para legacy round-trip ahora `outboundLegCount = 1, returnLegCount = 1` →
+  dos `legEditor` separados (IDA MAD→ARN + VUELTA ARN→MAD).
+- "Ruta de vuelo" preview (~líneas 8884–8893) también lee de
+  `effectiveFlightRoutes` → ahora muestra dos líneas (ida + vuelta) en vez de
+  una sola para legacy round-trip.
+
+**Por qué la sintetización es UI-only (no toca @State):**
+- `prepareEditSaveConfirmation` (~línea 8585) hace
+  `for ap in localAirports { apCombined[..., default: 0] += ap.count }` y
+  luego lo mismo para `localReturnAirports`. Si tocáramos el `@State` para
+  meter una vuelta sintetizada con count=2 cada uno, el confirm-dialog y el
+  save mostrarían **MAD x4, ARN x4**, doblando el conteo de aeropuertos.
+- Mantener la sintetización en una computed property derivada del @State
+  evita el side-effect: el save sigue escribiendo
+  `trip.tripAirports = localAirports` con los counts originales.
+- Cuando el usuario teclea en el editor de vuelta, los datos van a
+  `localFlightInfo.returnLegs[0]` vía `returnBinding`. En el save (línea
+  ~8687) se escribe `trip.flightDetails = localFlightInfo.hasAnyData ? ... : nil`
+  → `FlightInfo` Codable serializa `returnLegs` enterito. Al reabrir, los
+  datos persisten. ✓
+
+### Task 7 — Toggle "¿Visitaste alguna escala?" en cualquier edición/adición
+
+**Problema reportado:** "Si añado una escala editando un viaje no me pregunta
+si he visitado la escala para añadir el país. Esto ya lo teníamos hecho y debe
+aparecer; asegúrate que está en cualquier edición de viaje con escala y
+adición también."
+
+**Diagnóstico — dos huecos en la UX:**
+1. **`AddSegmentSheet` step 3 (segment-based):** la card de ruta era solo
+   visual. `showRoutePicker` solo se activaba en step 1 → editando un
+   segmento existente NO había forma de re-abrir el wizard para añadir/
+   cambiar escalas. El toggle ya existía (`outboundLayoverChoices` /
+   `returnLayoverChoices` poblados por `deriveFlightCountries()`), pero el
+   user no podía meter escalas si el segmento se creó sin ellas.
+2. **`EditTripSheet` flujo legacy (trips ✈️ sin segmentos):** la sheet de
+   `RouteWizardSheet` (~línea 9077) usaba `onDone: {}` vacío y NO había
+   sección de toggles equivalente — el modelo `Trip` ni siquiera tenía
+   campo donde guardar `visitedLayoverISOs` a nivel trip (solo a nivel
+   segmento). Resultado: añadir una escala en un trip legacy no preguntaba
+   nada y la escala no se contaba como país visitado.
+
+**Fix 1 — Card de ruta tappable en `AddSegmentSheet` (`AddSegmentSheet.swift`):**
+- La VStack de la card de ruta (~línea 420) pasa a estar envuelta en un
+  `Button { showRoutePicker = true }` con un sub-label "Editar" pequeño
+  bajo el ✈️ a la derecha. Tap → re-abre `RouteWizardSheet` → al guardar
+  se ejecuta el mismo `deriveFlightCountries()` ya existente → el bloque
+  IDA/VUELTA se actualiza automáticamente.
+- `.buttonStyle(.plain)` para preservar el look del card original.
+
+**Fix 2 — Persistencia trip-level (`Raskmap/Trip.swift`):**
+- Nuevo campo `var visitedLayoverISOsRaw: String?` en `@Model class Trip`
+  (~línea 86) — JSON-encoded `[String]` (ISO A3).
+- Computed `var visitedLayoverISOs: [String]?` (~línea 189) con el patrón
+  estándar (getter decode, setter encode `.isEmpty → nil`).
+- `daysPerCountry` (~línea 283): para trips sin segmentos, stake cada
+  `t.visitedLayoverISOs ?? []` en `tFrom` con prio 50 — gana sobre la
+  estancia ambient prio 100/1000+. Resultado: 1 día por escala visitada.
+
+**Fix 3 — Toggle UI en `EditTripSheet` legacy (`Raskmap/ContentView.swift`):**
+- Tres nuevos `@State` (~línea 8537):
+  ```swift
+  @State private var legacyOutboundLayovers: [LayoverChoice] = []
+  @State private var legacyReturnLayovers: [LayoverChoice] = []
+  @State private var legacyVisitedLayoverISOs: Set<String> = []
+  ```
+  (Reusa `LayoverChoice` de `AddSegmentSheet.swift` — mismo módulo.)
+- `init(trip:)` (~línea 8717) seedea `legacyVisitedLayoverISOs = Set(trip.visitedLayoverISOs ?? [])`.
+- Nueva helper `deriveLegacyFlightCountries()` (~línea 8631): igual que
+  `AddSegmentSheet.deriveFlightCountries()` pero usa `effectiveFlightRoutes`
+  como fuente de la ruta (cubre legacy round-trip directo sintetizado).
+- Wizard `RouteWizardSheet` (~línea 9192): `onDone` ahora llama
+  `deriveLegacyFlightCountries()` en vez de ser `{}`.
+- `.onAppear { deriveLegacyFlightCountries() }` en la sheet — recompute
+  inicial cuando el user re-abre un trip ya con escalas guardadas.
+- Bloque de toggles inline (~línea 8919) justo debajo del `FlightInfoSection`
+  legacy:
+  ```swift
+  if !legacyOutboundLayovers.isEmpty || !legacyReturnLayovers.isEmpty {
+      Text(isForFuture ? "¿HARÁS PARADA EN...?" : "¿VISITASTE ALGUNA ESCALA?")
+      legacyLayoverSection(title: "IDA", choices: legacyOutboundLayovers)
+      legacyLayoverSection(title: "VUELTA", choices: legacyReturnLayovers)
+  }
+  ```
+- `legacyLayoverSection` (~línea 8595) replica la estética de
+  `AddSegmentSheet.layoverSection` pero opera sobre `legacyVisitedLayoverISOs`
+  (Set binario por país → un país escala en ambas direcciones se marca con un
+  solo toggle).
+
+**Persistencia (`performEditSave`, ~línea 8809):**
+```swift
+if tripSegments.isEmpty {
+    trip.flightDetails = localFlightInfo.hasAnyData ? localFlightInfo : nil
+    let realISOs = Set(legacyOutboundLayovers.map(\.isoA3) + legacyReturnLayovers.map(\.isoA3))
+    let visited = Array(legacyVisitedLayoverISOs.intersection(realISOs))
+    trip.visitedLayoverISOs = visited.isEmpty ? nil : visited
+} else {
+    trip.visitedLayoverISOs = nil  // segment-based → escalas viven en seg.visitedLayoverISOs
+}
+```
+
+**Confirmación de visita (`prepareEditSaveConfirmation`, ~línea 8722):**
+- El bloque legacy ahora añade un `VisitEntry` por cada escala marcada
+  además del país de destino — el confirm-dialog las lista para que el
+  user vea qué países se van a marcar como visitados.
+
+**Coverage final:**
+| Flujo | Antes | Después |
+|---|---|---|
+| AddSegmentSheet (nuevo segmento ✈️) | toggle ✓ | toggle ✓ |
+| AddSegmentSheet (segmento ✈️ existente) | sin acceso al wizard | tap card → wizard → toggle ✓ |
+| EditTripSheet (trip legacy ✈️) | sin toggle | toggle ✓ + persistencia trip-level |
+| AddTripSheet (nuevo trip ✈️) | usa AddSegmentSheet → toggle ✓ | igual |
+
+## Cambios recientes (2026-04-25)
+
+### Task 5 — Edición de viajes: dos bugs en flujo de segmentos
+
+#### Bug 5a — Edición de asientos por leg en Próximos round-trip
+
+**Problema reportado:** "Cuando hay un viaje con un vuelo ida y vuelta me tiene que dejar añadir el asiento, pasillo, ventana etc. de cada vuelo (esto me pasa cuando edito un viaje en estado Próximos)."
+
+**Diagnóstico:**
+- `EditTripSheet` muestra trip-level `FlightInfoSection` SOLO cuando `tripSegments.isEmpty` (línea 8797). Pero los Próximos round-trip se almacenan como UN segmento ✈️ con `airports` (ida) + `returnAirports` (vuelta). Así que para esos viajes la sección de detalles del vuelo no se ve a nivel trip.
+- Edición per-segmento existía vía pencil → `AddSegmentSheet` step 3 → `FlightInfoSection` (que sí soporta IDA + VUELTA), pero era poco descubrible: el lápiz se asocia visualmente a "editar tramo" (transporte/países/fechas), no a "editar asientos".
+
+**Fix:** inline-ar `FlightInfoSection` por cada segmento ✈️ en la sección TRAMOS de `EditTripSheet`, plegable con un chevron. El binding escribe directamente en `tripSegments[idx].flightInfo` y vuelve a `nil` cuando `hasAnyData == false` (no contamina viajes sin datos de asiento).
+
+**Cambios en `Raskmap/ContentView.swift`:**
+- `EditTripSheet`: nuevo `@State expandedSegmentIDs: Set<UUID>` (línea ~8484).
+- `EditTripSheet`: nuevo helper `segmentFlightInfoBinding(for: UUID) -> Binding<FlightInfo>` (~línea 8489) que materializa `nil → FlightInfo()` para edición y revierte a `nil` cuando vacío al setear.
+- ForEach de segmentos: cada fila ✈️ tiene chevron `chevron.up.circle.fill` ↔ `chevron.down.circle.fill` antes del lápiz; cuando expandido renderiza `FlightInfoSection` debajo del card del segmento (no DENTRO del card, para evitar doble padding y gris-sobre-gris).
+
+#### Bug 5b — Back navigation rota al editar segmentos en Finalizados
+
+**Problema reportado:** "Si edito un viaje pasado y le doy a editar los vuelos cuando le doy al botón de atrás me dice que seleccione el país del tramo, le doy otra vez a atrás y me da a elegir el transporte y esto no debería ser así, ya que esas no son las pantallas anteriores si entro desde la edición."
+
+**Diagnóstico:**
+- `AddSegmentSheet` es un wizard de 3 pasos (transport → países → fechas). Cuando se edita un segmento existente (`initialSegment != nil`), el init hace `_step = State(initialValue: 3)` saltando los dos primeros.
+- El botón "Atrás" hacía `step -= 1` ciego, sin saber si el usuario venía de edición o creación. Al pulsar atrás desde step 3 en edición caía a step 2 (countriesStep "Países del tramo") y luego step 1 (transportStep "¿Cómo vas a viajar?") — pantallas del flujo de creación, no del flujo de edición.
+
+**Fix doble:**
+1. **`AddSegmentSheet`** (`Raskmap/AddSegmentSheet.swift`):
+   - Nueva computed property `private var isEditing: Bool { initialSegment != nil }`.
+   - Toolbar leading button: cuando `isEditing` siempre muestra "Cancelar" (que dismiss), independientemente del step. No aparece "Atrás" en modo edición porque no hay paso anterior real.
+   - Botón inferior: `Text(isEditing ? "Guardar cambios" : "Añadir tramo")`.
+   - Construcción del `TripSegment` final: `id: initialSegment?.id ?? UUID()` — preserva el id original al editar para que el caller pueda reemplazar por id.
+
+2. **`EditTripSheet` en `Raskmap/ContentView.swift`**:
+   - Botón pencil (~línea 8895) ya **no** elimina el segmento upfront. Solo asigna `editingSegment = seg` y abre la sheet. Antes hacía `tripSegments.removeAll { $0.id == seg.id }` antes de abrir → si el usuario cancelaba la edición, perdía el segmento original. Ahora se preserva.
+   - Sheet `onAdd` callback (~línea 8949): si el segmento devuelto tiene un id que ya existe en `tripSegments`, lo reemplaza por índice; si no, hace append (lógica unificada para creación + edición).
+
+**Side-effect positivo:** los segmentos editados nunca se duplican ni se pierden, incluso si se cancela el sheet de edición a mitad. La sheet pasa a comportarse correctamente como "editor de segmento existente" cuando viene de pencil tap.
+
+### Task 1 — Twemoji desplegado en toda la app principal
+
+**Objetivo:** que las banderas se vean con el set de Twitter/X (estética coherente cross-platform) en vez del Apple emoji nativo de iOS.
+
+**Infraestructura (ya existía de la fase prototipo):**
+- `Raskmap/TwemojiFlag.swift` con tres APIs:
+  - `TwemojiFlag(iso2:size:fallbackEmoji:)` — render directo desde código ISO-2.
+  - `FlagLabel(emoji:size:)` — drop-in replacement para `Text(emoji).font(.system(size:))` que detecta banderas regional-indicator y renderiza Twemoji; cualquier otro string (🌐, ✈️, "") cae a `Text(emoji)` normal.
+  - `String.flagEmojiToIso2` — parser de regional-indicator pairs a ISO-2.
+- 244 PNGs en `Assets.xcassets/Twemoji/flag_XX.imageset/` (paridad total con Apple emoji excepto los 5 territorios sin emoji estándar: BIR/BLR/SRB/PSE/CYN — esos siguen mostrando 🌐).
+
+**Sites convertidos en `ContentView.swift` (todos `Text(...flag...).font(...)` → `FlagLabel(emoji:size:)`):**
+- Cabecera de banner "Quedan X días" (línea ~964, body=17pt)
+- Grid de banderas visitadas en toast (línea ~3828, title2=22pt)
+- Aeropuerto favorito en perfil (línea ~4354, body=17pt)
+- Hero header de país (línea ~1879, size 64)
+- Toast de viaje (línea ~3957, headline=17pt) — refactorizado a HStack para separar bandera+nombre
+- Header de `AddTripSheet` (línea ~6508) — refactorizado a HStack (flag size 20 + Text title3)
+- Lista de búsqueda de países (línea ~1072, size 17)
+- Filas de `ProximosListSheet` (líneas ~2139, ~2203, size 22)
+- Filas de `FinalizadosListSheet` (ya en fase prototipo via `TwemojiFlag` directo, size 22)
+- Header de `PlannedDatePickerSheet` (línea ~7182, size 52)
+- Confirm-visits del save flow (línea ~7367, size 22)
+- Top-3 aeropuertos del año (línea ~7721, size 12)
+- Origen→Destino de cada leg (líneas ~8006/8008, size 20)
+- `CountryTripsSheet` (línea ~8417, size 20)
+- Continent assignment sheet (línea ~10590, size 22)
+- Multi-continent assignment sheet (línea ~10692, size 22)
+- Hemisphere assignment sheet (línea ~10789, size 22)
+- Lista de aeropuertos (`Text(ap.flagEmoji).font(.title3)`, 3 sites, todos size 20)
+- Pickers con favorite star (`Text(ap?.flagEmoji ?? "🌐").font(.title3)`, 2 sites, size 20)
+- Layovers visitados confirmation (líneas ~11479/11609/11681, size 20)
+- Lista de aeropuertos del país (línea ~11891, size 20)
+- Lista flat de visited/notVisited en stats (línea ~9796/9806, size 22)
+- Picker de países en leg detail (línea ~9723, size 17)
+- Top medal slots en perfil (líneas ~9970/10388, size 34/40)
+- Flag picker grids (líneas ~5788/10486, size 36)
+- Helper de `CountryListRow` (línea ~6073, size 20)
+
+**Sites NO convertidos (intencional):**
+- **Widget preview interno** (`WidgetHomeColorSheet`, `ContentView.swift` línea ~5108): la bandera 🇯🇵 representa el aspecto del widget real en la home screen. Tras la fase 2 (Twemoji en widgets) ahora **sí** podríamos convertir este preview para que coincida con el widget real — pendiente de hacer si el usuario lo nota inconsistente.
+
+### Task 1 (fase 2) — Twemoji desplegado en widgets
+
+Tras el rollout en la app principal, se extendió el sistema Twemoji a los widgets de iOS y la Live Activity (`RaskmapWidgetExtension` target).
+
+**Estrategia de duplicación de recursos:**
+- Xcode 16 usa synchronized folders (`PBXFileSystemSynchronizedRootGroup`). Cada target tiene su propio sync folder; los archivos del folder se compilan en su target y solo en él.
+- `Raskmap/` y `RaskmapWidget/` son sync folders separados → no comparten archivos por defecto.
+- **Solución:** copiar `TwemojiFlag.swift` y la carpeta `Assets.xcassets/Twemoji/` al folder del widget. Trade-off: 1.9 MB duplicados, dos sources of truth.
+- Comando de sync (manual cuando se modifique el helper):
+  ```bash
+  cp Raskmap/TwemojiFlag.swift RaskmapWidget/TwemojiFlag.swift
+  cp -R Raskmap/Assets.xcassets/Twemoji RaskmapWidget/Assets.xcassets/Twemoji
+  ```
+
+**Nuevo helper `FlagStrip` en `TwemojiFlag.swift`:**
+- Renderiza un string con múltiples banderas concatenadas (e.g. `"🇪🇸🇫🇷🇺🇸"`) como un HStack de imágenes Twemoji.
+- Necesario porque el widget guarda los flags como un único `String` en App Group (claves `widget_all_flags`, `widget_top_visited_flags`).
+- API: `FlagStrip(flags: String, size: CGFloat = 18, spacing: CGFloat = 0)`.
+- Itera por `Character` (cada flag emoji es un único grapheme cluster gracias al regional-indicator pair).
+
+**Sites convertidos en `RaskmapWidget/RaskmapWidget.swift`:**
+- Línea ~218 `entry.nextFlag` size 14 (ProgressBarLockWidget header)
+- Línea ~272 `entry.nextFlag` size 40 + sombra (Medium widget hero)
+- Línea ~314 `upcomingFlagsSkippingFirst` → `FlagStrip(size: 15)` (Medium widget upcoming row)
+- Línea ~362 `entry.nextFlag` size 54 + sombra (Large widget hero)
+- Línea ~486 `flagStrip()` helper — ya usaba `Text(String(flags.prefix(9)))`, ahora `FlagStrip(size: 18)`
+- Línea ~749 `entry.flags` → `FlagStrip(size: 22)` (RaskmapWatchFlagsWidget — pese al nombre, se muestra en iOS lock screen accessory)
+
+**Sites convertidos en `RaskmapWidget/RaskmapLiveActivity.swift`:**
+- Lock-screen banner: `Text(context.state.flagEmoji).font(.system(size: 40))` → `FlagLabel(emoji: ..., size: 40)` con sombra
+- Dynamic Island expanded leading: size 34
+- Dynamic Island compactLeading + minimal: size 16
+
+**Sites NO tocados (no son banderas):**
+- `Text(context.state.transportEmoji)` en Live Activity (transporte ✈️🚗🚂, no bandera)
+- Cualquier `Text("✈️")` placeholder
+
+**Targets sin widgets activos:**
+- `RaskmapWatch Watch App/` — solo placeholder `Text("Hello, world!")`, sin widgets propios
+- `RaskmapWatchWidgets/` — folder existe en disk pero NO está en `project.pbxproj` (no se compila). Si se activa en el futuro habrá que repetir la operación: copiar `TwemojiFlag.swift` y assets, luego convertir los `Text(entry.flag)` (líneas 73, 105 de `RaskmapWatchWidget.swift`).
+
+**Diagnostics SourceKit (false positives — ignorar):**
+- `Cannot find 'FlagLabel' in scope` en archivos de widget — el indexer de SourceKit no ve `TwemojiFlag.swift` cross-file en el sync folder. La build real iOS sí lo ve.
+- `Cannot find 'UIImage' in scope` en `TwemojiFlag.swift` — indexer en contexto macOS, UIKit no disponible. iOS build OK.
+- `'accessoryCircular' is unavailable in macOS` — confirma que SourceKit está en macOS, no iOS.
+
+**Tamaños usados (puntos):** mapeo aproximado de los font sizes de SwiftUI:
+- `.body` = 17 · `.title3` = 20 · `.title2` = 22 · `.caption` = 12 · `.headline` = 17
+
+### Task 2 — Orden estable de banderas en perfil (FIX)
+
+**Problema:** al tocar una fila de Finalizados o Próximos y cerrar la lista, las banderas en el bloque del año se reordenaban aleatoriamente. Causa: `Dictionary` en Swift tiene iteración no-determinista, y `sorted` es estable pero preserva el orden no-determinista del input cuando hay empates en la clave de ordenación.
+
+**Fix en `YearTravelView` (`ContentView.swift`):**
+- `finalizados` (~línea 6432): orden por `lastDate` ascendente con tiebreaker `isoCode` ascendente — antes visitado a la izquierda, después a la derecha, deterministic.
+- `proximos` (~línea 6475): orden por `nextDate` (nil al final) con tiebreaker `isoCode`.
+
+```swift
+return result.sorted { a, b in
+    if a.lastDate != b.lastDate { return a.lastDate < b.lastDate }
+    return a.isoCode < b.isoCode
+}
+```
+
+### Task 3 — Tap en Finalizados abre detalle de viaje completo
+
+**Problema:** las filas de `FinalizadosListSheet` solo permitían borrar (xmark) — no había forma de ver los tramos del viaje.
+
+**Solución (`ContentView.swift`):**
+- `FinalizadosListSheet` ahora tiene `@State private var rowToShow: ProximoRow? = nil`.
+- Cada fila lleva un chevron `chevron.right` indicador, `contentShape(Rectangle())` y `onTapGesture { rowToShow = row }`. El botón de borrar (xmark) sigue siendo tappable independientemente gracias a `.buttonStyle(.plain)`.
+- Nuevo `.sheet(item: $rowToShow) { row in FinalizadoTripDetailSheet(row: row, features: features) }` adjuntado al NavigationStack.
+
+**Nueva struct `FinalizadoTripDetailSheet`** (~línea 2450):
+- Cabecera: `TwemojiFlag` 44pt + título del trip + país (si título ≠ país) + rango de fechas.
+- Sección "TRAMOS DEL VIAJE": `ForEach(trip.tripSegments.sorted { $0.dateFrom < $1.dateFrom })`. Cada tramo se renderiza con `FinalizadoSegmentRow` (struct privada interna).
+- Fallback sin segmentos: una única fila con transport + país + fechas del `ProximoRow`.
+
+**`FinalizadoSegmentRow`:**
+- `ZStack` con `Circle` gris + emoji de transporte (mismo look&feel que `EditTripSheet`).
+- Banderas Twemoji por cada `iso` en `seg.isoCodes` (size 18).
+- Nombres de países separados por " · ".
+- Si transport == "✈️" y hay `airports`: ruta IATA tipo "MAD → NRT  /  NRT → MAD".
+- Fechas con formato `dateStyle: .medium`, locale `es_ES`.
+
+**Trade-offs:**
+- Sheet read-only: no edita ni borra desde aquí (el borrado sigue desde la fila padre vía xmark + confirmation dialog).
+- No muestra airlines/seat info — solo país+transporte+fechas+ruta IATA. Si el usuario quiere más detalle, lo añadimos en una iteración posterior.
+
+## Cambios recientes (2026-04-24)
+
+### `Trip.swift` — algoritmo quirúrgico de días por país
+
+**Problema:** `daysSpent(iso:trips:)` solo consideraba el rango `dateFrom…dateTo` del trip primario y no descontaba los días en los que el usuario estaba físicamente en otro país vía segmentos o trips hijos. Caso real: trip HKG 1–11 con bus→MAC día 4, pie→CHN día 6, tren→HKG día 9 → contaba **11 días HKG**; debería ser **6 HKG + 2 MAC + 3 CHN**.
+
+**Solución:** nuevo `daysPerCountry(trips:)` en `Trip.swift:192` — sistema basado en intervalos por día con prioridades. Cada día del calendario se atribuye a UN solo país según la fuente más específica. `daysSpent(iso:trips:)` delega ahora en `daysPerCountry` para garantizar consistencia app/widget/wrapped.
+
+**Sistema de prioridades (menor = gana):**
+- `100` — segmento interno dentro de un trip primario (el paso más granular)
+- `200 + tripLen` — trip hijo (`isSegmentChild == true`)
+- `1000 + tripLen` — trip primario independiente
+
+El `+ tripLen` hace que entre dos trips del mismo tipo gane el más corto (asunción más concreta).
+
+**Detalle clave de destino de segmento:** `isoCodes` llega como `Array(Set)` desde `AddSegmentSheet` (unordered), así que no se puede usar `.last` como destino fiable. Nueva heurística: `candidates = isos.filter { $0 != currentIso }`; `dest = candidates.first ?? isos.last`. Así, con `currentIso = HKG` y `isoCodes = {HKG, MAC}` siempre resulta `dest = MAC`.
+
+**Algoritmo:**
+```swift
+private struct _DayClaim {
+    var iso: String
+    var priority: Int   // smaller = wins
+}
+
+func daysPerCountry(trips: [Trip]) -> [String: Int] {
+    var claims: [Date: _DayClaim] = [:]
+    func stake(iso: String, from: Date, to: Date, priority: Int) { ... }
+    for t in trips {
+        // 1) Trip ambiental: todo el rango reclamado con prio 1000+len (o 200+len si child)
+        stake(iso: t.isoCode, from: tFrom, to: tTo, priority: tripPriority)
+        // 2) Segmentos internos: reclaman con prio 100 — ganan siempre
+        var currentIso = t.isoCode
+        var currentStart = tFrom
+        for seg in t.tripSegments.sorted(by: date) {
+            stake(iso: currentIso, from: currentStart, to: prevDay(segStart), priority: 100)
+            // destino heurística: filtrar out currentIso, fallback isos.last
+            let candidates = seg.isoCodes.filter { $0 != currentIso }
+            currentIso = candidates.first ?? seg.isoCodes.last ?? currentIso
+            currentStart = seg.dateTo ?? seg.dateFrom
+        }
+        stake(iso: currentIso, from: currentStart, to: tTo, priority: 100)  // cola
+    }
+    return claims.values.reduce(into: [:]) { $0[$1.iso, default: 0] += 1 }
+}
+```
+
+### `YearWrappedSheet.swift` — "longest stay" unificado
+
+Reemplazada la lógica compleja `staysFromPrimary` + groups en `WrappedStats.compute()` por delegación directa a `daysPerCountry(trips: yearAllTrips)`. Mismo algoritmo → mismos resultados que widget y `ContentView.topVisitedFlagsString`. Sorted stable: valor desc, ISO asc.
+
+### `RaskmapWidget.swift` — padding pequeño + lock screen/watch widgets restaurados
+
+**Padding del widget pequeño:**
+- `StaticConfiguration` con `.contentMarginsDisabled()` — elimina el margen del sistema (~16pt default).
+- `SmallView` (ambas ramas: empty + filled): `.padding(15)`. Total efectivo: 15pt, no 15+16.
+- `MediumView` y `LargeView` mantienen su padding interno explícito — no pierden layout.
+
+**Widgets de pantalla de bloqueo / Apple Watch restaurados.** En el commit `dfb1005` la reescritura del widget eliminó sin querer los 4 widgets de lock screen que existían en `a287018`. Se reintrodujeron convertidos de `AppIntentConfiguration` → `StaticConfiguration` (ya no hay `RaskmapIntent` en el bundle):
+
+| Struct | Kind | Familia | Provider | Comportamiento |
+|---|---|---|---|---|
+| `RaskmapLockPctWidget` | `"RaskmapLockPct"` | `.accessoryCircular` | `LockPctProvider` | Gauge circular con `%.1f%` visitado. Sin Pro → `lock.fill`. Modo de conteo leído de `widget_counting_mode`. |
+| `RaskmapLockNextWidget` | `"RaskmapLockNext"` | `.accessoryRectangular` | `LockNextProvider` | 🔜 + "X días" + "Próximo viaje". Sin Pro → lock. Sin viaje → ✈️ "Sin viaje". |
+| `RaskmapLockInlineWidget` | `"RaskmapLockInline"` | `.accessoryInline` | `LockNextProvider` | **Encima del reloj**: `"Quedan X días · Tokio"`. Sin Pro → `Label("Pro", systemImage: "lock.fill")`. Sin viaje → `Label("Sin próximo viaje", systemImage: "airplane")`. |
+| `RaskmapWatchFlagsWidget` | `"RaskmapWatchFlags"` | `.accessoryRectangular` | `WatchFlagsProvider` | Banderas de todos los próximos viajes concatenadas. Sin Pro → "🔒 Pro". Sin viajes → "✈️ Sin próximos viajes". |
+
+Registrados en `RaskmapWidgetBundle.swift`:
+```swift
+@main
+struct RaskmapWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        RaskmapWidget()
+        RaskmapLockPctWidget()
+        RaskmapLockNextWidget()
+        RaskmapLockInlineWidget()
+        RaskmapWatchFlagsWidget()
+        RaskmapWidgetControl()
+        RaskmapLiveActivity()
+    }
+}
+```
+
+Todas las vistas lock/watch usan `.containerBackground(.clear, for: .widget)` para respetar el fondo del lock screen. Entries (`LockPctEntry`, `LockNextEntry`, `WatchFlagsEntry`) incluyen `isPro: Bool` leído de `widget_is_pro`.
+
+### `ContentView.swift` — `MedalleroSheet` simplificada
+
+**Premios personales: 4 cuadrantes → 2.** Eliminado el segundo `HStack` con slots 2 y 3. `awardSlots` ahora es `(0..<2)`.
+
+**Eliminada "Lista personal 2" completamente.** Eliminados `@AppStorage("personalList2Title")`, `personalList2Content`, `@State showList2` y el `.sheet(isPresented: $showList2)`. Las claves UserDefaults subyacentes persisten (no se borran explícitamente) → si alguna vez se restaura la lista 2, los datos siguen ahí.
+
+**Categorías personales + Lista personal fusionadas en una sola card con `Divider`.** Antes: dos cards separadas con `.padding(.bottom, 12)` entre ellas. Ahora: un solo `VStack(spacing: 0)` con `Button { showSubjectiveCategories = true }` + `Divider().padding(.leading, 16)` + `Button { showList1 = true }`. Renombrado `"Lista personal 1"` → `"Lista personal"`.
+
+### `ColorThemeManager.swift` — defaults explícitos en sRGB
+
+Defaults reescritos a `Color(.sRGB, red: …, green: …, blue: …, opacity: 1.0)` con `/255.0` en lugar de `/255` — elimina ambigüedad de división entera y declara el espacio de color explícitamente.
+
+| Categoría UI | `CountryStatus` | Hex sRGB |
+|---|---|---|
+| Próximos | `wantToVisit` | `#00CB7C` |
+| Visitados | `visited` | `#DC6647` |
+| Quiero | `bucketList` | `#E5B257` |
+| Vivido | `lived` | `#5DAD6E` |
+
+Usuarios con colores personalizados (clave UserDefaults `color_visited/wantToVisit/bucketList/lived`) no se ven afectados — los defaults solo aplican a nuevas instalaciones o tras `resetToDefaults()`.
+
+### `Trip.swift` — `FlightLegInfo` per-tramo
+
+Nueva struct `FlightLegInfo` (Codable, Equatable) con `seatNumber / seatPosition / cabinClass`. `FlightInfo` extendido con `outboundLegs: [FlightLegInfo]` y `returnLegs: [FlightLegInfo]`, los campos escalares antiguos (`seatNumber/seatPosition/cabinClass`) se conservan como **legacy** para datos previos. Computed `allLegs` devuelve la unión ida+vuelta o un fallback sintético desde el legacy si las arrays están vacías. `hasAnyData` actualizado para considerar legs.
+
+Migración: idempotente, se ejecuta `onAppear` en cada FlightInfoSection — si `outboundLegs.isEmpty` y hay valor legacy, crea un solo leg con esos datos. Después limpia los escalares.
+
+### `ContentView.swift` / `AddSegmentSheet.swift` — `FlightInfoSection` refactor per-tramo
+
+Firma nueva: `FlightInfoSection(info:, outboundRoute: [String], returnRoute: [String])`. Genera N editores leg = `outboundRoute.count - 1` (escalas internas cuentan como tramo separado), igual para vuelta. Editor por leg muestra `LHR → MAD` etc. con su propio asiento/posición/clase.
+
+Call-sites actualizados (líneas aprox.):
+- `ContentView.swift:6821` — `AddTripSheet`
+- `ContentView.swift:8393` — `EditTripSheet`
+- `AddSegmentSheet.swift:447` — `AddSegmentSheet` (segmentos hijos)
+
+Agregadores de stats (`ContentView.swift:7195-7229`) iteran `info.allLegs` en lugar de los escalares antiguos.
+
+### Tramos ordenados cronológicamente
+
+`ForEach(tripSegments.sorted { $0.dateFrom < $1.dateFrom })` aplicado en:
+- `AddTripSheet` "Tramos adicionales" (`ContentView.swift:6275`)
+- `EditTripSheet` "TRAMOS" (`ContentView.swift:8579`)
+
+Antes: aparecían en orden de inserción → `31/10, 1/11, 30/10` rompía la lectura natural ida → vuelta. `FlightsSheet` ya estaba ordenado descendente globalmente y se deja como estaba.
+
+### `ContentView.swift` — bug de finalizados-sobre-perfil arreglado
+
+**Problema:** `showProfile` (full-screen) y `finalizadosSheetData` (sheet) estaban ambos atados al root view. SwiftUI solo permite UN sheet/cover activo por nivel: al tocar "Finalizados" desde el perfil, el sheet quedaba en cola y solo aparecía tras cerrar el perfil.
+
+**Fix:** estado `finalizadosPayload` y su `.sheet(item:)` movidos **dentro** de `ProfileSheet`. Helper privado `finalizadoRows(year:)` duplicado dentro de `ProfileSheet` con su propio `@Environment(\.modelContext)` y `@Query`. Se eliminó el callback `onFinalizadosTap` que comunicaba con el root.
+
+Archivos tocados: solo `ContentView.swift` (eliminadas ~80 líneas en root, añadidas ~50 dentro de `ProfileSheet`).
+
+### `ContentView.swift` — apartados legales reforzados para App Store
+
+Reescritos los 5 textos en `LegalInfoSheet` (líneas 4631–4659) para cumplir requisitos de Apple App Review + AEPD:
+
+| Apartado | Mejora |
+|---|---|
+| Política de privacidad | Email visible (`raskmap_soporte@icloud.com`); CloudKit declarado como procesador (Apple Inc.); aclaración de IAP vía App Store; edad mínima 13+; retención; derecho a reclamar ante AEPD con URL |
+| Términos de uso | Edad mínima; **Apple Standard EULA** referenciado por URL; aclarado «pago único, no suscripción»; limitación de responsabilidad reforzada |
+| Aviso legal | Email visible; «persona física, particular»; nuevo apartado de propiedad intelectual |
+| Tus derechos (RGPD) | **Derecho a reclamar ante AEPD** añadido (GDPR Art. 13(2)(d), antes faltaba); aclaración no-transferencia fuera del EEE |
+| Atribuciones | Añadido MapKit/Apple Maps + StoreKit/App Store |
+
+`ContactSheet` (línea 4722) ya enviaba a `raskmap_soporte@icloud.com` por `MFMailComposeViewController` — el email es real.
+
+### `RaskmapWidget.swift` — título de viaje en lock screen
+
+`LockNextEntry` (línea 587) extendido con `title: String`. `LockNextProvider.makeEntry()` lee `widget_next_title` (clave del App Group ya escrita por `WidgetDataWriter.syncNextTrip`).
+
+`LockNextView` (línea 630) muestra: `title` si existe → `name` (país) si no → fallback `"Próximo viaje"`. `.lineLimit(1).minimumScaleFactor(0.8)` para evitar truncado en pantallas estrechas.
+
+Configuración (línea 654): `.description("Días hasta el próximo evento.")` (antes "Bandera y días hasta el próximo viaje").
+
+### Nueva carpeta `docs/` — sitio web de documentación legal
+
+Repo-root `/docs/` con los 5 textos legales en Markdown listos para GitHub Pages. Mismo contenido literal que la app (Apple verifica en revisión que coinciden).
+
+```
+docs/
+├── README.md      (instrucciones para activar GitHub Pages)
+├── index.md       (landing con enlaces)
+├── privacy.md     ← Privacy Policy URL para App Store Connect
+├── terms.md
+├── imprint.md
+├── gdpr.md
+└── credits.md
+```
+
+Front-matter Jekyll mínimo (`title:`) en cada archivo. Funciona out-of-the-box con la rama `main` + carpeta `/docs` en Settings → Pages, sin configuración adicional.
+
+---
+
+## Cambios recientes (2026-04-19) — continuación
+
+### `FlightFilterSlider` — thumb vertical-centrado
+
+`ZStack(alignment: .leading)` ya centra verticalmente sus hijos. El thumb tenía además `.offset(y: 2)` heredado de un diseño previo, empujándolo 2pt por debajo del centro — resultado: colisión visible con el borde inferior de la cápsula exterior. Fix: `.offset(x: clampedX + 2)` sin componente Y. El `+2` horizontal sigue siendo el margen simétrico entre el thumb (`width: segW - 4`) y el borde.
+
+### `YearWrappedSheet` outro — navegación hacia atrás reactivada + `ShareableSummaryCard` rediseñada
+
+**Back-nav en slide final.** El layer táctil del outro se había eliminado entero para no chocar con los botones Share/Restart; eso rompía el swipe/tap a la izquierda para volver a slides anteriores. Solución: mantener `StoryTouchLayer` en outro con `onTapRight`/`onSwipeLeft` como no-op pero conservando `onTapLeft`/`onSwipeRight` → `goBack()`. Además `.padding(.bottom, 280)` acota la zona de gesto arriba de los CTAs para que siguen siendo tappables.
+
+**`ShareableSummaryCard` 1080×1920 rediseñada.** Antes todo el contenido quedaba apilado en la mitad superior. Nueva composición en 4 bloques verticalmente distribuidos con `Spacer()`:
+- Hero: `ASÍ FUE MI` (30pt, tracking 14) + año (280pt Palatino-Bold con sombra doble) + `EN RASKMAP` (28pt, tracking 12), padding top 170.
+- `SummaryStatGrid` (padding horizontal 72) separado por un divisor de puntos (3 círculos + 2 cápsulas).
+- Nueva galería `flagGallery` con label `MIS BANDERAS` entre hairlines + `LazyVGrid` `adaptive(minimum: 92→34pt)` según recuento, en contenedor redondo (radius 32, fill `white.opacity(0.08)`, stroke `white.opacity(0.18)`).
+- Footer: hairline 220pt + 🗺️ 52pt + `Raskmap` 44pt + tagline 22pt. Padding bottom 110.
+- Fondo: gradiente 4 paradas `#04071F → #1C1048 → #52209A → #E44BC4` + glows adicionales (`#A16BFF` 900pt, `#FF88CA` 820pt).
+
+### `TransportStatsSheet` — drill-down de avión muestra vuelos, no rutas
+
+Al tocar el chip ✈️ en "Tus medios" ahora se presenta `FlightLegsListSheet` (nueva) en lugar de `TransportTripsListSheet`. Cada fila es un **tramo individual** con origen, destino, fecha y bandera del país de destino, no una agrupación por viaje.
+
+Archivos: `ContentView.swift`.
+- `FlightLegsListSheet` nueva en `ContentView.swift:7179`. `FlightLeg` interno (from, to, date, transportISO). `legs` computed recorre solo trips primarios (no `isSegmentChild`), itera `tripSegments` y por cada segment con `airports`/`returnAirports` hace un walk pairwise para generar un leg por par consecutivo — usa `seg.dateFrom` para ida y `seg.dateTo` para vuelta. Para trips legacy sin segments con exactamente 2 `tripAirports`, genera `totalTouches/2` legs alternando dirección (ida → vuelta → ida…).
+- Router dentro de `TransportStatsSheet` body: `if filter.emoji == "✈️" { FlightLegsListSheet(…) } else { TransportTripsListSheet(…) }`.
+
+### Conteo de vuelos corregido en Wrapped y en `TransportStatsSheet`
+
+**Bug:** en la rama legacy (trips primarios sin `tripSegments`, con solo `tripAirports`) se usaba `max(1, tripAirports.count - 1)`. Como `tripAirports` está **deduplicado con un `count` por aeropuerto** (migración de `roundTrip=true` → `count=2`), un round-trip directo con 2 aeropuertos contaba `1` tramo en lugar de `2`.
+
+**Fix en dos sitios simétricos:**
+- `WrappedStats.compute()` en `YearWrappedSheet.swift:249` — rama `else if t.transport == "✈️"`.
+- `TransportStatsSheet.counts` en `ContentView.swift` — rama `if tr == "✈️"` dentro del loop de primaries.
+
+Ambas ahora usan:
+```swift
+let totalTouches = trip.tripAirports.reduce(0) { $0 + $1.count }
+let legs = max(1, totalTouches / 2)
+```
+Verificado: one-way directo `[MAD(1), NRT(1)]` = 1 tramo; round-trip directo `[MAD(2), NRT(2)]` = 2; one-way con escala `[MAD(1), DXB(2), NRT(1)]` = 2; round-trip con escala `[MAD(2), DXB(4), NRT(2)]` = 4. Los trips modernos (con `tripSegments`) siempre fueron correctos (`outLegs + retLegs`).
+
+---
+
+## Cambios recientes (2026-04-19)
+
+### `YearWrappedSheet.swift` — fixes de territorios, empates de mes y compartir
+
+**Territorios no reconocidos por la ONU ahora se cuentan siempre**
+`WrappedStats.compute(year:trips:allFeatures:)` reescrita para capturar destinos como Hong Kong, Macao, Puerto Rico, Taiwán, etc. — independientemente de cómo se hayan registrado y del medio de transporte.
+- Añadida variable `yearAllTrips = trips.filter { $0.year == year }` (incluye `isSegmentChild`). `countryTripCounts` ahora cuenta sobre `yearAllTrips`, capturando layovers guardados como child trips.
+- Bucle adicional sobre `yearTrips` (primarios) recorriendo `tripSegments.isoCodes` para capturar escalas declaradas únicamente dentro de segments (no como trip independiente).
+- `priorISOs` expandido: además del `isoCode` de trips anteriores, también recoge todos los `seg.isoCodes` de años previos — así "nuevos" sigue siendo coherente para territorios registrados como layover.
+- Top 4 flags: si `allFeatures.first(where:)` no encuentra feature (territorio sin entrada en geojson), se cae a `🌐` y se usa el propio ISO como nombre — antes el array se quedaba vacío y la slide no mostraba nada.
+
+**Empates de "mes más viajero"**
+- `WrappedStats.topMonth: (Int,Int)?` → `topMonths: [(month: Int, count: Int)]` (array de todos los meses que empatan al máximo).
+- `topMonthSlide` bifurca la UI: si `count <= 1`, render clásico (nombre grande + contador); si hay empate, lista vertical con los nombres de los meses empatados, tamaño decreciente si >3, y subtítulo "empate múltiple 🤝".
+- `activeSlides` usa `!stats.topMonths.isEmpty` en lugar de `topMonth != nil`.
+
+**Botón "Compartir mi año" ahora genera imagen 9:16 fiable**
+- `share()` refactorizado a arquitectura `Task { @MainActor in … }` para dar un tick al layout antes de renderizar (`ImageRenderer` devolvía `nil` cuando la vista aún no había resuelto layout).
+- Nuevo helper estático `renderShareImage(stats:year:)` — encapsula el render con `renderer.scale = 2`, `proposedSize = 1080×1920`, `isOpaque = true`, `environment(\.colorScheme, .dark)`.
+- Nuevo helper estático `presentShareSheet(items:onComplete:)` — búsqueda robusta de la keyWindow (filtra por `isKeyWindow`, luego visibilidad, luego primera) y sube por la cadena de `presentedViewController` saltándose VCs `isBeingDismissed`. Así el UIActivityViewController se presenta incluso desde `fullScreenCover` anidado.
+- Fallback: si el render falla, el share sheet igualmente se presenta con el texto "Mi año \(año) en Raskmap 🗺️" — antes la tap era silenciosa si `renderer.uiImage` era nil.
+
+### `ColorThemeManager.swift` — color default de "Próximos" actualizado
+- `defaultWantToVisit = #00CB7C` (verde esmeralda) — antes `#6E95C7` azul polvo en la paleta anterior. Se aplica a los polígonos en el mapa y al color de fondo del widget si el usuario no ha personalizado.
+
+### Widget de pantalla principal — rediseño mediano y grande
+
+Archivos: `RaskmapWidget/RaskmapWidget.swift` y `Raskmap/WidgetDataWriter.swift`.
+
+**Nueva estructura de datos compartida (App Group)**
+- `RaskmapEntry` ampliado: `visitedUN`, `visitedUNPlus`, `visitedAll`, `nextFlag`, `nextDays`, `nextName`, `nextTransport`, `upcomingFlags`, `topVisitedFlags` — suficiente para los tres tamaños sin recargas adicionales.
+- `WidgetDataWriter.syncTopVisitedFlags(_:)` — escribe un string concatenado de emojis de banderas de países visitados ordenados por `visitCount` (hasta 12).
+- Nueva computed `topVisitedFlagsString` en `ContentView.swift`: itera `countries` con `status ∈ {.visited, .lived}`, ordena por `visitCount` desc (tiebreak alfabético por ISO), mapea a `features.first(where: ...)?.flagEmoji ?? "🌐"`, `.prefix(12).joined()`. Se sincroniza en `handleTripsCountChange()` y `handleInitialTask()`.
+
+**`MediumView` — dos columnas con separador vertical**
+- Columna izquierda: eyebrow "PRÓXIMO VIAJE" + emoji transporte, flag 40pt con sombra, nombre del destino, contador `en N DÍAS`, strip mini de próximas banderas (6 chars). Estado vacío: 🗺️ "Sin viajes".
+- Columna derecha (ancho fijo 120): contador grande 52pt Palatino-Bold + label según modo + footer con modo corto.
+- Separador vertical `Color.white.opacity(0.18)` de 0.5pt.
+
+**`LargeView` — tres secciones separadas por dividers finos**
+- **Hero**: flag 54pt + eyebrow + nombre + número de días a la derecha.
+- **Stats**: tres celdas (ONU / ONU+OBS / TODOS) con sus contadores respectivos, separadas por dividers verticales de 0.5pt altura 36.
+- **Flag strips**: dos filas (`PRÓXIMOS`, `MÁS VISITADOS`) — label 9pt tracking 1.4 + banderas 18pt (prefix 9). Placeholders si vacíos.
+
+**`SmallView`**: sin cambios (seguía siendo el diseño que el usuario quería).
+
+**`.supportedFamilies`**: ahora `[.systemSmall, .systemMedium, .systemLarge]` en `RaskmapWidget`.
+
+**Fondo**: todos los tamaños usan `containerBackground(entry.bgColor, for: .widget)`. El color default (`widget_bg_color`) ahora es `#00CB7C` consistente con el color de "próximos" en la app.
+
+---
+
+## Cambios recientes (2026-04-18) — Compactación del passport + YearWrappedSheet v1
+
+### Passport avatar — migración completa
+- Eliminado `ImagePickerView` y todo el flujo de UIImagePickerController.
+- Onboarding rediseñado en 2 pasos (`onboardingSheet()` con `@State onboardingStep: Int`): (1) username, (2) grid de pasaportes con `PassportSelectableCard`.
+- Avatar del top bar y ajustes usan `PassportAvatarView(key:height:)` directamente.
+- Picker de pasaporte a pantalla completa via `.fullScreenCover` (antes era `.sheet`).
+
+### Slider del modo vuelos (`FlightFilterSlider`)
+- **Nota:** al principio usaba `GlassEffectContainer` + `.glassEffect(.regular.interactive(), in: Capsule())` (iOS 26 nativo), pero el blur del thumb ocultaba el texto debajo. Se reemplazó por una **cápsula transparente con gradiente blanco suave** (`white.opacity(0.22→0.08)`) + `stroke(white.opacity(0.55))` + sombra tenue. Lee perfectamente y mantiene la sensación líquida.
+- `GeometryReader` + `ZStack(alignment: .leading)` con HStack de labels+iconos debajo y el thumb (cápsula) encima (`allowsHitTesting(false)` — los taps los recibe el HStack).
+- `DragGesture(minimumDistance: 0)` con `@GestureState dragDelta: CGFloat` y `@GestureState isPressing: Bool`. Al presionar el thumb escala `1.06`. Snap al segmento más cercano en `onEnded`.
+- Centrado vertical: al apoyarse en `ZStack(alignment: .leading)` ya queda centrado en Y automáticamente; el único offset es horizontal (`.offset(x: clampedX + 2)` con `+2` = margen simétrico respecto al ancho reducido `segW - 4`). Un `.offset(y:2)` heredado causaba colisión con el borde inferior; eliminado.
+- Eliminado el username del top bar en modo mapa y vuelo (antes había `Text("@\(username)")` al lado del avatar).
+
+### YearWrappedSheet v1
+- `WrappedStats` ampliada con `totalTerritories`, `newTerritories`, `topAirlines: [(name,count)]`, `topAirports: [(iata,name,count)]`, `longestTripCountry`, `longestTripFlag`.
+- `WrappedStats.empty` para evitar recomputar en cada render — se cachea en `@State cachedStats: WrappedStats?` en `.onAppear`.
+- Sorts con tiebreakers estables (`if $0.count != $1.count { return $0.count > $1.count }; return $0.emoji < $1.emoji`) + `ForEach(id: \.emoji)` en slide de transportes — mata los parpadeos por iteración no-determinista de diccionarios.
+- `targetYear = Calendar.current.component(.year, from: Date()) - 1` → año anterior automático.
+- `StoryTouchLayer` component: `DragGesture(minimumDistance: 0)` detecta press-and-hold (pausa auto-advance), tap corto (<0.35s, <12px) = navegar, swipes laterales/hacia abajo.
+- `OutroSlideView` + `SummaryStatGrid` (2x2) + `ShareableSummaryCard` 1080×1920.
+- Fix bug de build: `import Combine` añadido en `YearWrappedSheet.swift:11` (antes `autoconnect()` fallaba al compilar).
+
+---
+
+## Cambios recientes (2026-04-17)
+
+### Modo Vuelos — filtro Visitados / Próximos
+- En `flightMode == true` el dock **vacía todo su contenido habitual** (passport avatar, separador vertical, badges de categorías, botón de búsqueda con denominador) y queda solo el slider `FlightFilterSlider` centrado con `Spacer()` a ambos lados (ver `ContentView.swift:400`). En modo mapa el dock vuelve a su layout normal.
+- Filtro por defecto: `Visitados` (`.past`). `Próximos` (`.upcoming`) dibuja los arcos de viajes con `dateFrom > hoy`.
+- Al entrar en modo vuelos siempre se resetea a `.past` (`triggerFlightModeTransition()`).
+- Nuevo enum `FlightRouteFilter { past, upcoming }` en `FlightMap.swift`. `FlightRoutesBuilder.build(from:filter:)` filtra según el caso.
+- `RaskMapView` recibe `flightRouteFilter: FlightRouteFilter`; el `Coordinator` guarda `lastFlightRouteFilter` y `rebuildFlightOverlays(mapView:trips:filter:)` limpia+redibuja cuando cambia.
+
+### Empty state del modo vuelos
+- `flightEmptyState()` en `ContentView.swift` — card `.ultraThinMaterial` centrado con `airplane.departure` y mensaje contextual: *"Aún no has volado"* (.past) vs *"Sin vuelos próximos"* (.upcoming).
+- Detección eficiente vía `FlightRoutesBuilder.hasAnyRoute(in:filter:)` — early-exit: devuelve `true` en cuanto encuentra un par válido, evitando materializar todo el set.
+- Estado `@State flightModeHasRoutes: Bool` recalculado en `onChange` de `flightMode`, `flightRouteFilter`, `trips.count` y en el `.task` inicial.
+- Overlay `.allowsHitTesting(false)` y `zIndex(50)` — no bloquea el mapa, queda por debajo del `FlightModeTransition`.
+
+### User location y centrado
+- `MKMapView.showsUserLocation = false` al entrar en `enterFlightMode`, `= true` al volver con `exitFlightMode`.
+- `exitFlightMode` ahora llama a `fitToVisitedCountries(mapView:)` — mismo encuadre automático que `enterFlightMode` aplica a aeropuertos, pero usando la unión de `boundingMapRect` de países visitados/lived con padding 80/50/80/50. Fallback a Antártida (`Coordinator.antarcticaFallback`) si no hay países.
+
+### Rediseño Live Activity (boarding-pass)
+Archivo: `RaskmapWidget/RaskmapLiveActivity.swift` — reescritura completa.
+- Lockscreen: gradiente oscuro, eyebrow "PRÓXIMO VIAJE" en accent cobalto (`Satoshi-Bold` 9pt tracking 1.8), bandera 40pt con sombra (sin círculo), nombre `Satoshi-Bold` 17pt, separador vertical, columna de días (34pt número + "DÍA/DÍAS" label en accent), motivo `DashedTrail` debajo.
+- Dynamic Island expanded: eyebrow + trail + separador en la misma estética.
+- Accent cobalto `#4072D4` consistente con botón de modo vuelos.
+
+### ColorThemeManager — defaults mutados
+Palette nueva, menos estridente en el mapa:
+- `defaultVisited = #C47457` (terracota suave)
+- `defaultWantToVisit = #6E95C7` (azul polvo)
+- `defaultLived = #6FA07C` (verde salvia)
+- `defaultBucketList = #D4A85E` (ámbar mate)
+
+### `ModelContext+Fetch.swift` — helpers con logging
+Nuevo archivo con extensión sobre `ModelContext`:
+- `fetchOrWarn(_:fallback:)` — reemplaza `try? modelContext.fetch(desc)` silencioso; en DEBUG imprime `⚠️ SwiftData fetch failed [file:line]: error` en lugar de tragar el fallo.
+- `fetchFirstOrWarn(_:)` — variante que devuelve el primer resultado o `nil`.
+- Migrados 10 sitios destructivos + 9 `.first` en `ContentView.swift` (incluyendo dentro de `EditTripSheet`, que no podía acceder a helpers privados de ContentView).
+
+### Otras mejoras / fixes de esta sesión
+- **`allProximoRows`**: O(n·m) → O(n+m) — indexa trips con `Dictionary(grouping: trips, by: \.isoCode)` antes del loop.
+- **Force-unwraps eliminados**: 3 en `ContentView.swift` + 3 en `AddSegmentSheet.swift` — `cal.date(byAdding:...)!` ahora cae a `?? date.addingTimeInterval(86_400)`.
+- **`earnedPassportZones`**: decodifica directamente `Set<String>.self` (antes decodificaba `[String]` y convertía) en los 3 puntos de uso.
+- **`lastEditedFutureTripIso = nil`** al final del `onDismiss` del edit sheet — evita estado stale.
+- **Banner declutter**: el banner ad (`isRaskmapPro == false`) se oculta con `!flightMode`, pero el countdown banner **sigue visible en modo vuelos** — es información relevante para el usuario estando en la vista de rutas. Ver `ContentView.swift:935` (banner ad: `if !flightMode, !isRaskmapPro`) vs `ContentView.swift:946` (countdown: `else if showCountdown`).
+- **Haptics**: medium al alternar modo vuelos, light al cambiar de filtro.
+- **Accesibilidad**: `flightModeButton` con label+hint contextuales; pills con `Filtro vuelos: <title>` y trait `.isSelected` cuando activo.
+- **Eliminada** la rama legacy `visitedIsoSet` (dead computed property) y los helpers privados `fetchOrWarn`/`fetchFirstOrWarn` de ContentView (migrados a extensión).
+
+### Recordatorio — Vivido
+No existe badge de "Vivido" en el dock ni en listas. Se marca únicamente con el toggle `Country.hasLived` (muestra 🏠 en lista visitados). Las rutas/filtros de modo vuelos usan solo `past`/`upcoming` sobre `trips.dateFrom`.
+
+---
+
+## Cambios recientes (2026-04-16)
+
+### Modo Vuelos (flight map view)
+Nueva funcionalidad: botón ✈️ flotante en esquina derecha (lado opuesto al menú) alterna entre mapa de polígonos y vista de rutas aéreas. Al activarlo:
+- Polígonos de países transparentes (cacheados, no se quitan, por rendimiento).
+- Arcos de gran círculo (`MKGeodesicPolyline`) entre pares de aeropuertos únicos, color accent cobalto 0.85 alpha, line width 1.6pt, caps round.
+- Cada aeropuerto visitado: punto blanco 10×10 con borde cobalto 2pt y sombra sutil.
+- Zoom automático `setVisibleMapRect` para encuadrar todos los aeropuertos con padding.
+- Taps en países deshabilitados mientras modo activo.
+- Icono cambia ✈️ → 🗺 (`map.fill`) con color accent cuando activo.
+
+### Lógica `FlightRoutesBuilder`
+- Solo trips con `dateFrom <= hoy`.
+- Con `tripSegments`: pares consecutivos de `airports` (ida) y `returnAirports` (vuelta) por cada segmento `✈️`. Escalas → múltiples arcos (MAD-LHR-JFK = MAD-LHR + LHR-JFK).
+- Sin segmentos (legacy) y `transport == "✈️"`: solo si exactamente 2 aeropuertos (caso directo inequívoco); con 3+ se omite porque el orden se pierde al combinar ida+vuelta.
+- Deduplicación vía `FlightRoutePair` (par no ordenado): ida+vuelta = misma línea, repetido = misma línea.
+
+### Archivos
+- **`airport_coords.json`**: 1031 entradas IATA→[lat,lng] de OpenFlights+OurAirports+fallback manual (HIX, ISF, MSD, QXB).
+- **`FlightMap.swift`** (nuevo): `AirportCoordinates`, `FlightRoutePair`, `FlightRoutesBuilder`, `AirportDotAnnotation`.
+- **`RaskMapView.swift`**: props `flightMode: Bool`, `trips: [Trip]`; `Coordinator.enterFlightMode`/`exitFlightMode`/`refreshFlightOverlaysIfNeeded`; `rendererFor` transparente si flightMode; `viewFor` rama `AirportDotAnnotation`; `handleTap` sale temprano.
+- **`ContentView.swift`**: `@State flightMode`, helper `flightModeButton()` en `mapCore()`.
+
+### Bug fix aeropuertos en `EditTripSheet`
+`prepareEditSaveConfirmation()` rama sin segmentos: antes solo usaba `localAirports` (ida), ignorando `localReturnAirports` (vuelta). Vuelo directo round-trip contaba 1 en lugar de 2 por aeropuerto. Ahora combina con `apCombined` dict → MAD=2, JFK=2 correctos.
+
+### `visitConfirmCard` → `confirmCardContent`
+Eliminada implementación legacy; delega a `confirmCardContent` compartido (mismo look premium que planned/editVisit).
+
+### Live Activity rediseñada
+- Banner lock: fondo oscuro gradiente diagonal, bandera en círculo semi-transparente, nombre `Satoshi-Bold 12pt` secundario, días `Satoshi-Bold 38pt` grande, emoji transporte + label "PRÓXIMO" (tracking 1.2) a la derecha.
+- Dynamic Island expanded: transporte+bandera leading, días trailing `Satoshi-Bold 30pt`, nombre center, "Próximo viaje" bottom.
+- Compact trailing usa accent cobalto para el `Nd`.
+- `ContentState` con nueva `transportEmoji: String` (ambas copias de `RaskmapActivityAttributes.swift`).
+
 ## Estructura de carpetas
 ```
 Raskmap/
@@ -346,34 +1253,138 @@ Sin licencia activa no se puede subir nada ni activar iCloud/CloudKit.
 
 ### Paso 3 — Crear los productos In-App Purchase en App Store Connect
 - [ ] **Non-Consumable** → ID: `com.raskmap.pro.lifetime` → precio: **4,99 €** → Pago único vitalicio
-- [ ] ID hardcoded en `ContentView.swift` como `raskmapProLifetimeID` (suscripción mensual eliminada)
+- [x] ID hardcoded en `ContentView.swift` como `raskmapProLifetimeID` (suscripción mensual eliminada)
+- ⚠️ **Crítico:** elegir **Non-Consumable**, NO «Auto-Renewable Subscription» — los términos de uso ya declaran «pago único, no suscripción». Si se configura mal en App Store Connect, App Review lo rechazará por inconsistencia.
 
 ### Paso 4 — Hostear Política de Privacidad en URL pública (obligatorio App Store Connect)
-- [ ] Opción fácil: Notion con "Share to web"
-- [ ] Opción profesional: GitHub Pages (`tuusuario.github.io/raskmap-legal`)
-- [ ] El texto ya está escrito en Ajustes → Legal → Política de privacidad
-- [ ] Pegar la URL en Xcode → Info y en App Store Connect (campo "Privacy Policy URL")
+- [x] Textos legales reescritos para cumplir Apple + AEPD (`ContentView.swift:4631-4659`)
+- [x] Carpeta `docs/` creada en raíz del repo con los 5 documentos en Markdown listos
+- [ ] Crear repo público en GitHub (p. ej. `raskmap-legal`) y subir `docs/`
+- [ ] Settings → Pages → Source: rama `main`, carpeta `/docs` → activar
+- [ ] Esperar ~1 min y copiar la URL final (`https://<usuario>.github.io/<repo>/privacy`)
+- [ ] Pegar en App Store Connect → App Information → **Privacy Policy URL**
+- [ ] Pegar también en **Support URL** (puede ser el `index.md`)
+- [ ] (Opcional) Configurar dominio propio `raskmap.app` añadiendo `CNAME` en `docs/`
 
-### Paso 5 — Configurar AdMob (monetización con banner)
+### Paso 5 — Monetización (decidir antes de subir v1.0)
+
+**Estado actual:** la Política de Privacidad declara explícitamente que **NO hay publicidad ni terceros**. Coherente con el código: no hay AdMob integrado, solo IAP de Raskmap Pro.
+
+⚠️ **Si se decide añadir AdMob después** habrá que actualizar **simultáneamente**:
+1. Política de privacidad in-app (`ContentView.swift:4631`)
+2. Política de privacidad pública (`docs/privacy.md`)
+3. App Privacy questionnaire en App Store Connect (declarar tracking + ad ID)
+4. Atribuciones (`ContentView.swift:4659` + `docs/credits.md`)
+
+Pasos AdMob (si se hace):
 - [ ] Crear cuenta en [admob.google.com](https://admob.google.com)
 - [ ] Registrar la app → obtener **App ID** (`ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX`)
 - [ ] Crear unidad de anuncio tipo **Banner** → obtener **Ad Unit ID** (`ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX`)
 - [ ] Añadir SDK en Xcode: `File → Add Package Dependencies` → `https://github.com/googleads/swift-package-manager-google-mobile-ads` → target `Raskmap`
 - [ ] Añadir en `Info.plist`: `GADApplicationIdentifier = <App ID>`
 - [ ] En `BannerAdView.swift` línea 16: sustituir el test ID por el **Ad Unit ID** real
-- [ ] Actualizar Política de Privacidad para mencionar el uso de publicidad y datos de AdMob (obligatorio tanto para Google como para Apple)
 
-### Paso 5 — App Store Connect: ficha de la app
-- [ ] Rellenar cuestionario de privacidad (datos en iCloud del usuario, sin terceros, sin analíticas)
-- [ ] Nombre, subtítulo, descripción localizada
-- [ ] Capturas de pantalla (6.7", 6.5", iPad si aplica)
-- [ ] Icono definitivo 1024×1024 sin transparencia
+### Paso 6 — App Store Connect: ficha de la app
+- [ ] Rellenar **App Privacy questionnaire** → declarar **«Data Not Collected»** (consistente con la política)
+- [ ] **Privacy Policy URL** ← del Paso 4
+- [ ] **Support URL** ← del Paso 4
+- [ ] **App Review Contact** → poner `raskmap_soporte@icloud.com`
+- [ ] **Age Rating**: 4+ (sin contenido cuestionable, no UGC compartido)
+- [ ] Nombre, subtítulo, descripción localizada (ES + EN)
+- [ ] Capturas de pantalla (6.9" para iPhone 16 Pro Max es el tamaño actual obligatorio; 6.5" si soporte iPhone 8 Plus)
+- [ ] Icono definitivo 1024×1024 sin transparencia, sin esquinas redondeadas
 - [ ] Categoría: Travel o Lifestyle
 - [ ] Precio: Gratis (el Pro es In-App Purchase)
 
-### Paso 6 — Probar con TestFlight antes del lanzamiento público
+### Paso 7 — Probar con TestFlight antes del lanzamiento público
 - [ ] Archivar en Xcode → Product → Archive → Distribute App → TestFlight
 - [ ] Revisar que `v.1.0` en SplashView coincide con el Build/Version de Xcode
+- [ ] Probar en al menos 2 dispositivos físicos: pago IAP en sandbox, sync iCloud entre dispositivos, widgets en pantalla de bloqueo y Home, Live Activities
+
+---
+
+## Cambios relevantes recientes (sesión 2026-04-15, parte 2) — Remodelación UI/UX
+
+### Paleta de colores
+
+Colores por defecto actualizados en `ColorThemeManager.swift`:
+- **visited**: `#C9503E` (terracota profunda — antes coral #EE6E7D)
+- **wantToVisit**: `#4072D4` (cobalto — antes azul brillante #53A3FE)
+- **lived**: `#3E9068` (esmeralda — antes verde neón #71EB71)
+- **bucketList**: `#E08B35` (ámbar cálido — antes naranja #FF9933)
+
+Nota: el cambio solo afecta a instalaciones nuevas. Usuarios existentes con defaults guardados en UserDefaults ven los suyos; pueden resetear en Ajustes → Colores del mapa.
+
+### Acento de UI en sheets
+
+Color de acento unificado en todos los sheets: `Color(red: 64/255, green: 114/255, blue: 212/255)` (`#4072D4`, mismo que el nuevo wantToVisit). Definido como `private let accent` en cada struct que lo necesita.
+
+### Redesign de AddSegmentSheet
+
+- **Step 1 (Transporte)**: Grid 2×3 con tarjetas grandes (56pt emoji en círculo, 22pt padding vertical). Tarjeta seleccionada: fondo `accent.opacity(0.08)` + borde `accent.opacity(0.35)`.
+- **Step 2 (Países)**: Campo de búsqueda con fondo `systemGray6` 12pt radius; chips de países seleccionados con borde `accent.opacity(0.2)` en Capsule.
+- **Step 3 (Fechas)**: Header con emoji de transporte; tarjeta de ruta de vuelo con fondo `accent.opacity(0.06)`; layover choices con círculo `accent` relleno cuando checked; date tabs como cards independientes con borde al activarse.
+- **Botón de acción**: `Satoshi-Bold 16pt`, corner 14pt, sombra `accent.opacity(0.3)`.
+- **NavigationTitle**: simplificado a "Nuevo tramo" / "Países" / "Fechas".
+
+### Redesign de FlightInfoSection
+
+- Sección header "DETALLES DEL VUELO" con tracking 1.0.
+- Iconos `ticket.fill` y `seat.fill` en accent color a la izquierda.
+- Input de reserva en `Satoshi-Bold` accent; separadores 0.5pt gris en lugar de Divider.
+- Corner radius: 16pt (antes 12pt).
+
+### Redesign de PlannedDatePickerSheet
+
+- Header visual: emoji de país grande (52pt) + nombre (`Satoshi-Bold 24pt`) + subtítulo secondary.
+- Eliminado el emoji 📅 del navigationTitle; title vacío (header está en contenido).
+- Sección "TÍTULO DEL VIAJE" (si isEditing) con tracking.
+- Sección "TRANSPORTE": pills con borde accent cuando seleccionado.
+- Sección "RUTA DE VUELO": botón con círculo accent a la izquierda (patrón consistente).
+- Sección "FECHAS": date tabs como cards independientes (mismo patrón que AddSegmentSheet).
+- Corner radius de cards: 14pt.
+
+### Redesign de EditTripSheet
+
+- Sección "TÍTULO DEL VIAJE" al top con card 14pt radius.
+- Sección "TRANSPORTE": pills con estilo consistente con PlannedDatePickerSheet.
+- Sección "FECHAS": separador 0.5pt entre rows, card radius 14pt.
+- Sección "RUTA DE VUELO": botón con círculo accent.
+- Sección "TRAMOS": círculo gris 40pt con emoji de transporte; botones de editar/eliminar más grandes (22pt); botón "Añadir transporte" con círculo accent.
+- Rango calculado desde segmentos: dos cards independientes DESDE/HASTA lado a lado.
+- navigationTitle: "Editar viaje" (antes "✏️ Editar viaje").
+
+### Redesign de confirm cards (visitConfirmCard / editVisitConfirmCard)
+
+Ambas tarjetas ahora usan el struct compartido `confirmCardContent` (struct privado al final de PlannedDatePickerSheet en ContentView.swift). Patrón DRY.
+
+Nuevo diseño:
+- Overlay: `Color.black.opacity(0.55)`.
+- Card: `RoundedRectangle(cornerRadius: 24)` con sombra `black.opacity(0.25), radius:30, y:10`.
+- Header: círculo accent con checkmark + título `Satoshi-Bold 18pt` + subtítulo secondary.
+- Separadores: `Rectangle 1pt systemGray5` en lugar de `Divider`.
+- Sección headers: tracking 0.8.
+- Stepper: botón `−` (fondo `systemGray5`) + contador `Satoshi-Bold 16pt` + botón `+` (fondo accent). Tamaño 34pt.
+- Botones footer: "Cancelar" `Satoshi-Medium 15pt` fondo gray5, "Guardar" `Satoshi-Bold 15pt` fondo accent. Corner 12pt.
+
+### Redesign de RaskmapMediumView (widget mediano)
+
+- Eliminado el layout con columna izquierda (70pt) + divisor vertical.
+- Nuevo layout full-bleed vertical: transporte emoji top-left (20pt, `.white.opacity(0.65)`); `Spacer`; flag+nombre+días+fecha bottom-left.
+- Días: 34pt medium (antes 32pt).
+- `bookingRef`: 11pt monospaced, `.white.opacity(0.55)` (antes 13pt, 0.75 opacity).
+- Padding: 16pt (antes 5pt).
+
+### Redesign de RaskmapLargeView (widget grande)
+
+- Sección próximo viaje: layout `HStack(alignment:.bottom)` — izquierda: transporte+flag+nombre en una línea + días 44pt; derecha: fecha alineada al bottom.
+- Sección países visitados: `HStack` con 🌍 + número 22pt semibold + barra de progreso 5pt height. Separadores: `white.opacity(0.18)` (antes 0.25).
+- Sección próximos: label "PRÓXIMOS" en tracking 1.0 uppercase (antes "Próximos destinos").
+- `bookingRef`: 11pt, 0.50 opacity (antes 13pt, 0.75).
+
+### raskmapBlue (widget)
+
+Color actualizado a `Color(red: 0x8B/255.0, green: 0xB8/255.0, blue: 1.0)` — azul pastel más legible sobre fondos de color saturado.
 
 ---
 

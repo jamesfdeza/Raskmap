@@ -7,83 +7,123 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-// MARK: - Helpers
+private let accent      = Color(red: 64/255,  green: 114/255, blue: 212/255)
+private let accentSoft  = Color(red: 120/255, green: 156/255, blue: 224/255)
 
-private func liveActivityFont(size: CGFloat, bold: Bool) -> Font {
-    return .system(size: size, weight: bold ? .bold : .regular)
-}
-
+private let darkBg = LinearGradient(
+    colors: [
+        Color(red: 0.05, green: 0.07, blue: 0.14),
+        Color(red: 0.08, green: 0.10, blue: 0.22)
+    ],
+    startPoint: .topLeading,
+    endPoint: .bottomTrailing
+)
 
 // MARK: - Widget
 
 struct RaskmapLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RaskmapTripAttributes.self) { context in
-            HStack(spacing: 0) {
-                Text(context.state.flagEmoji)
-                    .font(.system(size: 40))
-                    .frame(width: 64)
-                    .padding(.leading, 8)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(context.state.tripName)
-                        .font(liveActivityFont(size: 14, bold: true))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text("Quedan \(context.state.daysRemaining) \(context.state.daysRemaining == 1 ? "día" : "días")")
-                        .font(liveActivityFont(size: 18, bold: true))
-                        .foregroundStyle(.white)
+
+            // MARK: Lock screen / notification banner — estilo boarding pass
+            HStack(alignment: .center, spacing: 0) {
+
+                // Left block — flag + name
+                HStack(spacing: 12) {
+                    FlagLabel(emoji: context.state.flagEmoji, size: 40)
+                        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 5) {
+                            Text("PRÓXIMO VIAJE")
+                                .font(.custom("Satoshi-Bold", size: 9))
+                                .tracking(1.8)
+                                .foregroundStyle(accent)
+                            Text(context.state.transportEmoji)
+                                .font(.system(size: 10))
+                                .opacity(0.75)
+                        }
+                        Text(context.state.tripName)
+                            .font(.custom("Satoshi-Bold", size: 17))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
                 }
-                .padding(.leading, 8)
-                Spacer()
+                .padding(.leading, 18)
+
+                Spacer(minLength: 10)
+
+                // Vertical separator + countdown
+                HStack(spacing: 14) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.10))
+                        .frame(width: 0.5, height: 40)
+
+                    VStack(alignment: .center, spacing: 0) {
+                        Text("\(context.state.daysRemaining)")
+                            .font(.custom("Satoshi-Bold", size: 34))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                        Text(context.state.daysRemaining == 1 ? "DÍA" : "DÍAS")
+                            .font(.custom("Satoshi-Bold", size: 9))
+                            .tracking(1.6)
+                            .foregroundStyle(accent)
+                    }
+                }
+                .padding(.trailing, 20)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .containerBackground(
-                LinearGradient(
-                    colors: [Color(red: 0.08, green: 0.06, blue: 0.20), Color(red: 0.93, green: 0.43, blue: 0.49)],
-                    startPoint: .leading, endPoint: .trailing
-                ),
-                for: .widget
-            )
+            .containerBackground(darkBg, for: .widget)
+
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Text(context.state.flagEmoji)
-                        .font(.system(size: 40))
-                        .padding(.leading, 4)
+                    HStack(spacing: 10) {
+                        FlagLabel(emoji: context.state.flagEmoji, size: 34)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("PRÓXIMO")
+                                .font(.custom("Satoshi-Bold", size: 8))
+                                .tracking(1.4)
+                                .foregroundStyle(accent)
+                            Text(context.state.transportEmoji)
+                                .font(.system(size: 14))
+                                .opacity(0.8)
+                        }
+                    }
+                    .padding(.leading, 6)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    VStack(alignment: .trailing, spacing: 1) {
+                    VStack(alignment: .trailing, spacing: 0) {
                         Text("\(context.state.daysRemaining)")
-                            .font(.system(size: 30, weight: .bold))
+                            .font(.custom("Satoshi-Bold", size: 30))
                             .monospacedDigit()
-                        Text(context.state.daysRemaining == 1 ? "día" : "días")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white)
+                        Text(context.state.daysRemaining == 1 ? "DÍA" : "DÍAS")
+                            .font(.custom("Satoshi-Bold", size: 9))
+                            .tracking(1.5)
+                            .foregroundStyle(accent)
                     }
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 6)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     Text(context.state.tripName)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.custom("Satoshi-Bold", size: 14))
+                        .foregroundStyle(.white)
                         .lineLimit(1)
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    Text("Próximo viaje")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .minimumScaleFactor(0.85)
                 }
             } compactLeading: {
-                Text(context.state.flagEmoji)
-                    .font(.system(size: 16))
+                FlagLabel(emoji: context.state.flagEmoji, size: 16)
             } compactTrailing: {
                 let days = context.state.daysRemaining
                 Text(days > 99 ? "+\(days / 30)m" : "\(days)d")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.custom("Satoshi-Bold", size: 13))
+                    .foregroundStyle(accent)
                     .monospacedDigit()
             } minimal: {
-                Text(context.state.flagEmoji)
-                    .font(.system(size: 16))
+                FlagLabel(emoji: context.state.flagEmoji, size: 16)
             }
         }
     }

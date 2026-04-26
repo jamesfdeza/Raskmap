@@ -25,7 +25,7 @@ struct SplashView: View {
             VStack(spacing: 0) {
                 Spacer()
                 VStack(spacing: 20) {
-                    Text("🌍")
+                    Text("🗺️")
                         .font(.system(size: 56))
                         .offset(y: globeOffset)
                         .opacity(opacity)

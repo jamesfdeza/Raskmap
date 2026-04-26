@@ -81,4 +81,11 @@ struct WidgetDataWriter {
         store.set(flags, forKey: "widget_all_flags")
         WidgetCenter.shared.reloadAllTimelines()
     }
+
+    /// Flags de países visitados (pre-computadas como string). Hasta 12 emojis para caber en el widget grande.
+    static func syncTopVisitedFlags(_ flags: String) {
+        guard let store else { return }
+        store.set(flags, forKey: "widget_top_visited_flags")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
 }

@@ -7,11 +7,19 @@
 
 import SwiftUI
 
+/// Una opción de "escala" en el wizard de añadir/editar tramo.
+///
+/// `id` es único por aparición (combina dirección + ISO) para permitir que el
+/// MISMO país pueda aparecer una vez en la sección IDA y otra en VUELTA cuando
+/// la ruta lo lleva por ese país en ambos sentidos. El flag de "visitado" se
+/// guarda en un único `Set<String>` de ISOs (binario por país), de modo que
+/// toggle de una sección actualice ambas representaciones — visitar es por
+/// país, no por dirección.
 struct LayoverChoice: Identifiable {
-    let id: String  // ISO code
+    let id: String  // "out_<ISO3>" o "ret_<ISO3>"
+    let isoA3: String
     let flag: String?
     let name: String
-    var checked: Bool
 }
 
 struct AddSegmentSheet: View {
@@ -40,7 +48,13 @@ struct AddSegmentSheet: View {
     @State private var showRoutePicker: Bool = false
 
     // Layover / destination prompts (✈️ only)
-    @State private var layoverChoices: [LayoverChoice] = []
+    // Dos listas separadas, una por dirección, sin deduplicar entre ellas:
+    // si DXB es escala de ida Y de vuelta, aparece como toggle en ambas.
+    @State private var outboundLayoverChoices: [LayoverChoice] = []
+    @State private var returnLayoverChoices: [LayoverChoice] = []
+    /// Set único (binario por país) de ISOs marcados como visitados. Si DXB
+    /// está en ida y vuelta, ambos toggles reflejan el mismo valor del Set.
+    @State private var visitedLayoverISOs: Set<String> = []
     @State private var destinationIso: String? = nil  // auto-marked unless return flight
     @State private var segmentFlightInfo = FlightInfo()
 
@@ -49,7 +63,10 @@ struct AddSegmentSheet: View {
     private let initialSegment: TripSegment?
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
-    private var tomorrow: Date { Calendar.current.date(byAdding: .day, value: 1, to: today)! }
+    private var tomorrow: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: today)
+            ?? today.addingTimeInterval(86_400)
+    }
 
     private static let fmt: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
@@ -69,7 +86,8 @@ struct AddSegmentSheet: View {
         }
         self.normalizedNames = names
         let today = Calendar.current.startOfDay(for: Date())
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)
+                     ?? today.addingTimeInterval(86_400)
         if let seg = initialSegment {
             _selectedTransport = State(initialValue: seg.transport)
             _dateFrom = State(initialValue: seg.dateFrom)
@@ -87,7 +105,9 @@ struct AddSegmentSheet: View {
         } else {
             let from = isForFuture ? tomorrow : today
             _dateFrom = State(initialValue: from)
-            _dateTo = State(initialValue: Calendar.current.date(byAdding: .day, value: 1, to: from)!)
+            _dateTo = State(initialValue:
+                Calendar.current.date(byAdding: .day, value: 1, to: from)
+                    ?? from.addingTimeInterval(86_400))
         }
     }
 
@@ -100,16 +120,23 @@ struct AddSegmentSheet: View {
         }
     }
 
-    // Final isoCodes to use when creating the segment
+    // Final isoCodes to use when creating the segment.
+    // Incluye destino + cualquier escala marcada (ida o vuelta) — el set
+    // visitedLayoverISOs es ya binario por país, así que da igual si está
+    // marcada por la ida, por la vuelta, o por ambas.
     private var finalIsoCodes: Set<String> {
         if selectedTransport == "✈️" {
             var result = Set<String>()
             if let dest = destinationIso { result.insert(dest) }
-            for choice in layoverChoices where choice.checked { result.insert(choice.id) }
+            result.formUnion(visitedLayoverISOs)
             return result
         }
         return selectedIsoCodes
     }
+
+    /// Edición = abrimos directamente en step 3 con datos rellenos. En ese caso el
+    /// botón izquierdo siempre es "Cancelar" (no hay step anterior real al que volver).
+    private var isEditing: Bool { initialSegment != nil }
 
     var body: some View {
         NavigationStack {
@@ -124,7 +151,10 @@ struct AddSegmentSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    if step > 1 {
+                    if isEditing {
+                        // En modo edición no hay flujo creación al que volver.
+                        Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                    } else if step > 1 {
                         Button("Atrás") { step -= 1 }.font(.palatino(.body))
                     } else {
                         Button("Cancelar") { dismiss() }.font(.palatino(.body))
@@ -183,84 +213,114 @@ struct AddSegmentSheet: View {
             destinationIso = nil
         }
 
-        // Layover countries: intermediate airports from BOTH outbound and return legs
-        layoverChoices = []
-        var seen: Set<String> = Set([departureFeature?.isoCode, destinationIso].compactMap { $0 })
+        // Layover countries: lista por dirección, SIN dedup entre ida y vuelta.
+        // El usuario debe poder marcar la misma escala en ambos sentidos si la
+        // ruta pasa por allí dos veces (ida y vuelta independientes en el UI).
+        // Dentro de UNA dirección sí se dedupea (no tiene sentido el mismo
+        // país dos veces en la misma escala secuencial).
+        outboundLayoverChoices = []
+        returnLayoverChoices = []
+
+        // País de origen y destino se excluyen — no son "escalas" por
+        // definición, ya cuentan como parte del propio tramo.
+        let excludedISOs: Set<String> = Set([departureFeature?.isoCode, destinationIso].compactMap { $0 })
 
         // Outbound intermediates (e.g. AMS)
         if segmentAirports.count > 2 {
+            var seenInDirection = excludedISOs
             for ap in segmentAirports.dropFirst().dropLast() {
                 guard let a2 = allAps.first(where: { $0.iata == ap.iata })?.country,
                       let f = featureByA2(a2),
-                      seen.insert(f.isoCode).inserted else { continue }
-                layoverChoices.append(LayoverChoice(id: f.isoCode, flag: f.flagEmoji, name: f.localizedName, checked: false))
+                      seenInDirection.insert(f.isoCode).inserted else { continue }
+                outboundLayoverChoices.append(
+                    LayoverChoice(id: "out_\(f.isoCode)", isoA3: f.isoCode,
+                                  flag: f.flagEmoji, name: f.localizedName)
+                )
             }
         }
 
-        // Return intermediates (e.g. CDG)
+        // Return intermediates (e.g. CDG) — se evalúa de forma independiente
+        // a la ida, así que un país que sea escala en ambas direcciones
+        // aparecerá como dos toggles (uno bajo IDA, otro bajo VUELTA).
         if segmentReturnAirports.count > 2 {
+            var seenInDirection = excludedISOs
             for ap in segmentReturnAirports.dropFirst().dropLast() {
                 guard let a2 = allAps.first(where: { $0.iata == ap.iata })?.country,
                       let f = featureByA2(a2),
-                      seen.insert(f.isoCode).inserted else { continue }
-                layoverChoices.append(LayoverChoice(id: f.isoCode, flag: f.flagEmoji, name: f.localizedName, checked: false))
+                      seenInDirection.insert(f.isoCode).inserted else { continue }
+                returnLayoverChoices.append(
+                    LayoverChoice(id: "ret_\(f.isoCode)", isoA3: f.isoCode,
+                                  flag: f.flagEmoji, name: f.localizedName)
+                )
             }
         }
 
-        // Restore checked state when editing
+        // Restore visited state when editing — el set es binario por país,
+        // así que toggles en ida/vuelta del mismo país aparecen en sintonía.
         if let visitedISOs = initialSegment?.visitedLayoverISOs {
-            let visitedSet = Set(visitedISOs)
-            for i in layoverChoices.indices {
-                layoverChoices[i].checked = visitedSet.contains(layoverChoices[i].id)
-            }
+            visitedLayoverISOs = Set(visitedISOs)
+        } else {
+            visitedLayoverISOs = []
         }
     }
 
+    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+
     private var stepTitle: String {
         switch step {
-        case 1: return "Tipo de transporte"
-        case 2: return "Países del tramo"
-        default: return "Fecha del tramo"
+        case 1: return "Nuevo tramo"
+        case 2: return "Países"
+        default: return "Fechas"
         }
     }
 
     // MARK: - Step 1: Transport
     @ViewBuilder
     private func transportStep() -> some View {
-        VStack(spacing: 20) {
-            Text("¿Con qué transporte?")
-                .font(.palatino(.subheadline))
-                .foregroundStyle(.secondary)
-                .padding(.top, 20)
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(PlannedDatePickerSheet.transports, id: \.emoji) { t in
-                    let isSelected = selectedTransport == t.emoji
-                    Button {
-                        selectedTransport = t.emoji
-                        if t.emoji == "✈️" {
-                            showRoutePicker = true
-                        } else {
-                            step = 2
-                        }
-                    } label: {
-                        VStack(spacing: 6) {
-                            Text(t.emoji).font(.title)
-                            Text(t.label)
-                                .font(.system(size: 10))
-                                .foregroundStyle(isSelected ? .white : .secondary)
-                        }
-                        .frame(maxWidth: .infinity).padding(.vertical, 14)
-                        .background(
-                            isSelected ? Color.blue : Color(.systemGray5),
-                            in: RoundedRectangle(cornerRadius: 12)
-                        )
-                    }
-                    .buttonStyle(.plain)
+        ScrollView {
+            VStack(spacing: 28) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Transporte")
+                        .font(.custom("Satoshi-Bold", size: 28))
+                    Text("¿Cómo vas a viajar?")
+                        .font(.palatino(.subheadline))
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, 28)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(PlannedDatePickerSheet.transports, id: \.emoji) { t in
+                        let isSelected = selectedTransport == t.emoji
+                        Button {
+                            selectedTransport = t.emoji
+                            if t.emoji == "✈️" { showRoutePicker = true } else { step = 2 }
+                        } label: {
+                            VStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(isSelected ? accent : Color(.systemGray5))
+                                        .frame(width: 56, height: 56)
+                                    Text(t.emoji).font(.system(size: 26))
+                                }
+                                Text(t.label)
+                                    .font(.custom("Satoshi-Medium", size: 13))
+                                    .foregroundStyle(isSelected ? accent : .primary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 22)
+                            .background(isSelected ? accent.opacity(0.08) : Color(.systemGray6),
+                                        in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16)
+                                .stroke(isSelected ? accent.opacity(0.35) : Color.clear, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 24)
+                Spacer(minLength: 32)
             }
-            .padding(.horizontal, 24)
-            Spacer()
         }
     }
 
@@ -268,46 +328,54 @@ struct AddSegmentSheet: View {
     @ViewBuilder
     private func countriesStep() -> some View {
         VStack(spacing: 0) {
-            let transport = selectedTransport ?? "🚌"
-            Text("Selecciona los países con \(transport)")
-                .font(.palatino(.subheadline))
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 12)
+            HStack(spacing: 8) {
+                Text(selectedTransport ?? "🌍").font(.system(size: 22))
+                Text("Países del tramo")
+                    .font(.custom("Satoshi-Bold", size: 22))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 14)
 
-            HStack {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.subheadline)
-                TextField("Buscar país", text: $searchQuery)
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14, weight: .medium))
+                TextField("Buscar país...", text: $searchQuery)
                     .font(.palatino(.body))
                 if !searchQuery.isEmpty {
                     Button { searchQuery = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Color(.systemGray3))
                     }
                 }
             }
-            .padding(10)
-            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
-            .padding(.horizontal, 16).padding(.bottom, 8)
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 10)
 
             if !selectedIsoCodes.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(Array(selectedIsoCodes), id: \.self) { iso in
+                    HStack(spacing: 8) {
+                        ForEach(Array(selectedIsoCodes.sorted()), id: \.self) { iso in
                             let f = features.first { $0.isoCode == iso }
                             HStack(spacing: 4) {
                                 Text(f?.flagEmoji ?? "🌐").font(.caption)
-                                Text(f?.localizedName ?? iso).font(.palatino(.caption))
+                                Text(f?.localizedName ?? iso).font(.custom("Satoshi-Medium", size: 12))
                                 Button { selectedIsoCodes.remove(iso) } label: {
-                                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(.secondary)
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
                                 }
                             }
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.12), in: Capsule())
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(accent.opacity(0.1), in: Capsule())
+                            .overlay(Capsule().stroke(accent.opacity(0.2), lineWidth: 1))
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 24)
                 }
-                .padding(.bottom, 6)
+                .padding(.bottom, 8)
             }
 
             List(filteredFeatures, id: \.isoCode) { feature in
@@ -318,14 +386,16 @@ struct AddSegmentSheet: View {
                         selectedIsoCodes.insert(feature.isoCode)
                     }
                 } label: {
-                    HStack {
-                        Text(feature.flagEmoji ?? "🌐").font(.title3)
+                    HStack(spacing: 12) {
+                        Text(feature.flagEmoji ?? "🌐").font(.system(size: 22)).frame(width: 32)
                         Text(feature.localizedName).font(.palatino(.body)).foregroundStyle(.primary)
                         Spacer()
                         if selectedIsoCodes.contains(feature.isoCode) {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.blue)
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(accent).font(.system(size: 20))
                         }
                     }
+                    .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
             }
@@ -339,94 +409,118 @@ struct AddSegmentSheet: View {
         let transport = selectedTransport ?? "🌍"
         ScrollView {
             VStack(spacing: 0) {
-                Text("Fecha del tramo \(transport)")
-                    .font(.palatino(.subheadline))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 12).padding(.bottom, 16)
+                HStack(spacing: 8) {
+                    Text(transport).font(.system(size: 22))
+                    Text("Fecha del tramo")
+                        .font(.custom("Satoshi-Bold", size: 22))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 20)
 
-                // Show route summary for airplane segments
                 if transport == "✈️" && !segmentAirports.isEmpty {
-                    VStack(alignment: .center, spacing: 3) {
-                        Text(segmentAirports.map { $0.iata }.joined(separator: " → "))
-                            .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue)
-                        if !segmentReturnAirports.isEmpty {
-                            Text(segmentReturnAirports.map { $0.iata }.joined(separator: " → "))
-                                .font(.palatino(.caption, weight: .bold)).foregroundStyle(.blue.opacity(0.65))
+                    // Card de ruta tappable: re-abre `RouteWizardSheet` para que el
+                    // usuario pueda cambiar la ruta o añadir/eliminar escalas en un
+                    // segmento ya creado. Al cerrar el wizard `deriveFlightCountries()`
+                    // recalcula los toggles IDA/VUELTA debajo.
+                    Button { showRoutePicker = true } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(segmentAirports.map { $0.iata }.joined(separator: " → "))
+                                        .font(.custom("Satoshi-Bold", size: 15)).foregroundStyle(accent)
+                                    if !segmentReturnAirports.isEmpty {
+                                        Text(segmentReturnAirports.map { $0.iata }.joined(separator: " → "))
+                                            .font(.custom("Satoshi-Regular", size: 13))
+                                            .foregroundStyle(accent.opacity(0.65))
+                                    }
+                                    if !segmentAirlines.isEmpty {
+                                        Text(segmentAirlines.map { $0.name }.joined(separator: ", "))
+                                            .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                VStack(spacing: 4) {
+                                    Text("✈️").font(.system(size: 28))
+                                    Text("Editar")
+                                        .font(.custom("Satoshi-Medium", size: 10))
+                                        .foregroundStyle(accent)
+                                }
+                            }
                         }
-                        if !segmentAirlines.isEmpty {
-                            Text(segmentAirlines.map { $0.name }.joined(separator: ", "))
-                                .font(.palatino(.caption)).foregroundStyle(.secondary).lineLimit(1)
-                        }
+                        .padding(16)
+                        .background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(accent.opacity(0.15), lineWidth: 1))
                     }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.horizontal, 16).padding(.bottom, 12)
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24).padding(.bottom, 12)
 
-                    // Destination auto-mark label
                     if let destIso = destinationIso,
                        let destFeature = features.first(where: { $0.isoCode == destIso }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.subheadline)
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green).font(.system(size: 14))
                             Text(destFeature.flagEmoji ?? "🌐")
                             Text("\(destFeature.localizedName) se añade como visitado")
                                 .font(.palatino(.caption)).foregroundStyle(.secondary)
+                            Spacer()
                         }
-                        .padding(.horizontal, 16).padding(.bottom, 8)
+                        .padding(.horizontal, 24).padding(.bottom, 10)
                     }
 
-                    // Layover visit prompts
-                    if !layoverChoices.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(isForFuture ? "¿Harás parada en...?" : "¿Visitaste alguna escala?")
-                                .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                                .padding(.horizontal, 16)
-                            ForEach(layoverChoices.indices, id: \.self) { idx in
-                                let choice = layoverChoices[idx]
-                                Button {
-                                    layoverChoices[idx].checked.toggle()
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: choice.checked ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(choice.checked ? .blue : .secondary)
-                                        Text(choice.flag ?? "🌐")
-                                        Text(choice.name)
-                                            .font(.palatino(.body)).foregroundStyle(.primary)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 16).padding(.vertical, 6)
-                                }
-                                .buttonStyle(.plain)
+                    if !outboundLayoverChoices.isEmpty || !returnLayoverChoices.isEmpty {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(isForFuture ? "¿HARÁS PARADA EN...?" : "¿VISITASTE ALGUNA ESCALA?")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary).tracking(0.8)
+
+                            // ESCALAS IDA — sólo si la ida tiene aeropuertos intermedios
+                            if !outboundLayoverChoices.isEmpty {
+                                layoverSection(title: "IDA", choices: outboundLayoverChoices)
+                            }
+                            // ESCALAS VUELTA — sólo si la vuelta tiene aeropuertos intermedios
+                            if !returnLayoverChoices.isEmpty {
+                                layoverSection(title: "VUELTA", choices: returnLayoverChoices)
                             }
                         }
-                        .padding(.bottom, 12)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
-                        .padding(.horizontal, 16).padding(.bottom, 12)
+                        .padding(16)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 24).padding(.bottom, 12)
                     }
                 }
 
                 if transport == "✈️" {
-                    FlightInfoSection(info: $segmentFlightInfo)
+                    FlightInfoSection(info: $segmentFlightInfo,
+                                      outboundRoute: segmentAirports.map { $0.iata },
+                                      returnRoute: segmentReturnAirports.map { $0.iata })
                 }
 
-                HStack(spacing: 0) {
+                HStack(spacing: 12) {
                     dateTab(isFrom: true,  label: "DESDE", value: Self.fmt.string(from: dateFrom))
                     dateTab(isFrom: false, label: "HASTA",
                             value: dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")
                 }
-                .padding(.horizontal, 16).padding(.bottom, 12)
+                .padding(.horizontal, 24).padding(.bottom, 10)
 
                 RangeDatePicker(
                     dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom,
                     minDate: isForFuture ? tomorrow : nil,
                     maxDate: isForFuture ? nil : today
                 )
-                .padding(.horizontal, 8)
-                .frame(height: 340)
-                .padding(.bottom, 16)
+                .padding(.horizontal, 8).frame(height: 340).padding(.bottom, 24)
 
                 Button {
                     let isos = finalIsoCodes
-                    let visitedISOs = layoverChoices.filter { $0.checked }.map { $0.id }
+                    // Sólo guardamos como visitadas las escalas que realmente
+                    // existen en alguna de las dos direcciones — evita ISOs
+                    // huérfanas si el usuario cambia la ruta tras marcar.
+                    let realLayoverISOs: Set<String> = Set(
+                        outboundLayoverChoices.map(\.isoA3)
+                        + returnLayoverChoices.map(\.isoA3)
+                    )
+                    let visitedISOs = Array(visitedLayoverISOs.intersection(realLayoverISOs))
+                    // Edición: preserva el id original del segmento para reemplazo por id en el caller.
                     var segment = TripSegment(
+                        id: initialSegment?.id ?? UUID(),
                         transport: selectedTransport ?? "🌍",
                         isoCodes: Array(isos),
                         dateFrom: dateFrom,
@@ -441,13 +535,49 @@ struct AddSegmentSheet: View {
                     onAdd(segment)
                     dismiss()
                 } label: {
-                    Text("Añadir transporte")
-                        .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                    Text(isEditing ? "Guardar cambios" : "Añadir tramo")
+                        .font(.custom("Satoshi-Bold", size: 16))
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(accent, in: RoundedRectangle(cornerRadius: 14))
                         .foregroundStyle(.white)
+                        .shadow(color: accent.opacity(0.3), radius: 12, y: 4)
                 }
-                .padding(.horizontal, 24).padding(.bottom, 24)
+                .padding(.horizontal, 24).padding(.bottom, 36)
+            }
+        }
+    }
+
+    /// Sección de toggles de escalas (IDA o VUELTA). Cada fila refleja el
+    /// estado de `visitedLayoverISOs` (Set binario por país); pulsar el toggle
+    /// añade/quita el ISO del set, sincronizando ambas secciones automáticamente
+    /// si el mismo país aparece en ida y vuelta.
+    @ViewBuilder
+    private func layoverSection(title: String, choices: [LayoverChoice]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(accent.opacity(0.85))
+                .tracking(0.8)
+            ForEach(choices) { choice in
+                let checked = visitedLayoverISOs.contains(choice.isoA3)
+                Button {
+                    if checked { visitedLayoverISOs.remove(choice.isoA3) }
+                    else       { visitedLayoverISOs.insert(choice.isoA3) }
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle().fill(checked ? accent : Color(.systemGray5))
+                                .frame(width: 24, height: 24)
+                            if checked {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                            }
+                        }
+                        Text(choice.flag ?? "🌐")
+                        Text(choice.name).font(.palatino(.body)).foregroundStyle(.primary)
+                        Spacer()
+                    }
+                }.buttonStyle(.plain)
             }
         }
     }
@@ -455,17 +585,15 @@ struct AddSegmentSheet: View {
     @ViewBuilder
     private func dateTab(isFrom: Bool, label: String, value: String) -> some View {
         let active = pickingFrom == isFrom
-        let color: Color = active ? .blue : (isFrom ? .primary : (dateTo == nil ? .secondary : .primary))
+        let color: Color = active ? accent : (isFrom ? .primary : (dateTo == nil ? .secondary : .primary))
         Button { pickingFrom = isFrom } label: {
-            VStack(spacing: 2) {
-                Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                Text(value).font(.palatino(.subheadline, weight: .bold)).foregroundStyle(color)
+            VStack(spacing: 4) {
+                Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).tracking(0.8)
+                Text(value).font(.custom("Satoshi-Bold", size: 15)).foregroundStyle(color)
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 8)
-            .background(active ? Color.blue.opacity(0.08) : Color.clear)
-            .overlay(alignment: .bottom) {
-                if active { Rectangle().fill(Color.blue).frame(height: 2) }
-            }
+            .frame(maxWidth: .infinity).padding(.vertical, 12)
+            .background(active ? accent.opacity(0.08) : Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(active ? accent.opacity(0.3) : Color.clear, lineWidth: 1.5))
         }.buttonStyle(.plain)
     }
 }

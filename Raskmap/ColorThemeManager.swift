@@ -14,10 +14,14 @@ import Combine
 class ColorThemeManager: ObservableObject {
     static let shared = ColorThemeManager()
     
-    static let defaultVisited: Color     = Color(red: 0xEE/255, green: 0x6E/255, blue: 0x7D/255)
-    static let defaultWantToVisit: Color = Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255)
-    static let defaultLived: Color       = Color(red: 0x71/255, green: 0xEB/255, blue: 0x71/255)
-    static let defaultBucketList: Color  = Color(red: 1.0, green: 0.6, blue: 0.2)
+    // Paleta por defecto (sRGB): tonos con saturación media, legibles sobre tiles de Apple Maps.
+    // Visitados → #DC6647 (terracota vivo)
+    // Próximos (wantToVisit) → #00CB7C (verde esmeralda)
+    // Quiero (bucketList) → #E5B257 (ámbar dorado)
+    static let defaultVisited: Color     = Color(.sRGB, red: 0xDC/255.0, green: 0x66/255.0, blue: 0x47/255.0, opacity: 1.0)
+    static let defaultWantToVisit: Color = Color(.sRGB, red: 0x00/255.0, green: 0xCB/255.0, blue: 0x7C/255.0, opacity: 1.0)
+    static let defaultLived: Color       = Color(.sRGB, red: 0x5D/255.0, green: 0xAD/255.0, blue: 0x6E/255.0, opacity: 1.0)
+    static let defaultBucketList: Color  = Color(.sRGB, red: 0xE5/255.0, green: 0xB2/255.0, blue: 0x57/255.0, opacity: 1.0)
 
     @Published var visitedColor: Color {
         didSet { save(visitedColor, key: "color_visited") }
