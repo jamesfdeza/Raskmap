@@ -10106,10 +10106,23 @@ struct QuadrantDetailSheet: View {
                     }
                 }
             }
-            .navigationTitle("\(quadrant.title) · \(visited.count)/\(activeCandidates.count)")
+            // Título: `navigationTitle("...")` solo acepta String → cualquier
+            // bandera emoji embebida saldría como emoji nativo del sistema, NO
+            // como Twemoji. Para que el twemoji se renderice también en el
+            // header del sheet, usamos `.principal` con `FlagAwareText`.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    FlagAwareText(
+                        text: "\(quadrant.title) · \(visited.count)/\(activeCandidates.count)",
+                        font: .custom("Satoshi-Bold", size: 17),
+                        size: 16
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }

@@ -87,6 +87,17 @@ FlagAwareText(text: "🇪🇸 España",
   - Grid de "MIS BANDERAS" outro slim (~1424).
   - Grid de "MIS BANDERAS" outro big (~1679).
 
+**Título de `QuadrantDetailSheet` también vía Twemoji:**
+- `navigationTitle("...")` solo acepta `String` → cualquier flag emoji
+  embebido salía como emoji nativo del sistema en el header del sheet
+  full-screen, aunque la card del cuadrante sí lo mostrara como Twemoji.
+- **Fix (~línea 10109):** vaciar `.navigationTitle("")` y poner el título
+  en `.toolbar { ToolbarItem(placement: .principal) { FlagAwareText(...) } }`.
+  El `principal` slot acepta cualquier View, así que `FlagAwareText`
+  parsea las banderas y las renderiza vía `TwemojiFlag`. Resto del título
+  (texto + contador) sigue como `Text` normal. `.lineLimit(1) +
+  .minimumScaleFactor(0.75)` para que escale bien en pantallas estrechas.
+
 **Bandera de la UE (🇪🇺) añadida al set Twemoji:**
 - Síntoma: en el quadrante por defecto "Unión Europea 🇪🇺" (`ContentView.swift`
   línea 9244) la bandera salía como 🌐 (fallback) o como emoji nativo del
