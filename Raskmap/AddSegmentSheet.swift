@@ -494,10 +494,14 @@ struct AddSegmentSheet: View {
                                       returnRoute: segmentReturnAirports.map { $0.iata })
                 }
 
-                HStack(spacing: 12) {
+                let isOneWayFlight = transport == "✈️" && !segmentAirports.isEmpty && segmentReturnAirports.isEmpty
+
+                HStack(spacing: 0) {
                     dateTab(isFrom: true,  label: "DESDE", value: Self.fmt.string(from: dateFrom))
-                    dateTab(isFrom: false, label: "HASTA",
-                            value: dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")
+                    if !isOneWayFlight {
+                        dateTab(isFrom: false, label: "HASTA",
+                                value: dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")
+                    }
                 }
                 .padding(.horizontal, 24).padding(.bottom, 10)
 
@@ -506,7 +510,21 @@ struct AddSegmentSheet: View {
                     minDate: isForFuture ? tomorrow : nil,
                     maxDate: isForFuture ? nil : today
                 )
-                .padding(.horizontal, 8).frame(height: 340).padding(.bottom, 24)
+                .padding(.horizontal, 8)
+                .frame(height: 340)
+                .padding(.bottom, 16)
+                .onChange(of: isOneWayFlight) { _, newValue in
+                    if newValue {
+                        dateTo = nil
+                        pickingFrom = true
+                    }
+                }
+                .onAppear {
+                    if isOneWayFlight {
+                        dateTo = nil
+                        pickingFrom = true
+                    }
+                }
 
                 Button {
                     let isos = finalIsoCodes
