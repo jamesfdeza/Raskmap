@@ -6449,14 +6449,40 @@ struct AddTripSheet: View {
         let airplaneSeg = tripSegments.first(where: { $0.transport == "✈️" && ($0.airports?.isEmpty == false) })
         let finalAirports: [TripAirport]
         let finalAirlines: [TripAirline]
+        // Orden cronológico: iteramos segmentos por dateFrom y dentro de cada
+        // uno respetamos el orden ida → vuelta. El primer aeropuerto visto
+        // gana — así `trip.tripAirports` queda en el orden real del viaje
+        // (MAD → KWI → DXB) y NO en orden alfabético del Dictionary o de
+        // `confirmAirports.sorted`. Es lo que rendea `legacyAirportRoute`
+        // y otros paths que leen `trip.tripAirports`.
+        var apOrder: [String] = []
+        var seenIatas: Set<String> = []
+        for seg in tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom }) where seg.transport == "✈️" {
+            for ap in seg.airports ?? [] where seenIatas.insert(ap.iata).inserted { apOrder.append(ap.iata) }
+            for ap in seg.returnAirports ?? [] where seenIatas.insert(ap.iata).inserted { apOrder.append(ap.iata) }
+        }
         if !confirmAirports.isEmpty || !confirmAirlines.isEmpty {
-            finalAirports = confirmAirports.map { TripAirport(iata: $0.iata, count: $0.count) }
+            // Counts vienen del confirm-dialog; orden cronológico de apOrder.
+            let countsByIata = Dictionary(confirmAirports.map { ($0.iata, $0.count) }, uniquingKeysWith: +)
+            var ordered: [TripAirport] = apOrder.compactMap { iata in
+                guard let count = countsByIata[iata], count > 0 else { return nil }
+                return TripAirport(iata: iata, count: count)
+            }
+            // Defensiva: incluye iatas que el user añadiera en el dialog.
+            for entry in confirmAirports where !seenIatas.contains(entry.iata) && entry.count > 0 {
+                ordered.append(TripAirport(iata: entry.iata, count: entry.count))
+            }
+            finalAirports = ordered
             finalAirlines = confirmAirlines.map { TripAirline(name: $0.name, count: $0.count) }
         } else {
+            // No hubo confirm-dialog → counts naturales del segmento, mismo orden.
             var apC: [String: Int] = [:]
             for ap in airplaneSeg?.airports ?? [] { apC[ap.iata, default: 0] += 1 }
             for ap in airplaneSeg?.returnAirports ?? [] { apC[ap.iata, default: 0] += 1 }
-            finalAirports = apC.map { TripAirport(iata: $0.key, count: $0.value) }
+            finalAirports = apOrder.compactMap { iata in
+                guard let count = apC[iata], count > 0 else { return nil }
+                return TripAirport(iata: iata, count: count)
+            }
             finalAirlines = airplaneSeg?.airlines ?? []
         }
         let trip = Trip(isoCode: isoCode, title: trimmed.isEmpty ? nil : trimmed,
@@ -8801,8 +8827,36 @@ struct EditTripSheet: View {
             trip.dateTo = calculatedDateTo
             trip.transport = tripSegments.isEmpty ? selectedTransport : (tripSegments.first?.transport ?? selectedTransport ?? "🌍")
             let airplaneSeg = tripSegments.first(where: { $0.transport == "✈️" && ($0.airports?.isEmpty == false) })
+            // Orden cronológico de aeropuertos. Para segment-based: iteramos
+            // segmentos por dateFrom, y dentro de cada segmento ida → vuelta.
+            // Para legacy: usamos `localAirports` (lo que tipeó el user en el
+            // wizard, ya cronológico). El primer iata visto gana — esto evita
+            // que el orden alfabético del confirm-dialog (ordenado para la UI)
+            // o el orden hash del Dictionary contaminen `trip.tripAirports`,
+            // que es lo que rendea `legacyAirportRoute` y otros consumidores.
+            var apOrder: [String] = []
+            var seenIatas: Set<String> = []
+            if tripSegments.isEmpty {
+                for ap in localAirports where seenIatas.insert(ap.iata).inserted { apOrder.append(ap.iata) }
+                for ap in localReturnAirports where seenIatas.insert(ap.iata).inserted { apOrder.append(ap.iata) }
+            } else {
+                for seg in tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom }) where seg.transport == "✈️" {
+                    for ap in seg.airports ?? [] where seenIatas.insert(ap.iata).inserted { apOrder.append(ap.iata) }
+                    for ap in seg.returnAirports ?? [] where seenIatas.insert(ap.iata).inserted { apOrder.append(ap.iata) }
+                }
+            }
             if !confirmAirports.isEmpty || !confirmAirlines.isEmpty {
-                trip.tripAirports = confirmAirports.map { TripAirport(iata: $0.iata, count: $0.count) }
+                let countsByIata = Dictionary(confirmAirports.map { ($0.iata, $0.count) }, uniquingKeysWith: +)
+                var ordered: [TripAirport] = apOrder.compactMap { iata in
+                    guard let count = countsByIata[iata], count > 0 else { return nil }
+                    return TripAirport(iata: iata, count: count)
+                }
+                // Defensivo: si el user añadió un iata en el dialog que no
+                // estaba en segments/localAirports, lo añadimos al final.
+                for entry in confirmAirports where !seenIatas.contains(entry.iata) && entry.count > 0 {
+                    ordered.append(TripAirport(iata: entry.iata, count: entry.count))
+                }
+                trip.tripAirports = ordered
                 trip.tripAirlines = confirmAirlines.map { TripAirline(name: $0.name, count: $0.count) }
             } else if tripSegments.isEmpty {
                 trip.tripAirports = localAirports
@@ -10441,29 +10495,78 @@ struct PersonalListSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var titleDraft: String = ""
     @State private var contentDraft: String = ""
+    @State private var showPreview: Bool = false
     @FocusState private var contentFocused: Bool
+
+    /// Líneas no vacías del borrador, una por elemento de la lista. Vista
+    /// previa con Twemoji se rendea por línea con `FlagAwareText`.
+    private var previewLines: [String] {
+        contentDraft.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Título — el header del row "Lista personal" en el perfil
+                // ya rendea twemoji vía `FlagAwareText`, así que aquí basta
+                // un TextField normal para edición.
                 TextField("Título de la lista", text: $titleDraft)
                     .font(.palatino(.title3, weight: .bold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
                 Divider()
-                TextEditor(text: $contentDraft)
-                    .font(.palatino(.body))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .focused($contentFocused)
-                    .scrollContentBackground(.hidden)
+                if showPreview {
+                    // Vista previa de SOLO LECTURA con Twemoji. SwiftUI's
+                    // TextEditor usa el font del sistema y no acepta inline
+                    // images, así que la única forma de ver banderas como
+                    // Twemoji es alternando a este modo. Cada línea no
+                    // vacía se rendea con `FlagAwareText` (parsea regional-
+                    // indicator pairs y los swappea por TwemojiFlag).
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if previewLines.isEmpty {
+                                Text("Lista vacía. Vuelve a Editar y añade líneas.")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
+                                    FlagAwareText(text: line,
+                                                  font: .palatino(.body),
+                                                  size: 18)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    TextEditor(text: $contentDraft)
+                        .font(.palatino(.body))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .focused($contentFocused)
+                        .scrollContentBackground(.hidden)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+                ToolbarItem(placement: .principal) {
+                    // Toggle Editar / Vista previa (Twemoji).
+                    Picker("", selection: $showPreview) {
+                        Text("Editar").tag(false)
+                        Text("Vista previa").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 220)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Guardar") {
