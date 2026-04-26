@@ -6422,17 +6422,21 @@ struct AddTripSheet: View {
         var alOrder: [String] = []
         for seg in apSegs {
             let vlISOs = Set(seg.visitedLayoverISOs ?? [])
-            let outInter = Set((seg.airports ?? []).dropFirst().dropLast().map { $0.iata })
-            let retInter = Set((seg.returnAirports ?? []).dropFirst().dropLast().map { $0.iata })
-            let sameLayIATAs = outInter.intersection(retInter)
-            for ap in (seg.airports ?? []) { apC[ap.iata, default: 0] += ap.count }
-            for ap in (seg.returnAirports ?? []) {
-                if seg.visitedLayoverISOs != nil && sameLayIATAs.contains(ap.iata) {
-                    let a2 = RoutePickerSheet.allAirports.first { $0.iata == ap.iata }?.country ?? ""
-                    let iso = features.first { $0.isoA2 == a2 }?.isoCode ?? ""
-                    guard vlISOs.contains(iso) else { continue }
-                }
-                apC[ap.iata, default: 0] += ap.count
+            // Toques naturales por leg: cada aparición del IATA cuenta una vez.
+            for ap in (seg.airports ?? [])       { apC[ap.iata, default: 0] += ap.count }
+            for ap in (seg.returnAirports ?? []) { apC[ap.iata, default: 0] += ap.count }
+            // Bonus +1 por cada IATA de escala cuyo país esté marcado como
+            // visitado. Un solo bonus por IATA (no doblamos si aparece en ida
+            // y vuelta — ya tiene 2 toques + 1 bonus = 3, que es lo que pidió
+            // el usuario para MAD-SAW-KWI / KWI-SAW-MAD con SAW visitado).
+            let outIntermediate = (seg.airports ?? []).dropFirst().dropLast().map { $0.iata }
+            let retIntermediate = (seg.returnAirports ?? []).dropFirst().dropLast().map { $0.iata }
+            var bonusedIATAs: Set<String> = []
+            for iata in outIntermediate + retIntermediate where bonusedIATAs.insert(iata).inserted {
+                let a2 = RoutePickerSheet.allAirports.first { $0.iata == iata }?.country ?? ""
+                guard let iso = features.first(where: { $0.isoA2 == a2 })?.isoCode,
+                      vlISOs.contains(iso) else { continue }
+                apC[iata, default: 0] += 1
             }
             for al in (seg.airlines ?? []) {
                 if alC[al.name] == nil { alOrder.append(al.name) }
@@ -8794,17 +8798,19 @@ struct EditTripSheet: View {
         var alOrder: [String] = []
         for seg in apSegs {
             let vlISOs2 = Set(seg.visitedLayoverISOs ?? [])
-            let outInter2 = Set((seg.airports ?? []).dropFirst().dropLast().map { $0.iata })
-            let retInter2 = Set((seg.returnAirports ?? []).dropFirst().dropLast().map { $0.iata })
-            let sameLayIATAs2 = outInter2.intersection(retInter2)
-            for ap in (seg.airports ?? []) { apC[ap.iata, default: 0] += ap.count }
-            for ap in (seg.returnAirports ?? []) {
-                if seg.visitedLayoverISOs != nil && sameLayIATAs2.contains(ap.iata) {
-                    let a2 = RoutePickerSheet.allAirports.first { $0.iata == ap.iata }?.country ?? ""
-                    let iso = features.first { $0.isoA2 == a2 }?.isoCode ?? ""
-                    guard vlISOs2.contains(iso) else { continue }
-                }
-                apC[ap.iata, default: 0] += ap.count
+            // Toques naturales (idéntico a `prepareConfirmation` de AddTrip).
+            for ap in (seg.airports ?? [])       { apC[ap.iata, default: 0] += ap.count }
+            for ap in (seg.returnAirports ?? []) { apC[ap.iata, default: 0] += ap.count }
+            // Bonus +1 por cada IATA de escala cuyo país esté visitado (un
+            // solo bonus por IATA aunque aparezca en ida y vuelta).
+            let outIntermediate2 = (seg.airports ?? []).dropFirst().dropLast().map { $0.iata }
+            let retIntermediate2 = (seg.returnAirports ?? []).dropFirst().dropLast().map { $0.iata }
+            var bonusedIATAs: Set<String> = []
+            for iata in outIntermediate2 + retIntermediate2 where bonusedIATAs.insert(iata).inserted {
+                let a2 = RoutePickerSheet.allAirports.first { $0.iata == iata }?.country ?? ""
+                guard let iso = features.first(where: { $0.isoA2 == a2 })?.isoCode,
+                      vlISOs2.contains(iso) else { continue }
+                apC[iata, default: 0] += 1
             }
             for al in (seg.airlines ?? []) {
                 if alC[al.name] == nil { alOrder.append(al.name) }
@@ -10499,78 +10505,29 @@ struct PersonalListSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var titleDraft: String = ""
     @State private var contentDraft: String = ""
-    @State private var showPreview: Bool = false
     @FocusState private var contentFocused: Bool
-
-    /// Líneas no vacías del borrador, una por elemento de la lista. Vista
-    /// previa con Twemoji se rendea por línea con `FlagAwareText`.
-    private var previewLines: [String] {
-        contentDraft.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Título — el header del row "Lista personal" en el perfil
-                // ya rendea twemoji vía `FlagAwareText`, así que aquí basta
-                // un TextField normal para edición.
                 TextField("Título de la lista", text: $titleDraft)
                     .font(.palatino(.title3, weight: .bold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 14)
                 Divider()
-                if showPreview {
-                    // Vista previa de SOLO LECTURA con Twemoji. SwiftUI's
-                    // TextEditor usa el font del sistema y no acepta inline
-                    // images, así que la única forma de ver banderas como
-                    // Twemoji es alternando a este modo. Cada línea no
-                    // vacía se rendea con `FlagAwareText` (parsea regional-
-                    // indicator pairs y los swappea por TwemojiFlag).
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            if previewLines.isEmpty {
-                                Text("Lista vacía. Vuelve a Editar y añade líneas.")
-                                    .font(.palatino(.body))
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(Array(previewLines.enumerated()), id: \.offset) { _, line in
-                                    FlagAwareText(text: line,
-                                                  font: .palatino(.body),
-                                                  size: 18)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 14)
-                    }
+                TextEditor(text: $contentDraft)
+                    .font(.palatino(.body))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .focused($contentFocused)
+                    .scrollContentBackground(.hidden)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    TextEditor(text: $contentDraft)
-                        .font(.palatino(.body))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .focused($contentFocused)
-                        .scrollContentBackground(.hidden)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
-                }
-                ToolbarItem(placement: .principal) {
-                    // Toggle Editar / Vista previa (Twemoji).
-                    Picker("", selection: $showPreview) {
-                        Text("Editar").tag(false)
-                        Text("Vista previa").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 220)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Guardar") {
