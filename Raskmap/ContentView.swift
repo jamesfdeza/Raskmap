@@ -8565,16 +8565,19 @@ struct EditTripSheet: View {
         let f = DateFormatter(); f.dateStyle = .short; f.locale = Locale(identifier: "es_ES"); return f
     }()
 
-    /// Sección visual de toggles para una dirección (IDA o VUELTA) en el flujo
-    /// legacy. Replica la estética de `AddSegmentSheet.layoverSection` pero usa
-    /// `legacyVisitedLayoverISOs` como single source of truth.
+    /// Sección visual de toggles de escalas en el flujo legacy. Replica la
+    /// estética de `AddSegmentSheet.layoverSection` pero usa
+    /// `legacyVisitedLayoverISOs` como single source of truth. Title opcional
+    /// (ya no separamos por dirección — un solo toggle por país).
     @ViewBuilder
-    private func legacyLayoverSection(title: String, choices: [LayoverChoice]) -> some View {
+    private func legacyLayoverSection(title: String?, choices: [LayoverChoice]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(accent.opacity(0.85))
-                .tracking(0.8)
+            if let title, !title.isEmpty {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(accent.opacity(0.85))
+                    .tracking(0.8)
+            }
             ForEach(choices) { choice in
                 let checked = legacyVisitedLayoverISOs.contains(choice.isoA3)
                 Button {
@@ -8619,38 +8622,31 @@ struct EditTripSheet: View {
             [departureFeature?.isoCode, destinationFeature?.isoCode].compactMap { $0 }
         )
 
-        var newOutbound: [LayoverChoice] = []
-        var newReturn: [LayoverChoice] = []
-
-        if outRoute.count > 2 {
-            var seen = excludedISOs
-            for iata in outRoute.dropFirst().dropLast() {
+        // Lista única deduplicada — un país aparece una sola vez aunque sea
+        // escala en ida y vuelta (visitar es por país, no por dirección).
+        // Preserva orden de primera aparición (ida primero, luego vuelta).
+        var seen = excludedISOs
+        var combined: [LayoverChoice] = []
+        func addRoute(_ route: [String]) {
+            guard route.count > 2 else { return }
+            for iata in route.dropFirst().dropLast() {
                 guard let a2 = allAps.first(where: { $0.iata == iata })?.country,
                       let f = featureByA2(a2),
                       seen.insert(f.isoCode).inserted else { continue }
-                newOutbound.append(LayoverChoice(
-                    id: "out_\(f.isoCode)", isoA3: f.isoCode,
+                combined.append(LayoverChoice(
+                    id: "lay_\(f.isoCode)", isoA3: f.isoCode,
                     flag: f.flagEmoji, name: f.localizedName))
             }
         }
-        if retRoute.count > 2 {
-            var seen = excludedISOs
-            for iata in retRoute.dropFirst().dropLast() {
-                guard let a2 = allAps.first(where: { $0.iata == iata })?.country,
-                      let f = featureByA2(a2),
-                      seen.insert(f.isoCode).inserted else { continue }
-                newReturn.append(LayoverChoice(
-                    id: "ret_\(f.isoCode)", isoA3: f.isoCode,
-                    flag: f.flagEmoji, name: f.localizedName))
-            }
-        }
+        addRoute(outRoute)
+        addRoute(retRoute)
 
-        legacyOutboundLayovers = newOutbound
-        legacyReturnLayovers = newReturn
+        legacyOutboundLayovers = combined
+        legacyReturnLayovers = []
 
         // Filtra el set persistido contra las escalas que realmente existen
         // en la ruta actual — evita ISOs huérfanas si el usuario reroutea.
-        let realISOs = Set(newOutbound.map(\.isoA3) + newReturn.map(\.isoA3))
+        let realISOs = Set(combined.map(\.isoA3))
         legacyVisitedLayoverISOs = legacyVisitedLayoverISOs.intersection(realISOs)
     }
 
@@ -8730,7 +8726,7 @@ struct EditTripSheet: View {
                 count: 1))
             // Escalas marcadas como visitadas en el flujo legacy. Se filtran
             // contra las escalas reales para excluir ISOs huérfanas.
-            let realISOs = Set(legacyOutboundLayovers.map(\.isoA3) + legacyReturnLayovers.map(\.isoA3))
+            let realISOs = Set(legacyOutboundLayovers.map(\.isoA3))
             for iso in legacyVisitedLayoverISOs.intersection(realISOs) where iso != trip.isoCode {
                 let feat = features.first { $0.isoCode == iso }
                 visits.append(VisitEntry(
@@ -8818,24 +8814,61 @@ struct EditTripSheet: View {
             }
             if !tripSegments.isEmpty { trip.hasLayover = airplaneSeg?.hasLayover ?? trip.hasLayover }
             trip.tripSegments = tripSegments
+            // Persistir escalas visitadas a nivel trip y limpiar el legacy
+            // cuando el trip se convierte en segment-based.
+            let legacyVisitedLayovers: [String]
             if tripSegments.isEmpty {
                 trip.flightDetails = localFlightInfo.hasAnyData ? localFlightInfo : nil
-                // Persistir escalas visitadas a nivel trip — solo aplica al
-                // path legacy non-segment. Filtramos contra las escalas que
-                // realmente existen en la ruta actual para no guardar ISOs
-                // huérfanas si el usuario rerouted.
-                let realISOs = Set(legacyOutboundLayovers.map(\.isoA3) + legacyReturnLayovers.map(\.isoA3))
-                let visited = Array(legacyVisitedLayoverISOs.intersection(realISOs))
-                trip.visitedLayoverISOs = visited.isEmpty ? nil : visited
+                // Filtramos contra las escalas que realmente existen en la
+                // ruta actual para no guardar ISOs huérfanas si el usuario
+                // re-routea.
+                let realISOs = Set(legacyOutboundLayovers.map(\.isoA3))
+                legacyVisitedLayovers = Array(legacyVisitedLayoverISOs.intersection(realISOs))
+                trip.visitedLayoverISOs = legacyVisitedLayovers.isEmpty ? nil : legacyVisitedLayovers
             } else {
-                // Trip pasa a segment-based — limpia el campo legacy para
-                // evitar doble-conteo en `daysPerCountry`.
+                // Segment-based → escalas viven en seg.visitedLayoverISOs.
                 trip.visitedLayoverISOs = nil
+                legacyVisitedLayovers = []
             }
-            // Delete old children
+            // Delete old children — antes de re-crear arriba/abajo.
             if let groupID = trip.segmentGroupID {
                 let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.segmentGroupID == groupID })
                 for t in modelContext.fetchOrWarn(desc) where t.isSegmentChild { modelContext.delete(t) }
+            }
+            // Children para escalas visitadas en el path legacy non-segment.
+            // Cada escala = 1 child trip de 1 día → aparece en lista del país,
+            // marca `Country.status = .visited` (si el viaje es pasado) y se
+            // refleja en el contador de días vía el stake de prio 50 que hace
+            // `daysPerCountry` para `t.visitedLayoverISOs`.
+            if tripSegments.isEmpty && !legacyVisitedLayovers.isEmpty {
+                let groupID = trip.segmentGroupID ?? UUID().uuidString
+                trip.segmentGroupID = groupID
+                let today = Calendar.current.startOfDay(for: Date())
+                let dayStart = Calendar.current.startOfDay(for: trip.dateFrom)
+                let trimmedTitleStr = trip.title?.trimmingCharacters(in: .whitespaces) ?? ""
+                for iso in legacyVisitedLayovers where iso != trip.isoCode {
+                    let child = Trip(
+                        isoCode: iso,
+                        title: trimmedTitleStr.isEmpty ? nil : trimmedTitleStr,
+                        dateFrom: trip.dateFrom,
+                        dateTo: trip.dateFrom,   // 1 día (la escala dura el día del vuelo)
+                        transport: "✈️",
+                        tripAirports: [], tripAirlines: []
+                    )
+                    child.segmentGroupID = groupID
+                    child.isSegmentChild = true
+                    modelContext.insert(child)
+                    if dayStart <= today {
+                        let isoCopy = iso
+                        let dd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == isoCopy })
+                        if let country = modelContext.fetchFirstOrWarn(dd), country.status != .visited {
+                            country.status = .visited
+                            country.plannedDate = nil
+                            country.plannedDateTo = nil
+                            country.transport = nil
+                        }
+                    }
+                }
             }
             if !tripSegments.isEmpty {
                 let groupID = trip.segmentGroupID ?? UUID().uuidString
@@ -9061,17 +9094,14 @@ struct EditTripSheet: View {
                     // sin segmentos. Solo aparece cuando hay aeropuertos
                     // intermedios en alguna dirección. Misma UX que en
                     // AddSegmentSheet (IDA / VUELTA con set binario por país).
-                    if !legacyOutboundLayovers.isEmpty || !legacyReturnLayovers.isEmpty {
+                    // UN solo toggle por país (binario). `legacyOutboundLayovers`
+                    // viene ya deduplicada de `deriveLegacyFlightCountries()`.
+                    if !legacyOutboundLayovers.isEmpty {
                         VStack(alignment: .leading, spacing: 14) {
                             Text(isForFuture ? "¿HARÁS PARADA EN...?" : "¿VISITASTE ALGUNA ESCALA?")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary).tracking(0.8)
-                            if !legacyOutboundLayovers.isEmpty {
-                                legacyLayoverSection(title: "IDA", choices: legacyOutboundLayovers)
-                            }
-                            if !legacyReturnLayovers.isEmpty {
-                                legacyLayoverSection(title: "VUELTA", choices: legacyReturnLayovers)
-                            }
+                            legacyLayoverSection(title: nil, choices: legacyOutboundLayovers)
                         }
                         .padding(16)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))

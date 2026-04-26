@@ -205,58 +205,55 @@ struct AddSegmentSheet: View {
 
         let departureFeature = featureByA2(departureA2)
         let destinationFeature = featureByA2(destinationA2)
+        let departureISO = departureFeature?.isoCode
+        let destinationISO = destinationFeature?.isoCode
 
         // Auto-include destination unless it's a return to the same country as departure
-        if let destF = destinationFeature, destF.isoCode != departureFeature?.isoCode {
-            destinationIso = destF.isoCode  // A3 code
+        if let dISO = destinationISO, dISO != departureISO {
+            destinationIso = dISO   // A3 code
         } else {
             destinationIso = nil
         }
 
-        // Layover countries: lista por dirección, SIN dedup entre ida y vuelta.
-        // El usuario debe poder marcar la misma escala en ambos sentidos si la
-        // ruta pasa por allí dos veces (ida y vuelta independientes en el UI).
-        // Dentro de UNA dirección sí se dedupea (no tiene sentido el mismo
-        // país dos veces en la misma escala secuencial).
+        // Escalas: UN SOLO toggle por país (binario). Si el mismo país aparece
+        // como escala en ida y vuelta, se cuenta una sola vez — visitar es por
+        // país, no por dirección. Esto evita la confusión de "dos toggles para
+        // el mismo país" que reportaba el usuario.
         outboundLayoverChoices = []
         returnLayoverChoices = []
 
         // País de origen y destino se excluyen — no son "escalas" por
-        // definición, ya cuentan como parte del propio tramo.
-        let excludedISOs: Set<String> = Set([departureFeature?.isoCode, destinationIso].compactMap { $0 })
+        // definición, ya cuentan como parte del propio tramo. Usamos los
+        // valores LOCALES (no `destinationIso` @State) para evitar reads
+        // stale dentro del mismo render pass.
+        let excludedISOs: Set<String> = Set([departureISO, destinationISO].compactMap { $0 })
 
-        // Outbound intermediates (e.g. AMS)
-        if segmentAirports.count > 2 {
-            var seenInDirection = excludedISOs
-            for ap in segmentAirports.dropFirst().dropLast() {
+        // Recolecta intermedios de IDA + VUELTA en un solo set deduplicado,
+        // preservando orden de primera aparición (ida → vuelta).
+        var seen = excludedISOs
+        var combined: [LayoverChoice] = []
+
+        func addIntermediates(_ aps: [TripAirport]) {
+            guard aps.count > 2 else { return }
+            for ap in aps.dropFirst().dropLast() {
                 guard let a2 = allAps.first(where: { $0.iata == ap.iata })?.country,
                       let f = featureByA2(a2),
-                      seenInDirection.insert(f.isoCode).inserted else { continue }
-                outboundLayoverChoices.append(
-                    LayoverChoice(id: "out_\(f.isoCode)", isoA3: f.isoCode,
+                      seen.insert(f.isoCode).inserted else { continue }
+                combined.append(
+                    LayoverChoice(id: "lay_\(f.isoCode)", isoA3: f.isoCode,
                                   flag: f.flagEmoji, name: f.localizedName)
                 )
             }
         }
+        addIntermediates(segmentAirports)
+        addIntermediates(segmentReturnAirports)
 
-        // Return intermediates (e.g. CDG) — se evalúa de forma independiente
-        // a la ida, así que un país que sea escala en ambas direcciones
-        // aparecerá como dos toggles (uno bajo IDA, otro bajo VUELTA).
-        if segmentReturnAirports.count > 2 {
-            var seenInDirection = excludedISOs
-            for ap in segmentReturnAirports.dropFirst().dropLast() {
-                guard let a2 = allAps.first(where: { $0.iata == ap.iata })?.country,
-                      let f = featureByA2(a2),
-                      seenInDirection.insert(f.isoCode).inserted else { continue }
-                returnLayoverChoices.append(
-                    LayoverChoice(id: "ret_\(f.isoCode)", isoA3: f.isoCode,
-                                  flag: f.flagEmoji, name: f.localizedName)
-                )
-            }
-        }
+        // El UI consume `outboundLayoverChoices` como lista única (renombrar
+        // sería más invasivo, así que conservamos la `@State` y dejamos
+        // `returnLayoverChoices` siempre vacío para no romper call-sites).
+        outboundLayoverChoices = combined
 
-        // Restore visited state when editing — el set es binario por país,
-        // así que toggles en ida/vuelta del mismo país aparecen en sintonía.
+        // Restore visited state when editing — el set es binario por país.
         if let visitedISOs = initialSegment?.visitedLayoverISOs {
             visitedLayoverISOs = Set(visitedISOs)
         } else {
@@ -467,20 +464,16 @@ struct AddSegmentSheet: View {
                         .padding(.horizontal, 24).padding(.bottom, 10)
                     }
 
-                    if !outboundLayoverChoices.isEmpty || !returnLayoverChoices.isEmpty {
+                    // UNA sola sección de toggles — un país escala (en cualquier
+                    // dirección) se marca una sola vez como visitado. La lista
+                    // `outboundLayoverChoices` ya viene deduplicada en
+                    // `deriveFlightCountries()`.
+                    if !outboundLayoverChoices.isEmpty {
                         VStack(alignment: .leading, spacing: 14) {
                             Text(isForFuture ? "¿HARÁS PARADA EN...?" : "¿VISITASTE ALGUNA ESCALA?")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary).tracking(0.8)
-
-                            // ESCALAS IDA — sólo si la ida tiene aeropuertos intermedios
-                            if !outboundLayoverChoices.isEmpty {
-                                layoverSection(title: "IDA", choices: outboundLayoverChoices)
-                            }
-                            // ESCALAS VUELTA — sólo si la vuelta tiene aeropuertos intermedios
-                            if !returnLayoverChoices.isEmpty {
-                                layoverSection(title: "VUELTA", choices: returnLayoverChoices)
-                            }
+                            layoverSection(title: nil, choices: outboundLayoverChoices)
                         }
                         .padding(16)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
@@ -529,12 +522,9 @@ struct AddSegmentSheet: View {
                 Button {
                     let isos = finalIsoCodes
                     // Sólo guardamos como visitadas las escalas que realmente
-                    // existen en alguna de las dos direcciones — evita ISOs
-                    // huérfanas si el usuario cambia la ruta tras marcar.
-                    let realLayoverISOs: Set<String> = Set(
-                        outboundLayoverChoices.map(\.isoA3)
-                        + returnLayoverChoices.map(\.isoA3)
-                    )
+                    // existen en la ruta — evita ISOs huérfanas si el usuario
+                    // cambia la ruta tras marcar.
+                    let realLayoverISOs: Set<String> = Set(outboundLayoverChoices.map(\.isoA3))
                     let visitedISOs = Array(visitedLayoverISOs.intersection(realLayoverISOs))
                     // Edición: preserva el id original del segmento para reemplazo por id en el caller.
                     var segment = TripSegment(
@@ -570,12 +560,14 @@ struct AddSegmentSheet: View {
     /// añade/quita el ISO del set, sincronizando ambas secciones automáticamente
     /// si el mismo país aparece en ida y vuelta.
     @ViewBuilder
-    private func layoverSection(title: String, choices: [LayoverChoice]) -> some View {
+    private func layoverSection(title: String?, choices: [LayoverChoice]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(accent.opacity(0.85))
-                .tracking(0.8)
+            if let title, !title.isEmpty {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(accent.opacity(0.85))
+                    .tracking(0.8)
+            }
             ForEach(choices) { choice in
                 let checked = visitedLayoverISOs.contains(choice.isoA3)
                 Button {
@@ -591,7 +583,7 @@ struct AddSegmentSheet: View {
                                     .font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
                             }
                         }
-                        Text(choice.flag ?? "🌐")
+                        FlagLabel(emoji: choice.flag ?? "🌐", size: 22)
                         Text(choice.name).font(.palatino(.body)).foregroundStyle(.primary)
                         Spacer()
                     }
