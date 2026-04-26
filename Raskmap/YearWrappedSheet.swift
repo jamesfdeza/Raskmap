@@ -1206,17 +1206,19 @@ struct YearWrappedSheet: View {
                     .font(.custom("Satoshi-Bold", size: 22))
                     .foregroundStyle(.white.opacity(0.85))
             } else {
-                // Empate: listamos todos los meses con su nombre
+                // Empate: listamos todos los meses con su nombre. Aparecen
+                // TODOS A LA VEZ (mismo delay), sin escalonado — el usuario
+                // pidió explícitamente que no se alternen.
                 let count = stats.topMonths.first?.count ?? 0
                 VStack(spacing: 6) {
-                    ForEach(Array(stats.topMonths.enumerated()), id: \.element.month) { i, m in
+                    ForEach(Array(stats.topMonths.enumerated()), id: \.element.month) { _, m in
                         Text(monthName(m.month).uppercased())
                             .font(.custom("Satoshi-Bold", size: stats.topMonths.count > 3 ? 34 : 44))
                             .foregroundStyle(.white)
                             .scaleEffect(animKick ? 1 : 0.7)
                             .opacity(animKick ? 1 : 0)
                             .animation(.spring(response: 0.6, dampingFraction: 0.75)
-                                .delay(0.15 + Double(i) * 0.1), value: animKick)
+                                .delay(0.15), value: animKick)
                     }
                 }
                 .padding(.vertical, 6)

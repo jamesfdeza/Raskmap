@@ -184,6 +184,46 @@ struct FlagAwareText: View {
     }
 }
 
+// MARK: - Multi-line flag-aware Text
+
+/// Multi-line variant de `FlagAwareText`. Devuelve un `Text` único compuesto
+/// con `Text(Image(...))` interpolations para que las banderas Twemoji se
+/// rendericen INLINE dentro del flujo del texto y respeten line wrapping en
+/// párrafos largos (la versión basada en HStack no podía partir líneas).
+///
+/// Apropiado para textos legales/largos donde las banderas aparecen mezcladas
+/// con párrafos. En vez de `Text(content)` haz `FlagAwareLongText(text: content)`.
+struct FlagAwareLongText: View {
+    let text: String
+    var font: Font = .body
+    var foreground: Color = .primary
+
+    private var composed: Text {
+        var acc = Text("")
+        var buffer = ""
+        func flushBuffer() {
+            if !buffer.isEmpty { acc = acc + Text(buffer); buffer = "" }
+        }
+        for ch in text {
+            let s = String(ch)
+            if let iso = s.flagEmojiToIso2,
+               let assetName = TwemojiFlag.assetName(for: iso),
+               UIImage(named: assetName) != nil {
+                flushBuffer()
+                acc = acc + Text(Image(assetName))
+            } else {
+                buffer.append(ch)
+            }
+        }
+        flushBuffer()
+        return acc
+    }
+
+    var body: some View {
+        composed.font(font).foregroundStyle(foreground)
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
