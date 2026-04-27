@@ -252,9 +252,18 @@ private struct MediumView: View {
         String(entry.upcomingFlags.dropFirst())
     }
 
+    /// Formatea `nextDateFrom` como "vie · 15 may" (corto, locale es).
+    private var formattedNextDate: String? {
+        guard let d = entry.nextDateFrom else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "es_ES")
+        f.dateFormat = "EEE · d MMM"
+        return f.string(from: d).lowercased()
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 5) {
                     Text("PRÓXIMO VIAJE")
                         .font(.custom("Satoshi-Bold", size: 9))
@@ -262,27 +271,34 @@ private struct MediumView: View {
                         .foregroundStyle(.white.opacity(0.75))
                     if !entry.nextTransport.isEmpty {
                         Text(entry.nextTransport)
-                            .font(.system(size: 10))
-                            .opacity(0.7)
+                            .font(.system(size: 11))
+                            .opacity(0.75)
+                    }
+                    if !entry.nextBookingRef.isEmpty {
+                        Text("· #\(entry.nextBookingRef)")
+                            .font(.custom("Satoshi-Bold", size: 9))
+                            .tracking(0.8)
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
                     }
                 }
 
                 if entry.nextDays >= 0, !entry.nextFlag.isEmpty {
-                    HStack(alignment: .center, spacing: 10) {
-                        FlagLabel(emoji: entry.nextFlag, size: 40)
+                    HStack(alignment: .center, spacing: 12) {
+                        FlagLabel(emoji: entry.nextFlag, size: 52)
                             .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(entry.nextName.isEmpty ? "—" : entry.nextName)
-                                .font(.custom("Satoshi-Bold", size: 16))
+                                .font(.custom("Satoshi-Bold", size: 19))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                            HStack(spacing: 3) {
+                                .minimumScaleFactor(0.65)
+                            HStack(spacing: 4) {
                                 Text("en")
-                                    .font(.custom("Satoshi-Regular", size: 10))
+                                    .font(.custom("Satoshi-Regular", size: 11))
                                     .foregroundStyle(.white.opacity(0.7))
                                 Text("\(entry.nextDays)")
-                                    .font(.custom("Satoshi-Bold", size: 15))
+                                    .font(.custom("Satoshi-Bold", size: 17))
                                     .monospacedDigit()
                                     .foregroundStyle(.white)
                                 Text(entry.nextDays == 1 ? "DÍA" : "DÍAS")
@@ -290,19 +306,25 @@ private struct MediumView: View {
                                     .tracking(1.2)
                                     .foregroundStyle(.white.opacity(0.75))
                             }
+                            if let dateLabel = formattedNextDate {
+                                Text(dateLabel)
+                                    .font(.custom("Satoshi-Regular", size: 10))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                    .lineLimit(1)
+                            }
                         }
                     }
                 } else {
-                    HStack(alignment: .center, spacing: 10) {
+                    HStack(alignment: .center, spacing: 12) {
                         Text("🗺️")
-                            .font(.system(size: 36))
+                            .font(.system(size: 44))
                             .opacity(0.85)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text("Sin viajes")
-                                .font(.custom("Satoshi-Bold", size: 15))
+                                .font(.custom("Satoshi-Bold", size: 17))
                                 .foregroundStyle(.white)
                             Text("planea el siguiente")
-                                .font(.custom("Satoshi-Regular", size: 10))
+                                .font(.custom("Satoshi-Regular", size: 11))
                                 .foregroundStyle(.white.opacity(0.7))
                         }
                     }
@@ -311,8 +333,14 @@ private struct MediumView: View {
                 Spacer(minLength: 0)
 
                 if !upcomingFlagsSkippingFirst.isEmpty {
-                    FlagStrip(flags: String(upcomingFlagsSkippingFirst.prefix(6)), size: 15, spacing: 4)
-                        .lineLimit(1)
+                    HStack(alignment: .center, spacing: 8) {
+                        Text("PRÓXIMOS")
+                            .font(.custom("Satoshi-Bold", size: 8))
+                            .tracking(1.2)
+                            .foregroundStyle(.white.opacity(0.55))
+                        FlagStrip(flags: String(upcomingFlagsSkippingFirst.prefix(6)), size: 17, spacing: 5)
+                            .lineLimit(1)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -342,9 +370,9 @@ private struct MediumView: View {
                     .font(.custom("Palatino", size: 9))
                     .foregroundStyle(.white.opacity(0.6))
             }
-            .frame(width: 116)
+            .frame(width: 104)
             .padding(.vertical, 18)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
         }
         .containerBackground(entry.bgColor, for: .widget)
     }
@@ -355,14 +383,23 @@ private struct MediumView: View {
 private struct LargeView: View {
     let entry: RaskmapEntry
 
+    /// Misma formateo que MediumView — "vie · 15 may".
+    private var formattedNextDate: String? {
+        guard let d = entry.nextDateFrom else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "es_ES")
+        f.dateFormat = "EEE · d MMM"
+        return f.string(from: d).lowercased()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 14) {
                 if entry.nextDays >= 0, !entry.nextFlag.isEmpty {
-                    FlagLabel(emoji: entry.nextFlag, size: 54)
+                    FlagLabel(emoji: entry.nextFlag, size: 60)
                         .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 5) {
                             Text("PRÓXIMO VIAJE")
                                 .font(.custom("Satoshi-Bold", size: 10))
@@ -375,17 +412,23 @@ private struct LargeView: View {
                             }
                         }
                         Text(entry.nextName.isEmpty ? "—" : entry.nextName)
-                            .font(.custom("Satoshi-Bold", size: 22))
+                            .font(.custom("Satoshi-Bold", size: 24))
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(0.65)
+                        if let dateLabel = formattedNextDate {
+                            Text(dateLabel)
+                                .font(.custom("Satoshi-Regular", size: 11))
+                                .foregroundStyle(.white.opacity(0.65))
+                                .lineLimit(1)
+                        }
                     }
 
                     Spacer(minLength: 6)
 
                     VStack(alignment: .center, spacing: 0) {
                         Text("\(entry.nextDays)")
-                            .font(.custom("Satoshi-Bold", size: 38))
+                            .font(.custom("Satoshi-Bold", size: 42))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                         Text(entry.nextDays == 1 ? "DÍA" : "DÍAS")
@@ -431,17 +474,53 @@ private struct LargeView: View {
                 .frame(height: 0.5)
                 .padding(.horizontal, 16)
 
-            VStack(alignment: .leading, spacing: 10) {
-                // Ocultamos el próximo viaje (primera bandera) — ya se muestra grande arriba.
+            // Tres flag-strips: PRÓXIMOS, MÁS VISITADOS y NUEVOS DESTINOS — el
+            // tercero usa el mismo dataset de "más visitados" pero invertido
+            // (los más recientes/menos repetidos quedan al final del string),
+            // así rellenamos visualmente la zona inferior antes vacía.
+            VStack(alignment: .leading, spacing: 12) {
                 let upcomingRest = String(entry.upcomingFlags.dropFirst())
                 flagStrip(title: "PRÓXIMOS", flags: upcomingRest, placeholder: "Sin viajes futuros")
                 flagStrip(title: "MÁS VISITADOS", flags: entry.topVisitedFlags, placeholder: "Registra tu primer viaje")
+                flagStrip(title: "NUEVOS",
+                          flags: String(entry.topVisitedFlags.reversed()),
+                          placeholder: "Sin destinos recientes")
             }
             .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 14)
 
-            Spacer(minLength: 0)
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(height: 0.5)
+                .padding(.horizontal, 16)
+
+            // Footer minimal — fija el contenido al fondo del widget en vez
+            // de dejar `Spacer` vacío. Muestra modo de conteo + booking ref
+            // si hay viaje próximo + branding suave.
+            HStack(spacing: 8) {
+                Text(entry.mode.shortLabel)
+                    .font(.custom("Satoshi-Bold", size: 9))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.55))
+                if !entry.nextBookingRef.isEmpty {
+                    Text("·")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("PNR \(entry.nextBookingRef)")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("RASKMAP")
+                    .font(.custom("Satoshi-Bold", size: 9))
+                    .tracking(2.0)
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
         }
         .containerBackground(entry.bgColor, for: .widget)
     }
