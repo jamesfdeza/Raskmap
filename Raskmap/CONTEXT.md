@@ -167,6 +167,63 @@ La licencia CC-BY 4.0 exige reconocer autoría + enlazar a la licencia.
 Cubre: autor original (Twitter/X) + mantenedor actual (jdecked/twemoji) +
 licencia + indicación de no-modificación. App Store Review-ready.
 
+### Task 13 — Widgets medium/large: rellenar el espacio vacío
+
+**Problema reportado:**
+- Widget mediano: el bloque "PRÓXIMO VIAJE" se quedaba pequeño con espacio
+  vacío debajo y a la derecha (entre flag y columna derecha).
+- Widget grande: bajo "MÁS VISITADOS" había un `Spacer(minLength: 0)` que
+  dejaba toda la mitad inferior del widget vacía.
+
+**Investigación paralela — print(0.5) en consola:**
+Usuario reportó ver "0.5" en la consola de Xcode. Búsqueda exhaustiva
+(`grep -rn print|debugPrint|os_log|Logger|dump|.print(\)` en
+`Raskmap/`, `RaskmapWidget/`, watch targets) → solo 3 sites con `print`,
+todos con strings explícitas de error de SwiftData o Live Activity.
+**Ningún `print(0.5)` en el código** — debe ser un log del sistema
+(WidgetKit/MapKit/SwiftUI). Pendiente de pegar la línea exacta para cazarlo.
+
+**Fix Widget Medium (`RaskmapWidget/RaskmapWidget.swift` `MediumView` ~248):**
+
+| Elemento | Antes | Después |
+|---|---|---|
+| Bandera | 40pt | **52pt** |
+| Nombre destino | 16pt | **19pt** |
+| Contador "X DÍAS" | 15/10pt | **17/11pt** |
+| Línea de fecha | — | **"vie · 15 may"** 10pt opacity 0.6 |
+| Booking ref | — | **"· #ABC123"** 9pt opacity 0.55 en el header |
+| Strip PRÓXIMOS | sin label | **con label "PRÓXIMOS"** + flag 15→17pt + spacing 4→5 |
+| Columna derecha | 116pt | **104pt** (más respiro a la izquierda) |
+| VStack spacing | 6 | 8 |
+
+`formattedNextDate` usa `DateFormatter` con `EEE · d MMM` (locale `es_ES`)
+sobre `entry.nextDateFrom`. Datos ya en el `RaskmapEntry` — no hay cambio
+en `WidgetDataWriter`.
+
+**Fix Widget Large (`LargeView` ~355):**
+
+1. Bloque superior crece — bandera 54→60pt, nombre 22→24pt, días 38→42pt.
+   Línea de fecha bajo el nombre (igual que medium).
+2. **Tercer flag-strip nuevo "NUEVOS"** debajo de "MÁS VISITADOS" usando
+   `String(entry.topVisitedFlags.reversed())` — los menos visitados al
+   inicio del string suelen ser los más recientes, así que rellena con
+   datos relevantes sin requerir nueva clave en el App Group.
+3. **Footer fijo** que reemplaza el `Spacer(minLength: 0)`:
+   ```swift
+   HStack {
+       Text(entry.mode.shortLabel)              // "ONU" / "ONU+OBS" / "TODOS"
+       if !entry.nextBookingRef.isEmpty {
+           Text("· PNR \(entry.nextBookingRef)")
+       }
+       Spacer()
+       Text("RASKMAP")  // tracking 2.0, opacity 0.45 — firma suave
+   }
+   ```
+   Separado del bloque de flag-strips por un divider `0.5pt opacity 0.18`.
+
+Resultado: el widget grande ahora tiene 4 zonas balanceadas (próximo
+viaje · stats · 3 flag-strips · footer) en vez de 3 zonas + área vacía.
+
 ## Cambios recientes (2026-04-26)
 
 Tanda de 6 bugs de QA — todos sobre flujos de edición de vuelos, rollout
