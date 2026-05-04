@@ -103,8 +103,13 @@ struct FlagLabel: View {
                 .accessibilityLabel(Locale(identifier: "es")
                     .localizedString(forRegionCode: iso) ?? iso)
         } else {
+            // Fallback (🌐, ✈️, banderas no soportadas): mismo bounding box
+            // que la versión Twemoji para que las strips de banderas
+            // mantengan spacing uniforme entre items.
             Text(emoji)
                 .font(.system(size: size))
+                .frame(width: size, height: size)
+                .minimumScaleFactor(0.5)
         }
     }
 }
@@ -199,24 +204,30 @@ struct FlagAwareLongText: View {
     var foreground: Color = .primary
 
     private var composed: Text {
-        var acc = Text("")
+        // Acumulamos los runs como tuplas (texto-libre | imagen-bandera) y al
+        // final componemos un único Text con interpolación, en lugar del
+        // operador `+` de Text — deprecado en iOS 26.
+        enum Run { case text(String); case flag(String) }
+        var runs: [Run] = []
         var buffer = ""
-        func flushBuffer() {
-            if !buffer.isEmpty { acc = acc + Text(buffer); buffer = "" }
-        }
         for ch in text {
             let s = String(ch)
             if let iso = s.flagEmojiToIso2,
                let assetName = TwemojiFlag.assetName(for: iso),
                UIImage(named: assetName) != nil {
-                flushBuffer()
-                acc = acc + Text(Image(assetName))
+                if !buffer.isEmpty { runs.append(.text(buffer)); buffer = "" }
+                runs.append(.flag(assetName))
             } else {
                 buffer.append(ch)
             }
         }
-        flushBuffer()
-        return acc
+        if !buffer.isEmpty { runs.append(.text(buffer)) }
+        return runs.reduce(Text(verbatim: "")) { acc, run in
+            switch run {
+            case .text(let s):    return Text("\(acc)\(s)")
+            case .flag(let name): return Text("\(acc)\(Image(name))")
+            }
+        }
     }
 
     var body: some View {

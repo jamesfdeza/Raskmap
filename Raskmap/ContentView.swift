@@ -48,6 +48,7 @@ struct ContentView: View {
     @Environment(\.requestReview) private var requestReview
     @State private var pendingDateStatus: CountryStatus = .none
     @State private var deferredDateCountry: Country? = nil
+    @State private var showHelpToast: Bool = false
     @State private var searchText: String = ""
     @StateObject private var mapStore = MapStore()
     @EnvironmentObject private var colorTheme: ColorThemeManager
@@ -117,7 +118,11 @@ struct ContentView: View {
                     result.insert(kind)
                 } else {
                     let quadrants = (allQuadrants[zoneKey] ?? []).filter { $0.position >= 0 }
-                    if !quadrants.isEmpty && quadrants.allSatisfy({ q in q.candidateIsoCodes.allSatisfy { visited.contains($0) } }) {
+                    let zoneNameLower = AchievementKind.zoneName(forPassportKey: zoneKey)
+                    if !quadrants.isEmpty && quadrants.allSatisfy({ q in
+                        let filtered = zoneNameLower.map { AchievementKind.filterCandidatesForZone(q.candidateIsoCodes, zoneName: $0, assignments: assignments, quadrantTitle: q.title) } ?? q.candidateIsoCodes
+                        return filtered.allSatisfy { visited.contains($0) }
+                    }) {
                         result.insert(kind)
                     }
                 }
@@ -298,10 +303,56 @@ struct ContentView: View {
         }
     }
 
+    /// Cuenta TOTAL de tramos de vuelo (incluye vueltas + repeticiones) para
+    /// el filtro pasado/futuro. 30x ida+vuelta MAD-BCN = 60. Distinto del
+    /// `FlightRoutesBuilder.routes.count` que dedupa pares no-ordenados.
+    private func flightLegsCount(filter: FlightRouteFilter) -> Int {
+        let today = Calendar.current.startOfDay(for: Date())
+        var count = 0
+        for trip in trips where !trip.isSegmentChild {
+            let day = Calendar.current.startOfDay(for: trip.dateFrom)
+            switch filter {
+            case .past:     if day > today { continue }
+            case .upcoming: if day <= today { continue }
+            }
+            let segs = trip.tripSegments
+            if !segs.isEmpty {
+                for seg in segs where seg.transport == "✈️" {
+                    let out = max(0, (seg.airports?.count ?? 0) - 1)
+                    let ret = max(0, (seg.returnAirports?.count ?? 0) - 1)
+                    count += out + ret
+                }
+            } else if trip.transport == "✈️" {
+                let airports = trip.tripAirports
+                if airports.count > 1 {
+                    let totalTouches = airports.reduce(0) { $0 + $1.count }
+                    count += totalTouches / 2
+                }
+            }
+        }
+        return count
+    }
+
     @ViewBuilder
     private func flightFilterRow() -> some View {
-        FlightFilterSlider(selection: $flightRouteFilter)
-            .frame(maxWidth: 260)
+        let count = flightLegsCount(filter: flightRouteFilter)
+        let labelTotal: String = {
+            switch flightRouteFilter {
+            case .past:     return count == 1 ? "1 vuelo finalizado" : "\(count) vuelos finalizados"
+            case .upcoming: return count == 1 ? "1 vuelo próximo"    : "\(count) vuelos próximos"
+            }
+        }()
+        VStack(spacing: 8) {
+            Text(labelTotal)
+                .font(.custom("Satoshi-Bold", size: 12))
+                .tracking(0.6)
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .center)
+            FlightFilterSlider(selection: $flightRouteFilter)
+                .frame(maxWidth: 260)
+        }
     }
 
     @ViewBuilder
@@ -360,32 +411,90 @@ struct ContentView: View {
         return trip.flightDetails?.bookingRef ?? ""
     }
 
-    private var allProximosFlagsString: String {
+    /// Aeropuertos (IATA) y coordenadas del próximo vuelo. Busca el primer
+    /// trip ✈️ futuro en TODOS los trips (no solo el país del banner) — para
+    /// que el widget de mapa de vuelos muestre la ruta aunque el siguiente
+    /// viaje del banner no sea ✈️ pero haya un próximo vuelo después.
+    /// nil si no hay ningún trip ✈️ futuro con aeropuertos conocidos.
+    private func nextFlightAirportsAny() -> (depIATA: String, arrIATA: String, depCoord: CLLocationCoordinate2D, arrCoord: CLLocationCoordinate2D)? {
         let today = Calendar.current.startOfDay(for: Date())
-        var entries: [(flag: String, date: Date)] = []
-        for country in countries where country.status == .wantToVisit {
-            guard let date = country.plannedDate else { continue }
-            let d = Calendar.current.startOfDay(for: date)
-            guard d > today else { continue }
-            let flag = features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
-            entries.append((flag, d))
+        let candidates = trips.filter {
+            !$0.isSegmentChild &&
+            Calendar.current.startOfDay(for: $0.dateFrom) >= today
+        }.sorted { $0.dateFrom < $1.dateFrom }
+        for trip in candidates {
+            if let seg = trip.tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
+                            .first(where: { $0.transport == "✈️" && ($0.airports?.count ?? 0) >= 2 }),
+               let aps = seg.airports,
+               let depCoord = AirportCoordinates.coordinate(for: aps.first!.iata),
+               let arrCoord = AirportCoordinates.coordinate(for: aps.last!.iata) {
+                return (aps.first!.iata, aps.last!.iata, depCoord, arrCoord)
+            }
+            if trip.tripSegments.isEmpty, trip.transport == "✈️", trip.tripAirports.count >= 2,
+               let depCoord = AirportCoordinates.coordinate(for: trip.tripAirports[0].iata),
+               let arrCoord = AirportCoordinates.coordinate(for: trip.tripAirports[1].iata) {
+                return (trip.tripAirports[0].iata, trip.tripAirports[1].iata, depCoord, arrCoord)
+            }
         }
-        for trip in trips where trip.isoCode != "" {
-            let d = Calendar.current.startOfDay(for: trip.dateFrom)
-            guard d > today else { continue }
-            guard countries.first(where: { $0.isoCode == trip.isoCode })?.status == .visited else { continue }
-            let flag = features.first(where: { $0.isoCode == trip.isoCode })?.flagEmoji ?? "🌐"
-            entries.append((flag, d))
-        }
-        return entries.sorted { $0.date < $1.date }.map { $0.flag }.joined()
+        return nil
     }
 
-    /// Top banderas de países visitados (por días pasados desc), hasta 12 para el widget grande.
+    private var allProximosFlagsString: String {
+        let today = Calendar.current.startOfDay(for: Date())
+        // Para cada iso, la PRIMERA fecha futura que tengamos (de cualquier
+        // trip futuro de ese país, incluyendo children por segmentos). Si no
+        // hay trip pero sí `country.plannedDate`, usamos eso. Esto evita que
+        // un país tipo "Chipre del Norte" aparezca con una fecha stale y
+        // quede mal ordenado en el widget.
+        let tripsByIso: [String: [Trip]] = Dictionary(grouping: trips, by: { $0.isoCode })
+        func nextFutureDate(forIso iso: String, fallback: Date?) -> Date? {
+            let tripDates = (tripsByIso[iso] ?? [])
+                .map { Calendar.current.startOfDay(for: $0.dateFrom) }
+                .filter { $0 > today }
+            if let earliest = tripDates.min() { return earliest }
+            if let fb = fallback {
+                let d = Calendar.current.startOfDay(for: fb)
+                if d > today { return d }
+            }
+            return nil
+        }
+        var byIso: [String: (flag: String, date: Date)] = [:]
+        func add(iso: String, date: Date) {
+            let flag = features.first(where: { $0.isoCode == iso })?.flagEmoji ?? "🌐"
+            byIso[iso] = (flag, date)
+        }
+        for country in countries where country.status == .wantToVisit {
+            guard let date = nextFutureDate(forIso: country.isoCode, fallback: country.plannedDate) else { continue }
+            add(iso: country.isoCode, date: date)
+        }
+        for country in countries where country.status == .visited || country.status == .lived {
+            guard let date = nextFutureDate(forIso: country.isoCode, fallback: nil) else { continue }
+            add(iso: country.isoCode, date: date)
+        }
+        // Orden estable: fecha asc, tiebreaker por iso asc.
+        return byIso.map { (iso: $0.key, flag: $0.value.flag, date: $0.value.date) }
+            .sorted { a, b in
+                if a.date != b.date { return a.date < b.date }
+                return a.iso < b.iso
+            }
+            .map { $0.flag }
+            .joined()
+    }
+
+    /// Banderas de países visitados ordenados por fecha del último viaje finalizado
+    /// (más reciente primero). Hasta 12 para el widget grande.
     private var topVisitedFlagsString: String {
+        let today = Date()
         let visited = countries.filter { $0.status == .visited || $0.status == .lived }
+        let lastDateByIso: [String: Date] = trips.reduce(into: [:]) { acc, t in
+            let end = t.dateTo ?? t.dateFrom
+            guard end <= today else { return }
+            if let prev = acc[t.isoCode], prev >= end { return }
+            acc[t.isoCode] = end
+        }
         let sorted = visited.sorted { lhs, rhs in
-            let ld = daysSpent(iso: lhs.isoCode, trips: trips)
-            let rd = daysSpent(iso: rhs.isoCode, trips: trips)
+            let ld = lastDateByIso[lhs.isoCode] ?? .distantPast
+            let rd = lastDateByIso[rhs.isoCode] ?? .distantPast
             if ld != rd { return ld > rd }
             return lhs.isoCode < rhs.isoCode
         }
@@ -497,31 +606,90 @@ struct ContentView: View {
     private func bodyWithCoreHandlers() -> some View {
         mapWithSheets()
             .overlay { loadingOverlay() }
+            .overlay { helpToastOverlay() }
             .onChange(of: locationManager.currentLocation) { old, loc in handleLocationChange(old: old, location: loc) }
             .task { await handleInitialTask() }
             .onChange(of: scenePhase) { _, phase in handleScenePhaseActive(phase) }
     }
 
     @ViewBuilder
+    private func helpToastOverlay() -> some View {
+        if showHelpToast {
+            ZStack {
+                Color.black.opacity(0.45).ignoresSafeArea()
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { showHelpToast = false } }
+                VStack(spacing: 18) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(Color(red: 64/255, green: 114/255, blue: 212/255))
+                    Text("Ayuda")
+                        .font(.custom("Satoshi-Bold", size: 22))
+                    Text("Si te faltan aeropuertos, aerolíneas o has tenido un bug, repórtalo en **Ajustes › Contacto**.")
+                        .font(.palatino(.body))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { showHelpToast = false }
+                    } label: {
+                        Text("Entendido")
+                            .font(.custom("Satoshi-Bold", size: 15))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(red: 64/255, green: 114/255, blue: 212/255), in: RoundedRectangle(cornerRadius: 14))
+                    }.buttonStyle(.plain)
+                }
+                .padding(28)
+                .frame(maxWidth: 340)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .padding(.horizontal, 28)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
+            }
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showHelpToast)
+        }
+    }
+
+    @ViewBuilder
     private func loadingOverlay() -> some View {
         if isLoadingFeatures {
             ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+                LinearGradient(
+                    colors: [
+                        Color(red: 0x12/255, green: 0x1B/255, blue: 0x3A/255),
+                        Color(red: 0x1E/255, green: 0x33/255, blue: 0x6A/255),
+                        Color(red: 0x40/255, green: 0x6E/255, blue: 0xC9/255)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ).ignoresSafeArea()
                 VStack(spacing: 32) {
-                    Text("🗺️")
-                        .font(.system(size: 80))
-                    VStack(spacing: 10) {
-                        Text("Raskmap")
-                            .font(.custom("Satoshi-Bold", size: 38))
-                            .foregroundStyle(.primary)
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                            .frame(width: 132, height: 132)
+                        Circle()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                            .frame(width: 168, height: 168)
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 64, weight: .light))
+                            .foregroundStyle(.white)
+                    }
+                    VStack(spacing: 6) {
+                        Text("RASKMAP")
+                            .font(.custom("Satoshi-Bold", size: 30))
+                            .tracking(6)
+                            .foregroundStyle(.white)
                         Text("Cargando el mundo...")
-                            .font(.palatino(.footnote))
-                            .foregroundStyle(.tertiary)
+                            .font(.custom("Satoshi-Regular", size: 12))
+                            .tracking(1.5)
+                            .textCase(.uppercase)
+                            .foregroundStyle(.white.opacity(0.55))
                     }
                     ProgressView()
                         .progressViewStyle(.circular)
-                        .tint(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255))
-                        .scaleEffect(1.1)
+                        .tint(.white)
+                        .scaleEffect(1.0)
                 }
             }
             .transition(.opacity)
@@ -544,6 +712,8 @@ struct ContentView: View {
         cachedNextBanner = b
         WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
         WidgetDataWriter.syncAllFlags(allProximosFlagsString)
+        let af = nextFlightAirportsAny()
+        WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
         recalculateFlightRouteAvailability()
     }
 
@@ -553,6 +723,8 @@ struct ContentView: View {
         cachedNextBanner = b
         WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
         WidgetDataWriter.syncAllFlags(allProximosFlagsString)
+        let af = nextFlightAirportsAny()
+        WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
     }
 
     fileprivate func handleCountingModeChange(_ newMode: String) {
@@ -603,6 +775,7 @@ struct ContentView: View {
                     country: country,
                     displayName: localizedName(for: country),
                     flagEmoji: flagEmoji(for: country),
+                    isoA2: features.first(where: { $0.isoCode == country.isoCode })?.isoA2,
                     onStatusChange: { newStatus in
                         updateCountryStatus(country: country, newStatus: newStatus)
                         selectedCountry = nil
@@ -1102,8 +1275,8 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancelar") { showSearch = false; searchText = "" }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { showSearch = false; searchText = "" }
                 }
             }
         }
@@ -1268,15 +1441,27 @@ struct ContentView: View {
         VStack {
             if menuPositionIsTop { Spacer() }
             HStack {
+                Button { showHelpToast = true } label: {
+                    Image(systemName: "questionmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .background(.regularMaterial, in: Circle())
+                        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 3)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ayuda")
+                .accessibilityHint("Información sobre cómo reportar bugs o sugerir contenido")
+                .padding(.leading, 14)
+                .padding(.top, menuPositionIsTop ? 0 : 60)
+                .padding(.bottom, menuPositionIsTop ? 120 : 0)
                 Spacer()
                 Button {
                     triggerFlightModeTransition()
                 } label: {
                     Image(systemName: flightMode ? "map.fill" : "airplane")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(flightMode
-                                         ? Color(red: 64/255, green: 114/255, blue: 212/255)
-                                         : .primary)
+                        .foregroundStyle(.primary)
                         .frame(width: 44, height: 44)
                         .background(.regularMaterial, in: Circle())
                         .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 3)
@@ -1376,7 +1561,7 @@ struct ContentView: View {
                 for country in countries where country.status == status { country.status = .none; country.hasLived = false }
                 try? modelContext.save()
             },
-            onProximosTap: { statusListFilter = .wantToVisit },
+            onProximosTap: nil,
             topTable: $topTable,
             visitedFlags: visitedFlags,
             allFeatures: features,
@@ -1643,6 +1828,8 @@ struct ContentView: View {
                 WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
                 WidgetDataWriter.syncAllFlags(self.allProximosFlagsString)
                 WidgetDataWriter.syncTopVisitedFlags(self.topVisitedFlagsString)
+                let af = self.nextFlightAirportsAny()
+                WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
                 if self.liveActivityEnabled { self.startOrUpdateLiveActivity() }
             }
         } else {
@@ -1655,6 +1842,8 @@ struct ContentView: View {
             WidgetDataWriter.syncPro(isRaskmapPro)
             if liveActivityEnabled { startOrUpdateLiveActivity() }
             cachedNextBanner = nextProximosBanner
+            let af = nextFlightAirportsAny()
+            WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
         }
         if username.isEmpty { showOnboarding = true }
         flightModeHasRoutes = FlightRoutesBuilder.hasAnyRoute(in: trips, filter: flightRouteFilter)
@@ -1862,6 +2051,7 @@ struct CountryBottomSheet: View {
     let country: Country
     let displayName: String
     let flagEmoji: String?
+    var isoA2: String? = nil
     let onStatusChange: (CountryStatus) -> Void
     let onDismiss: () -> Void
     var showBucketList: Bool = true
@@ -1874,14 +2064,22 @@ struct CountryBottomSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Hero header
-            VStack(spacing: 10) {
-                FlagLabel(emoji: flagEmoji ?? "🌐", size: 64)
-                    .padding(.top, 28)
+            // Hero header — la bandera arranca con un margen amplio para no quedar
+            // pegada al drag indicator del sheet ni cortarse en pantallas estrechas.
+            VStack(spacing: 12) {
+                Group {
+                    if let iso = isoA2, !iso.isEmpty {
+                        TwemojiFlag(iso2: iso, size: 64, fallbackEmoji: flagEmoji ?? "🌐")
+                    } else {
+                        FlagLabel(emoji: flagEmoji ?? "🌐", size: 64)
+                    }
+                }
+                .frame(width: 80, height: 80)
                 Text(displayName)
                     .font(.palatino(.title2, weight: .bold))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
+                    .padding(.horizontal, 24)
                 if country.status != .none {
                     Text(country.status.label)
                         .font(.custom("Satoshi-Regular", size: 11))
@@ -1892,6 +2090,7 @@ struct CountryBottomSheet: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .padding(.top, 36)
             .padding(.bottom, 20)
 
             Divider()
@@ -1923,11 +2122,15 @@ struct CountryBottomSheet: View {
                     )
                 }
                 if country.status != .lived {
+                    let isProximo = country.status == .wantToVisit
                     ActionButton(
-                        label: "🔜 Añadir próximo viaje",
+                        label: isProximo ? "🔜 Añadido a próximos" : "🔜 Añadir próximo viaje",
                         color: colorTheme.wantToVisitColor,
-                        isSelected: false,
-                        action: { onAddNextTrip?() }
+                        isSelected: isProximo,
+                        action: {
+                            if isProximo { showRemoveConfirm = true }
+                            else { onAddNextTrip?() }
+                        }
                     )
                 }
                 if showBucketList && (country.status == .none || country.status == .bucketList) {
@@ -1945,18 +2148,6 @@ struct CountryBottomSheet: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
-
-            Button {
-                onDismiss()
-            } label: {
-                Text("Cerrar")
-                    .font(.palatino(.subheadline))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-            }
-            .padding(.top, 8)
-            .padding(.horizontal, 20)
 
             Spacer()
         }
@@ -2307,6 +2498,23 @@ struct FinalizadosListSheet: View {
     private func isoA2(for country: Country) -> String {
         features.first(where: { $0.isoCode == country.isoCode })?.isoA2 ?? ""
     }
+    private func displayName(for iso: String) -> String {
+        features.first(where: { $0.isoCode == iso })?.localizedName ?? iso
+    }
+    private func flagEmoji(for iso: String) -> String {
+        features.first(where: { $0.isoCode == iso })?.flagEmoji ?? "🌐"
+    }
+    private func isoA2(for iso: String) -> String {
+        features.first(where: { $0.isoCode == iso })?.isoA2 ?? ""
+    }
+    /// País del trip donde se han pasado más días. Empate → primero alfabético.
+    private func mainCountryIso(for row: ProximoRow) -> String {
+        guard let trip = row.trip else { return row.country.isoCode }
+        let days = daysPerCountry(trips: [trip])
+        guard let maxDays = days.values.max(), maxDays > 0 else { return row.country.isoCode }
+        let tied = days.filter { $0.value == maxDays }.keys.sorted()
+        return tied.first ?? row.country.isoCode
+    }
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none; return f
@@ -2356,21 +2564,22 @@ struct FinalizadosListSheet: View {
                         ForEach(grouped, id: \.label) { section in
                             Section(header: Text(section.label).font(.palatino(.caption, weight: .bold))) {
                                 ForEach(section.items) { row in
+                                    let mainIso = mainCountryIso(for: row)
                                     HStack {
                                         TwemojiFlag(
-                                            iso2: isoA2(for: row.country),
+                                            iso2: isoA2(for: mainIso),
                                             size: 22,
-                                            fallbackEmoji: flagEmoji(for: row.country)
+                                            fallbackEmoji: flagEmoji(for: mainIso)
                                         )
                                         VStack(alignment: .leading, spacing: 2) {
                                             if let title = row.rowTitle, !title.isEmpty {
                                                 HStack(spacing: 6) {
                                                     Text(title).font(.palatino(.body, weight: .bold))
                                                     Text("|").foregroundStyle(.secondary)
-                                                    Text(displayName(for: row.country)).font(.palatino(.body)).foregroundStyle(.secondary)
+                                                    Text(displayName(for: mainIso)).font(.palatino(.body)).foregroundStyle(.secondary)
                                                 }
                                             } else {
-                                                Text(displayName(for: row.country)).font(.palatino(.body))
+                                                Text(displayName(for: mainIso)).font(.palatino(.body))
                                             }
                                             HStack(spacing: 4) {
                                                 if let t = row.transport { Text(t).font(.caption) }
@@ -2411,7 +2620,7 @@ struct FinalizadosListSheet: View {
             .navigationTitle("Finalizados \(String(year))")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
             }
@@ -2429,7 +2638,7 @@ struct FinalizadosListSheet: View {
             Button("Cancelar", role: .cancel) { rowToRemove = nil }
         } message: {
             if let row = rowToRemove {
-                Text("Se borrará el viaje a \(displayName(for: row.country)) (y sus tramos asociados).")
+                Text("Se borrará el viaje a \(displayName(for: mainCountryIso(for: row))) (y sus tramos asociados).")
             }
         }
         // Detalle del viaje: al tocar una fila se abre esta hoja mostrando
@@ -2476,6 +2685,23 @@ struct FinalizadoTripDetailSheet: View {
     /// segmentos embebidos (viaje simple de un único país + transporte).
     private var segments: [TripSegment] {
         (row.trip?.tripSegments ?? []).sorted { $0.dateFrom < $1.dateFrom }
+    }
+
+    /// Días por país calculados sobre el trip (ordenados desc por días, tiebreak alfabético).
+    private var daysByCountry: [(iso: String, days: Int)] {
+        guard let trip = row.trip else {
+            // Trip sin objeto Trip (sólo Country.plannedDate) — el rango total
+            // se atribuye a la única country.
+            let from = row.dateFrom ?? Date()
+            let to = row.dateTo ?? from
+            let cnt = max(1, (Calendar.current.dateComponents([.day], from: from, to: to).day ?? 0) + 1)
+            return [(row.country.isoCode, cnt)]
+        }
+        let map = daysPerCountry(trips: [trip])
+        return map.map { (iso: $0.key, days: $0.value) }.sorted {
+            if $0.days != $1.days { return $0.days > $1.days }
+            return $0.iso < $1.iso
+        }
     }
 
     private var headerTitle: String {
@@ -2601,6 +2827,41 @@ struct FinalizadoTripDetailSheet: View {
                         }
                     }
 
+                    // MARK: Días por país
+                    if !daysByCountry.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("DÍAS POR PAÍS")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.0)
+                                .padding(.horizontal, 20)
+                            VStack(spacing: 0) {
+                                ForEach(Array(daysByCountry.enumerated()), id: \.offset) { idx, entry in
+                                    HStack(spacing: 10) {
+                                        TwemojiFlag(
+                                            iso2: isoA2(for: entry.iso),
+                                            size: 18,
+                                            fallbackEmoji: flagEmoji(for: entry.iso)
+                                        )
+                                        Text(displayName(for: entry.iso))
+                                            .font(.palatino(.body))
+                                        Spacer()
+                                        Text(entry.days == 1 ? "1 día" : "\(entry.days) días")
+                                            .font(.palatino(.body, weight: .bold))
+                                            .foregroundStyle(.primary)
+                                    }
+                                    .padding(.horizontal, 16).padding(.vertical, 12)
+                                    if idx < daysByCountry.count - 1 {
+                                        Rectangle().fill(Color(.systemGray5)).frame(height: 0.5)
+                                            .padding(.leading, 16)
+                                    }
+                                }
+                            }
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                            .padding(.horizontal, 20)
+                        }
+                    }
+
                     Spacer(minLength: 20)
                 }
                 .padding(.top, 8)
@@ -2608,7 +2869,7 @@ struct FinalizadoTripDetailSheet: View {
             .navigationTitle("Detalle del viaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
             }
@@ -2811,8 +3072,8 @@ struct FlightFilterSlider: View {
     @GestureState private var isPressing: Bool = false
 
     private let segments: [(FlightRouteFilter, String, String)] = [
-        (.past,     "Visitados", "checkmark.seal.fill"),
-        (.upcoming, "Próximos",  "airplane.departure")
+        (.past,     "Finalizados", "checkmark.seal.fill"),
+        (.upcoming, "Próximos",    "airplane.departure")
     ]
 
     private func index(_ f: FlightRouteFilter) -> Int {
@@ -3154,6 +3415,29 @@ enum AchievementKind: CaseIterable {
         }
     }
 
+    /// Maps a `passportZoneKey` rawValue to the lowercase `zoneName` used in
+    /// `multiContinentData`. Used for filtering pluricontinental countries
+    /// out of the wrong zone in passport-completion checks.
+    static func zoneName(forPassportKey key: String) -> String? {
+        switch key {
+        case "Europa":      return "europa"
+        case "Asia":        return "asia"
+        case "M. Oriente":  return "medioOriente"
+        case "África":      return "africa"
+        case "América":     return "america"
+        case "Oceanía":     return "oceania"
+        default:            return nil
+        }
+    }
+
+    /// Antes filtraba ISOs pluricontinentales según asignación de zona en
+    /// Ajustes. Ahora devuelve los ISOs sin filtrar: el usuario decide
+    /// libremente en qué cuadrante meter cada país pluri y siempre cuenta
+    /// donde lo pone, independientemente del continente asignado.
+    static func filterCandidatesForZone(_ isos: [String], zoneName: String, assignments: [String: String], quadrantTitle: String? = nil) -> [String] {
+        return isos
+    }
+
     var zoneIsoCodes: Set<String> {
         switch self {
         case .europaCompleta:       return Self._zoneEuropa
@@ -3326,6 +3610,11 @@ struct ProfileSheet: View {
     // Sheet de finalizados gestionado dentro del perfil para que no haya conflicto
     // con el propio sheet del perfil (SwiftUI sólo permite 1 sheet activo por nivel).
     @State private var finalizadosPayload: FinalizadosSheetPayload? = nil
+    // Mismo motivo para Próximos: si se presenta desde el root, SwiftUI cierra
+    // el perfil para abrirlo, dando un parpadeo. Se gestiona localmente.
+    @State private var proximosShown: Bool = false
+    @State private var editingProximoTrip: Trip? = nil
+    @State private var pendingProximoCountryForDate: Country? = nil
 
     @AppStorage("multiContinentRaw") private var multiContinentRaw: String = "{}"
     @AppStorage("multiHemisphereRaw") private var multiHemisphereRaw: String = "{}"
@@ -3385,6 +3674,38 @@ struct ProfileSheet: View {
             .compactMap { $0.flagEmoji }
     }
 
+    // Próximos rows: una fila por cada país wantToVisit (con o sin trip futuro)
+    // y por cada visited con trip futuro. Mismo patrón que `allProximoRows` del root.
+    private var profileProximoRows: [ProximoRow] {
+        let today = Calendar.current.startOfDay(for: Date())
+        let tripsByIso: [String: [Trip]] = Dictionary(grouping: trips, by: { $0.isoCode })
+        var rows: [ProximoRow] = []
+        for country in countries where country.status == .wantToVisit {
+            let futureTrips = (tripsByIso[country.isoCode] ?? [])
+                .filter { Calendar.current.startOfDay(for: $0.dateFrom) > today }
+                .sorted { $0.dateFrom < $1.dateFrom }
+            if futureTrips.isEmpty {
+                rows.append(ProximoRow(id: "c_\(country.isoCode)", country: country, trip: nil))
+            } else {
+                for trip in futureTrips {
+                    let tid = "\(trip.isoCode)_\(trip.createdAt.timeIntervalSince1970)"
+                    rows.append(ProximoRow(id: tid, country: country, trip: trip))
+                }
+            }
+        }
+        let futureIsoCodes = Set(trips.compactMap { trip -> String? in
+            guard Calendar.current.startOfDay(for: trip.dateFrom) >= today else { return nil }
+            return trip.isoCode
+        })
+        for country in countries where country.status == .visited && futureIsoCodes.contains(country.isoCode) {
+            let nearestTrip = (tripsByIso[country.isoCode] ?? [])
+                .filter { Calendar.current.startOfDay(for: $0.dateFrom) >= today }
+                .min(by: { $0.dateFrom < $1.dateFrom })
+            rows.append(ProximoRow(id: "v_\(country.isoCode)", country: country, trip: nearestTrip))
+        }
+        return rows
+    }
+
     // Filas de finalizados para un año concreto (duplicado del helper homónimo
     // en ContentView, aquí dentro de ProfileSheet para que el sheet pueda montarse
     // desde el propio perfil y presentarse al instante al tocar "Finalizados").
@@ -3424,7 +3745,11 @@ struct ProfileSheet: View {
         if earnedPassportZones.contains(zoneKey) { return true }
         let quadrants = (allPassportQuadrants[zoneKey] ?? []).filter { $0.position >= 0 }
         guard !quadrants.isEmpty else { return false }
-        return quadrants.allSatisfy { q in q.candidateIsoCodes.allSatisfy { visitedIsoCodes.contains($0) } }
+        let zoneNameLower = AchievementKind.zoneName(forPassportKey: zoneKey)
+        return quadrants.allSatisfy { q in
+            let filtered = zoneNameLower.map { AchievementKind.filterCandidatesForZone(q.candidateIsoCodes, zoneName: $0, assignments: multiContinentAssignments, quadrantTitle: q.title) } ?? q.candidateIsoCodes
+            return filtered.allSatisfy { visitedIsoCodes.contains($0) }
+        }
     }
 
     private func isAchieved(_ kind: AchievementKind) -> Bool {
@@ -3683,7 +4008,7 @@ struct ProfileSheet: View {
                         countries: countries,
                         features: allFeatures,
                         trips: trips,
-                        onProximosTap: onProximosTap,
+                        onProximosTap: { proximosShown = true },
                         onFinalizadosTap: { year in
                             finalizadosPayload = FinalizadosSheetPayload(year: year)
                         }
@@ -3775,6 +4100,121 @@ struct ProfileSheet: View {
         }
         .sheet(isPresented: $showSubscriptionFromProfile) {
             SubscriptionSheet()
+        }
+        .sheet(isPresented: $proximosShown) {
+            StatusListSheet(
+                filter: .wantToVisit,
+                countries: [],
+                proximoRows: profileProximoRows,
+                features: allFeatures,
+                trips: trips,
+                onRemove: { country in
+                    let today = Calendar.current.startOfDay(for: Date())
+                    for trip in trips where trip.isoCode == country.isoCode {
+                        if Calendar.current.startOfDay(for: trip.dateFrom) >= today {
+                            modelContext.delete(trip)
+                        }
+                    }
+                    if country.status == .wantToVisit {
+                        country.status = .none
+                        country.plannedDate = nil
+                        country.plannedDateTo = nil
+                        country.transport = nil
+                        country.plannedTitle = nil
+                    }
+                    try? modelContext.save()
+                },
+                onSetDate: { country, trip in
+                    if let trip = trip {
+                        proximosShown = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            editingProximoTrip = trip
+                        }
+                    } else {
+                        proximosShown = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            pendingProximoCountryForDate = country
+                        }
+                    }
+                },
+                onRemoveProximo: { row in
+                    let today = Calendar.current.startOfDay(for: Date())
+                    let country = row.country
+                    if let trip = row.trip {
+                        modelContext.delete(trip)
+                        let tripID = ObjectIdentifier(trip)
+                        let remaining = trips.filter {
+                            $0.isoCode == country.isoCode &&
+                            ObjectIdentifier($0) != tripID &&
+                            Calendar.current.startOfDay(for: $0.dateFrom) > today
+                        }.sorted { $0.dateFrom < $1.dateFrom }
+                        if let earliest = remaining.first {
+                            country.plannedDate = earliest.dateFrom
+                            country.plannedDateTo = earliest.dateTo
+                            country.transport = earliest.transport
+                            country.plannedTitle = earliest.title
+                        } else {
+                            country.status = .none
+                            country.plannedDate = nil
+                            country.plannedDateTo = nil
+                            country.transport = nil
+                            country.plannedTitle = nil
+                        }
+                    } else {
+                        country.status = .none
+                        country.plannedDate = nil
+                        country.plannedDateTo = nil
+                        country.transport = nil
+                        country.plannedTitle = nil
+                    }
+                    try? modelContext.save()
+                },
+                onDeleteAll: {
+                    let today = Calendar.current.startOfDay(for: Date())
+                    for c in countries where c.status == .wantToVisit {
+                        let iso = c.isoCode
+                        let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                        for t in modelContext.fetchOrWarn(desc) {
+                            if Calendar.current.startOfDay(for: t.dateFrom) > today { modelContext.delete(t) }
+                        }
+                        c.status = .none; c.plannedDate = nil; c.plannedDateTo = nil
+                        c.transport = nil; c.plannedTitle = nil
+                    }
+                    for c in countries where c.status == .visited || c.status == .lived {
+                        let iso = c.isoCode
+                        let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                        for t in modelContext.fetchOrWarn(desc) {
+                            if Calendar.current.startOfDay(for: t.dateFrom) > today { modelContext.delete(t) }
+                        }
+                    }
+                    try? modelContext.save()
+                }
+            )
+        }
+        .sheet(item: $editingProximoTrip) { trip in
+            EditTripSheet(trip: trip, isForFuture: true, features: allFeatures)
+                .environmentObject(colorTheme)
+        }
+        .sheet(item: $pendingProximoCountryForDate) { country in
+            AddTripSheet(
+                isoCode: country.isoCode,
+                displayName: allFeatures.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name,
+                flagEmoji: allFeatures.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐",
+                features: allFeatures,
+                isForFuture: true,
+                onSave: { trip, _ in
+                    modelContext.insert(trip)
+                    country.status = .wantToVisit
+                    if country.plannedDate == nil || trip.dateFrom < country.plannedDate! {
+                        country.plannedDate = trip.dateFrom
+                        country.plannedDateTo = trip.dateTo
+                        country.transport = trip.transport
+                        country.plannedTitle = trip.title
+                    }
+                    try? modelContext.save()
+                }
+            )
+            .environmentObject(colorTheme)
         }
         .sheet(item: $finalizadosPayload) { payload in
             FinalizadosListSheet(
@@ -5003,56 +5443,143 @@ struct ContactSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var messageText = ""
     @State private var showMailComposer = false
+    @FocusState private var editorFocused: Bool
 
-    private let maxChars = 150
+    private let maxChars = 600
+    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
     private var subject: String { "Solicitud de \(username.isEmpty ? "usuario" : username)" }
+    private var trimmed: String { messageText.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Escribe tu mensaje")
-                    .font(.palatino(.subheadline))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 24)
-
-                ZStack(alignment: .bottomTrailing) {
-                    TextEditor(text: $messageText)
-                        .font(.palatino(.body))
-                        .padding(12)
-                        .frame(minHeight: 140, maxHeight: 180)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-                        .onChange(of: messageText) { _, new in
-                            if new.count > maxChars { messageText = String(new.prefix(maxChars)) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    // Header con icono + texto
+                    HStack(alignment: .top, spacing: 14) {
+                        ZStack {
+                            Circle().fill(accent.opacity(0.12)).frame(width: 44, height: 44)
+                            Image(systemName: "envelope.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(accent)
                         }
-                    Text("\(messageText.count)/\(maxChars)")
-                        .font(.palatino(.caption))
-                        .foregroundStyle(messageText.count >= maxChars ? .red : .secondary)
-                        .padding(.trailing, 18).padding(.bottom, 10)
-                }
-                .padding(.horizontal, 24)
-
-                Button {
-                    if MFMailComposeViewController.canSendMail() {
-                        showMailComposer = true
-                    } else if let url = URL(string: "mailto:raskmap_soporte@icloud.com?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(messageText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
-                        UIApplication.shared.open(url)
-                        dismiss()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Escríbenos")
+                                .font(.custom("Satoshi-Bold", size: 18))
+                            Text("Cuéntanos qué falta o qué falla. Leemos cada mensaje.")
+                                .font(.palatino(.subheadline))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
                     }
-                } label: {
-                    Text("Enviar")
-                        .font(.palatino(.body, weight: .bold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(messageText.isEmpty ? Color(.systemGray4) : Color.blue,
-                                    in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.white)
-                }
-                .disabled(messageText.isEmpty)
-                .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
 
-                Spacer()
+                    // Recipient pill (read-only) — destinatario visible
+                    HStack(spacing: 10) {
+                        Text("PARA")
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(1.0)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 38, alignment: .leading)
+                        Text("raskmap_soporte@icloud.com")
+                            .font(.custom("Satoshi-Medium", size: 14))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 20)
+
+                    // Subject pill — asunto pre-rellenado
+                    HStack(spacing: 10) {
+                        Text("ASUNTO")
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(1.0)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 60, alignment: .leading)
+                        Text(subject)
+                            .font(.custom("Satoshi-Medium", size: 14))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 20)
+
+                    // Editor del mensaje — body
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("MENSAJE")
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(1.0)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color(.systemGray6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(editorFocused ? accent.opacity(0.4) : Color.clear, lineWidth: 1.5)
+                                )
+                            if messageText.isEmpty {
+                                Text("Hola, me gustaría reportar…\n\n· Bug encontrado:\n· Aeropuerto/aerolínea que falta:\n· Sugerencia:")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(Color(.placeholderText))
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 16)
+                                    .allowsHitTesting(false)
+                            }
+                            TextEditor(text: $messageText)
+                                .font(.palatino(.body))
+                                .scrollContentBackground(.hidden)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .focused($editorFocused)
+                                .frame(minHeight: 200)
+                                .onChange(of: messageText) { _, new in
+                                    if new.count > maxChars { messageText = String(new.prefix(maxChars)) }
+                                }
+                        }
+                        HStack {
+                            Spacer()
+                            Text("\(messageText.count)/\(maxChars)")
+                                .font(.custom("Satoshi-Medium", size: 11))
+                                .foregroundStyle(messageText.count >= maxChars ? .red : .secondary)
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                    .padding(.horizontal, 20)
+
+                    // Botón Enviar
+                    Button {
+                        if MFMailComposeViewController.canSendMail() {
+                            showMailComposer = true
+                        } else if let url = URL(string: "mailto:raskmap_soporte@icloud.com?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(messageText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
+                            UIApplication.shared.open(url)
+                            dismiss()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "paperplane.fill").font(.system(size: 14, weight: .semibold))
+                            Text("Enviar mensaje").font(.custom("Satoshi-Bold", size: 15))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 15)
+                        .background(trimmed.isEmpty ? Color(.systemGray4) : accent,
+                                    in: RoundedRectangle(cornerRadius: 14))
+                    }
+                    .disabled(trimmed.isEmpty)
+                    .padding(.horizontal, 20)
+
+                    Spacer(minLength: 24)
+                }
+                .padding(.top, 12)
             }
-            .padding(.top, 20)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Contacto")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -5071,7 +5598,8 @@ struct ContactSheet: View {
                 )
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .appColorScheme()
     }
 }
@@ -6577,6 +7105,33 @@ struct AddTripSheet: View {
                         let name = feat?.localizedName ?? iso
                         newlyVisitedNames.append("\(flag) \(name)".trimmingCharacters(in: .whitespaces))
                     }
+                } else {
+                    // Future trip: promociona child country a wantToVisit y registra plannedDate.
+                    let countryIso = iso
+                    let desc = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == countryIso })
+                    let segTransport = segsWithIso.first?.transport
+                    let segDateTo = segsWithIso.first?.dateTo
+                    if let countryRecord = modelContext.fetchFirstOrWarn(desc) {
+                        if countryRecord.status != .visited && countryRecord.status != .lived {
+                            countryRecord.status = .wantToVisit
+                            if countryRecord.plannedDate == nil || firstDate < countryRecord.plannedDate! {
+                                countryRecord.plannedDate = firstDate
+                                countryRecord.plannedDateTo = segDateTo
+                                countryRecord.transport = segTransport
+                            }
+                        }
+                    } else {
+                        let feat = features.first { $0.isoCode == iso }
+                        let newCountry = Country(
+                            name: feat?.localizedName ?? iso,
+                            isoCode: iso,
+                            status: .wantToVisit
+                        )
+                        newCountry.plannedDate = firstDate
+                        newCountry.plannedDateTo = segDateTo
+                        newCountry.transport = segTransport
+                        modelContext.insert(newCountry)
+                    }
                 }
             }
         }
@@ -6702,7 +7257,7 @@ struct AddTripSheet: View {
             if !didSave { onCancel?() }
         }
         .sheet(isPresented: $showAddSegment) {
-            AddSegmentSheet(features: features, isForFuture: isForFuture) { seg in
+            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments) { seg in
                 tripSegments.append(seg)
                 // Mantener el array siempre ordenado por fecha de vuelo,
                 // no por orden de inserción — el del 29 aparece antes del 30
@@ -6799,6 +7354,7 @@ struct YearTravelView: View {
 
     private var proximos: [Country] {
         let today = Calendar.current.startOfDay(for: Date())
+        let tripsByIso: [String: [Trip]] = Dictionary(grouping: trips, by: { $0.isoCode })
         let futureIsoCodes = Set(trips.compactMap { trip -> String? in
             guard Calendar.current.startOfDay(for: trip.dateFrom) >= today else { return nil }
             return trip.isoCode
@@ -6806,16 +7362,19 @@ struct YearTravelView: View {
         let visitedWithFuture = countries.filter { $0.status == .visited && futureIsoCodes.contains($0.isoCode) }
         let wantToVisit = countries.filter { $0.status == .wantToVisit }
         let all = (wantToVisit + visitedWithFuture)
+        // Próxima fecha REAL del país: la primera fecha futura de cualquier trip
+        // (incluido children). Para países wantToVisit sin trips, fallback al
+        // `plannedDate` legacy. Esto evita que países como "Chipre del Norte"
+        // queden mal ordenados porque su plannedDate sea stale (heredado de
+        // una iteración anterior) y no coincida con su trip futuro real.
         func nextDate(_ country: Country) -> Date? {
-            if country.status == .wantToVisit { return country.plannedDate }
-            return trips.filter { t in
-                t.isoCode == country.isoCode && Calendar.current.startOfDay(for: t.dateFrom) >= today
-            }.min(by: { lhs, rhs in lhs.dateFrom < rhs.dateFrom })?.dateFrom
+            let tripDates = (tripsByIso[country.isoCode] ?? [])
+                .map { Calendar.current.startOfDay(for: $0.dateFrom) }
+                .filter { $0 >= today }
+            if let earliest = tripDates.min() { return earliest }
+            return country.plannedDate
         }
         // Orden fijo: próxima fecha asc + isoCode asc como tiebreaker.
-        // Sin tiebreaker, países con la misma fecha pueden reordenarse entre
-        // renders porque el orden de `countries` y `trips` no es garantizado
-        // estable tras re-fetch de SwiftData.
         return all.sorted { c0, c1 in
             switch (nextDate(c0), nextDate(c1)) {
             case let (a?, b?):
@@ -6825,7 +7384,7 @@ struct YearTravelView: View {
             case (nil, _?):   return false
             case (nil, nil):  return c0.isoCode < c1.isoCode
             }
-        }.prefix(10).map { $0 }
+        }
     }
 
     private var flightCount: Int {
@@ -6870,12 +7429,16 @@ struct YearTravelView: View {
         return count
     }
 
+    /// Devuelve la bandera emoji del país. Si el territorio no tiene bandera
+    /// (Twemoji asset falta o ISO no estándar), devuelve "🌐" como fallback
+    /// para que aparezca en los grids de Próximos/Finalizados con la posición
+    /// cronológica correcta en vez de quedar invisible.
     private func flagEmoji(for country: Country) -> String? {
-        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji
+        features.first(where: { $0.isoCode == country.isoCode })?.flagEmoji ?? "🌐"
     }
 
     private func flagEmoji(for isoCode: String) -> String? {
-        features.first(where: { $0.isoCode == isoCode })?.flagEmoji
+        features.first(where: { $0.isoCode == isoCode })?.flagEmoji ?? "🌐"
     }
 
     var body: some View {
@@ -6934,13 +7497,13 @@ struct YearTravelView: View {
                                 Text("–").font(.palatino(.caption)).foregroundStyle(.secondary)
                             } else {
                                 let flagged = finalizados.compactMap { flagEmoji(for: $0.isoCode) }
-                                FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: true)
+                                FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: true, perRow: 5)
                             }
-                        }.frame(maxWidth: .infinity)
+                        }.frame(maxWidth: .infinity, alignment: .top)
                     }
                     .buttonStyle(.plain)
                     .disabled(onFinalizadosTap == nil || finalizados.isEmpty)
-                    Divider()
+                    Divider().frame(maxHeight: .infinity)
                     Button {
                         onProximosTap?()
                     } label: {
@@ -6950,9 +7513,9 @@ struct YearTravelView: View {
                                 Text("–").font(.palatino(.caption)).foregroundStyle(.secondary)
                             } else {
                                 let flagged = proximos.compactMap { flagEmoji(for: $0) }
-                                FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: false)
+                                FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: false, perRow: 5)
                             }
-                        }.frame(maxWidth: .infinity)
+                        }.frame(maxWidth: .infinity, alignment: .top)
                     }
                     .buttonStyle(.plain)
                     .disabled(onProximosTap == nil)
@@ -6967,7 +7530,7 @@ struct YearTravelView: View {
                             Text("–").font(.palatino(.caption)).foregroundStyle(.secondary)
                         } else {
                             let flagged = finalizados.compactMap { flagEmoji(for: $0.isoCode) }
-                            FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: true)
+                            FlowLayoutCentered(emojis: flagged, year: selectedYear, isLeft: true, perRow: 10)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -6984,14 +7547,19 @@ struct FlowLayoutCentered: View {
     let emojis: [String]
     let year: Int
     let isLeft: Bool
+    /// Máximo de banderas por línea — el grid del año actual usa 5 para que las
+    /// columnas Finalizados/Próximos quepan en mitad del ancho del perfil sin
+    /// recortar emojis. Para años pasados se permite hasta 10 por línea (ancho
+    /// completo).
+    var perRow: Int = 5
     var body: some View {
-        let rows = stride(from: 0, to: emojis.count, by: 10).map {
-            Array(emojis[$0..<min($0+10, emojis.count)])
+        let rows = stride(from: 0, to: emojis.count, by: perRow).map {
+            Array(emojis[$0..<min($0 + perRow, emojis.count)])
         }
         VStack(alignment: .center, spacing: 4) {
             ForEach(rows.indices, id: \.self) { i in
                 HStack(spacing: 6) {
-                    ForEach(rows[i], id: \.self) { e in
+                    ForEach(Array(rows[i].enumerated()), id: \.offset) { _, e in
                         FlagLabel(emoji: e, size: 22)
                     }
                 }
@@ -7198,10 +7766,8 @@ struct PlannedDatePickerSheet: View {
         let initial = existingDate ?? tomorrow
         let from = max(initial, tomorrow)
         _dateFrom = State(initialValue: from)
-        let defaultTo = existingDateTo
-                      ?? cal.date(byAdding: .day, value: 1, to: from)
-                      ?? from.addingTimeInterval(86_400)
-        _dateTo = State(initialValue: defaultTo)
+        // Sin fecha de vuelta por defecto. Si ya existía una al editar, se respeta.
+        _dateTo = State(initialValue: existingDateTo)
         _selectedTransport = State(initialValue: existingTransport)
         _tripTitle = State(initialValue: existingTitle ?? "")
     }
@@ -7429,6 +7995,7 @@ private struct confirmCardContent: View {
     let accent: Color
     let onSave: () -> Void
     let onCancel: () -> Void
+    @State private var isSaving: Bool = false
 
     var body: some View {
         ZStack {
@@ -7488,20 +8055,31 @@ private struct confirmCardContent: View {
                 Rectangle().fill(Color(.systemGray5)).frame(height: 0.5)
 
                 HStack(spacing: 10) {
-                    Button { onCancel() } label: {
+                    Button { if !isSaving { onCancel() } } label: {
                         Text("Cancelar")
                             .font(.custom("Satoshi-Medium", size: 15))
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
                             .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 12))
                             .foregroundStyle(.primary)
-                    }.buttonStyle(.plain)
-                    Button { onSave() } label: {
-                        Text("Guardar")
-                            .font(.custom("Satoshi-Bold", size: 15))
-                            .frame(maxWidth: .infinity).padding(.vertical, 14)
-                            .background(accent, in: RoundedRectangle(cornerRadius: 12))
-                            .foregroundStyle(.white)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.plain).disabled(isSaving)
+                    Button {
+                        guard !isSaving else { return }
+                        isSaving = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                            onSave()
+                        }
+                    } label: {
+                        Group {
+                            if isSaving {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Guardar").font(.custom("Satoshi-Bold", size: 15))
+                            }
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(accent, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                    }.buttonStyle(.plain).disabled(isSaving)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 14)
             }
@@ -7711,7 +8289,7 @@ struct TransportStatsSheet: View {
 
     private var topSeats: [(seat: String, count: Int)] {
         var counts: [String: Int] = [:]
-        for trip in pastTrips {
+        for trip in pastTrips where !trip.isSegmentChild {
             let segs = trip.tripSegments
             if segs.isEmpty {
                 if trip.transport == "✈️", let info = trip.flightDetails {
@@ -7737,7 +8315,7 @@ struct TransportStatsSheet: View {
 
     private var topSeatPositions: [(position: String, count: Int)] {
         var counts: [String: Int] = [:]
-        for trip in pastTrips {
+        for trip in pastTrips where !trip.isSegmentChild {
             let segs = trip.tripSegments
             if segs.isEmpty {
                 if trip.transport == "✈️", let info = trip.flightDetails {
@@ -8160,6 +8738,7 @@ struct CountryTripsSheet: View {
     @State private var confirmDelete: Trip? = nil
     @State private var showDeleteConfirm: Bool = false
     @State private var showCounterInfo: Bool = false
+    @State private var showLivedHereInfo: Bool = false
     @State private var editingTrip: Trip? = nil
     @State private var sortNewestFirst: Bool = true
     @State private var showSortToast: Bool = false
@@ -8182,7 +8761,15 @@ struct CountryTripsSheet: View {
                         get: { country.hasLived },
                         set: { country.hasLived = $0; try? modelContext.save() }
                     )) {
-                        Text("He vivido aquí").font(.palatino(.body))
+                        HStack(spacing: 6) {
+                            Text("He vivido aquí").font(.palatino(.body))
+                            Button { showLivedHereInfo = true } label: {
+                                Image(systemName: "info.circle")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
                 Section(header: Text("Visitas manuales").font(.palatino(.caption, weight: .bold))) {
@@ -8325,6 +8912,37 @@ struct CountryTripsSheet: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showCounterInfo)
+        .overlay {
+            if showLivedHereInfo {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea()
+                        .onTapGesture { showLivedHereInfo = false }
+                    VStack(spacing: 16) {
+                        Text("He vivido aquí")
+                            .font(.palatino(.subheadline, weight: .bold))
+                        Text("Marca este país como uno en el que has vivido. Aparecerá una 🏠 junto a su contador en la lista de visitados y se contabiliza como visitado en todas las stats.")
+                            .font(.palatino(.body))
+                            .multilineTextAlignment(.center)
+                        Button {
+                            showLivedHereInfo = false
+                        } label: {
+                            Text("Cerrar")
+                                .font(.palatino(.body, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 32)
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showLivedHereInfo)
         .overlay {
             if showSortToast {
                 VStack(spacing: 10) {
@@ -9001,6 +9619,19 @@ struct EditTripSheet: View {
                                 country.status = .visited
                                 country.plannedDate = nil; country.plannedDateTo = nil; country.transport = nil
                             }
+                        } else {
+                            let countryIso = iso
+                            let dd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == countryIso })
+                            if let country = modelContext.fetchFirstOrWarn(dd) {
+                                if country.status != .visited && country.status != .lived {
+                                    country.status = .wantToVisit
+                                    if country.plannedDate == nil || d < country.plannedDate! {
+                                        country.plannedDate = d
+                                        country.plannedDateTo = dTo
+                                        country.transport = t
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -9304,7 +9935,7 @@ struct EditTripSheet: View {
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(showSaveConfirmation)
         .sheet(isPresented: $showAddSegment, onDismiss: { editingSegment = nil }) {
-            AddSegmentSheet(features: features, isForFuture: isForFuture, initialSegment: editingSegment) { seg in
+            AddSegmentSheet(features: features, isForFuture: isForFuture, initialSegment: editingSegment, existingSegments: tripSegments) { seg in
                 // Reemplaza por id si ya existe (edición), o añade (creación).
                 if let idx = tripSegments.firstIndex(where: { $0.id == seg.id }) {
                     tripSegments[idx] = seg
@@ -9764,7 +10395,7 @@ struct MapExportSheet: View {
             }
             .sheet(item: $selectedQuadrant) { q in
                 let visitedSet = Set(visitedCountries.map { $0.isoCode })
-                QuadrantDetailSheet(quadrant: q, features: features, visitedIsoCodes: visitedSet, countingModeRaw: countingModeRaw)
+                QuadrantDetailSheet(quadrant: q, features: features, visitedIsoCodes: visitedSet, countingModeRaw: countingModeRaw, zoneName: selectedZone.zoneName, multiContinentAssignments: multiContinentAssignments)
             }
             .alert("¿Eliminar lista?", isPresented: Binding(
                 get: { quadrantToDelete != nil },
@@ -9796,7 +10427,14 @@ struct MapExportSheet: View {
         let visitedSet = Set(visitedCountries.map { $0.isoCode })
         let currentMode = CountingMode(rawValue: countingModeRaw) ?? .all
         if let q = slots[index] {
-            let activeCodes = q.candidateIsoCodes.filter { currentMode.counts($0) }
+            let zoneFiltered = AchievementKind.filterCandidatesForZone(
+                q.candidateIsoCodes,
+                zoneName: selectedZone.zoneName,
+                assignments: multiContinentAssignments,
+                quadrantTitle: q.title
+            )
+            let zoneFilteredSet = Set(zoneFiltered)
+            let activeCodes = q.candidateIsoCodes.filter { zoneFilteredSet.contains($0) && currentMode.counts($0) }
             let cnt = activeCodes.filter { visitedSet.contains($0) }.count
             ZStack(alignment: .topTrailing) {
                 Button { if !isEditingQuadrants { selectedQuadrant = q } } label: {
@@ -10077,10 +10715,19 @@ struct AddQuadrantSheet: View {
         dismiss()
     }
 
+    /// ISOs de países pluricontinentales — siempre seleccionables en cualquier
+    /// zona (Europa/Asia/MedioOriente/etc.) independientemente de la asignación
+    /// en Ajustes, para que un país como Chipre pueda meterse en cuadrantes
+    /// tanto europeos como asiáticos sin restricciones.
+    private static let pluriIsoCodes: Set<String> = ["RUS", "TUR", "CYP", "AZE", "GEO", "KAZ", "EGY"]
+
     private var flaggedFeatures: [CountryFeature] {
         features.filter {
-            $0.flagEmoji != nil &&
-            zone.isoCodes.contains($0.isoCode) &&
+            // En modo `all` (todos los territorios) mostramos también los que no
+            // tienen bandera para que sean elegibles. En el resto de modos
+            // (un/unPlus) seguimos exigiendo bandera.
+            (countingMode == .all || $0.flagEmoji != nil) &&
+            (zone.isoCodes.contains($0.isoCode) || Self.pluriIsoCodes.contains($0.isoCode)) &&
             countingMode.counts($0.isoCode)
         }.sorted { $0.localizedName.localizedCompare($1.localizedName) == .orderedAscending }
     }
@@ -10109,7 +10756,7 @@ struct AddQuadrantSheet: View {
                             }
                         } label: {
                             HStack {
-                                FlagLabel(emoji: feature.flagEmoji ?? "", size: 17)
+                                FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 17)
                                 Text(feature.localizedName)
                                     .font(.palatino(.body))
                                     .foregroundStyle(.primary)
@@ -10152,14 +10799,30 @@ struct QuadrantDetailSheet: View {
     let features: [CountryFeature]
     let visitedIsoCodes: Set<String>
     let countingModeRaw: String
+    var zoneName: String? = nil
+    var multiContinentAssignments: [String: String] = [:]
 
     @Environment(\.dismiss) private var dismiss
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
-    // Solo los candidatos que el modo de conteo activo reconoce
+    /// Candidatos filtrados por modo de conteo Y por asignaciones pluricontinentales:
+    /// si un país pluri (ej. Chipre) está asignado a otra zona en Ajustes, no aparece
+    /// en cuadrantes de zonas distintas. Excepción: cuadrantes UE no se filtran.
     private var activeCandidates: [String] {
-        quadrant.candidateIsoCodes.filter { countingMode.counts($0) }
+        let zoneFiltered: [String]
+        if let zoneName {
+            zoneFiltered = AchievementKind.filterCandidatesForZone(
+                quadrant.candidateIsoCodes,
+                zoneName: zoneName,
+                assignments: multiContinentAssignments,
+                quadrantTitle: quadrant.title
+            )
+        } else {
+            zoneFiltered = quadrant.candidateIsoCodes
+        }
+        let allowed = Set(zoneFiltered)
+        return quadrant.candidateIsoCodes.filter { allowed.contains($0) && countingMode.counts($0) }
     }
 
     private var visited: [CountryFeature] {
@@ -10489,7 +11152,7 @@ struct MedalleroSheet: View {
         .sheet(isPresented: $showList1) {
             PersonalListSheet(title: $list1Title, content: $list1Content)
         }
-        .fullScreenCover(isPresented: $showSubjectiveCategories) {
+        .sheet(isPresented: $showSubjectiveCategories) {
             SubjectiveCategoriesSheet(
                 allFeatures: allFeatures,
                 visitedIsoCodes: visitedIsoCodes
@@ -10647,9 +11310,9 @@ struct PersonalAwardSheet: View {
 // MARK: - Categorías subjetivas (medallero)
 
 enum SubjectiveCategory: String, CaseIterable, Identifiable {
-    case overrated, underrated, dirtiest, safestNight, mostDangerous,
+    case overrated, underrated, cleanest, dirtiest, safestNight, mostDangerous,
          friendliestLocals, rudestTourists, bestStreetFood, cultureShock,
-         hardestLanguage, cleanest
+         hardestLanguage
 
     var id: String { rawValue }
 
@@ -10693,12 +11356,40 @@ struct SubjectiveCategoriesSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage("subjectiveCategoriesTable") private var tableRaw: String = "{}"
+    @AppStorage("subjectiveCategoriesOrder") private var orderRaw: String = "[]"
     @State private var editing: EditTarget? = nil
+    @State private var isReordering: Bool = false
 
     struct EditTarget: Identifiable {
         let category: SubjectiveCategory
         let medal: ProfileSheet.MedalSlot
         var id: String { category.rawValue + "_" + medal.rawValue }
+    }
+
+    private func decodeOrder() -> [SubjectiveCategory] {
+        let stored: [String]
+        if let data = orderRaw.data(using: .utf8),
+           let arr = try? JSONDecoder().decode([String].self, from: data) {
+            stored = arr
+        } else {
+            stored = []
+        }
+        var seen = Set<String>()
+        var ordered: [SubjectiveCategory] = []
+        for raw in stored {
+            if let cat = SubjectiveCategory(rawValue: raw), seen.insert(raw).inserted {
+                ordered.append(cat)
+            }
+        }
+        for cat in SubjectiveCategory.allCases where seen.insert(cat.rawValue).inserted {
+            ordered.append(cat)
+        }
+        return ordered
+    }
+    private func saveOrder(_ cats: [SubjectiveCategory]) {
+        let arr = cats.map(\.rawValue)
+        let data = (try? JSONEncoder().encode(arr)) ?? Data()
+        orderRaw = String(data: data, encoding: .utf8) ?? "[]"
     }
 
     // MARK: - Persistencia en AppStorage
@@ -10741,14 +11432,36 @@ struct SubjectiveCategoriesSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 10) {
-                    ForEach(SubjectiveCategory.allCases) { cat in
-                        categoryRow(cat)
+            Group {
+                if isReordering {
+                    List {
+                        ForEach(decodeOrder()) { cat in
+                            HStack(spacing: 10) {
+                                Text(cat.emoji).font(.system(size: 18))
+                                Text(cat.title).font(.palatino(.body, weight: .bold))
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .onMove { indices, newOffset in
+                            var current = decodeOrder()
+                            current.move(fromOffsets: indices, toOffset: newOffset)
+                            saveOrder(current)
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    .environment(\.editMode, .constant(.active))
+                } else {
+                    ScrollView {
+                        VStack(spacing: 10) {
+                            ForEach(decodeOrder()) { cat in
+                                categoryRow(cat)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 16)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 16)
             }
             .navigationTitle("Categorías personales")
             .navigationBarTitleDisplayMode(.inline)
@@ -10756,6 +11469,12 @@ struct SubjectiveCategoriesSheet: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(isReordering ? "Listo" : "Editar") {
+                        withAnimation { isReordering.toggle() }
+                    }
+                    .font(.palatino(.body, weight: isReordering ? .bold : .regular))
                 }
             }
         }
@@ -11014,7 +11733,7 @@ struct FlagAlphabetSheet: View {
                 .padding(.vertical, 16)
                 .blur(radius: isRaskmapPro ? 0 : 10)
                 .allowsHitTesting(isRaskmapPro)
-                .overlay {
+                .overlay(alignment: .top) {
                     if !isRaskmapPro {
                         Button { showSubscription = true } label: {
                             VStack(spacing: 10) {
@@ -11025,7 +11744,8 @@ struct FlagAlphabetSheet: View {
                                     .font(.palatino(.body, weight: .bold))
                                     .foregroundStyle(.purple)
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 32)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -11226,7 +11946,7 @@ struct MultiHemisphereSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 20)
             }
-            .navigationTitle("Países en más de un hemisferio")
+            .navigationTitle("Países plurihemisferiales")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {

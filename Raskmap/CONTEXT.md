@@ -1,5 +1,732 @@
 # CONTEXT.md — Raskmap
 
+## Cambios recientes (2026-05-03)
+
+Iteración con foco en (a) consistencia entre perfil/widgets para órdenes y
+fallbacks, (b) el algoritmo `daysPerCountry` reescrito por tercera vez para
+soportar escalas como días compartidos, (c) Swift 6 strict concurrency para
+`FlightInfo`, y (d) afinado UX de modo vuelo + cuadrantes pluricontinentales.
+
+### Algoritmo `daysPerCountry` — reescritura completa (Trip.swift)
+
+**Modelo conceptual nuevo (`_DaySet` por día, no `_DayClaim`)**: cada día
+puede pertenecer a MÚLTIPLES países simultáneamente cuando hay tránsito o
+escalas — antes era 1 día = 1 país (mejor priority gana). Ahora `_DaySet`
+tiene `isos: Set<String>` y la regla es:
+- Prioridad menor REEMPLAZA por completo el set.
+- Prioridad igual AÑADE el iso al set existente (set unión).
+- Prioridad mayor: ignora.
+
+**Prioridades**:
+- 100 — segmento no-✈️ multi-día. Reemplaza ambient del primary.
+- 200+len — trip hijo (`isSegmentChild`).
+- 1000+len — trip primario "ambient".
+
+**Reglas clave**:
+1. **Segmentos ✈️ NO reclaman su rango como destino** — sus fechas son los
+   días del vuelo (ida/vuelta), no la estancia. El ambient del trip cubre
+   esos días. Antes contábamos el destino entero del segmento ✈️ y eso
+   pisaba excursiones a otros países (caso HKG-MAC-CHN-HKG → daba HKG=11).
+2. **Excursión de día (single-day)**: si `seg.dateTo == nil` o
+   `seg.dateTo == seg.dateFrom`, el destino se reclama con `tripPriority`
+   (mismo prio que ambient → set unión). Resultado: el día cuenta tanto
+   para el destino como para el primary del trip. Caso Macedonia + Kosovo
+   ida/vuelta mismo día → MKD=7, KOS=1 (no MKD=6, KOS=1).
+3. **Estancia multi-día**: `dateFrom < dateTo` → prio 100 (reemplaza).
+   Casos como bus a MAC 16-17 dentro de viaje a HKG → MAC se queda con
+   16-17, HKG ambient pierde esos días.
+4. **Layovers ✈️**: se reclaman tanto en `segDateFrom` como `segDateTo`
+   (ida y vuelta) con `tripPriority` → set unión con primary. Caso
+   Macedonia con escala BEG ida+vuelta → SRB=2 días, MKD sigue contando
+   esos 2 días también.
+5. **Layovers no-✈️**: solo en `segStart` con `tripPriority` (set unión).
+6. **Layovers de trip legacy** (`t.visitedLayoverISOs` sin segments):
+   reclamados en `tFrom` y `tTo` con `tripPriority`.
+7. **Children no compiten con su primary**: si un trip primary cubre el
+   rango con sus segments y existen children del mismo `segmentGroupID`,
+   los children se SALTAN en `daysPerCountry`. Antes los children (trips
+   de 1 día con prio 200+1=201) ganaban por prioridad y robaban días al
+   primary, dando counts incorrectos (típicamente el destino del primary
+   perdía 2 días por trip).
+
+**Verificación con casos reales** (en log del usuario):
+- HK 15-25 con bus MAC 16-17, pie CHN 17-21, tren HKG 21-25: HKG=6, MAC=2, CHN=5 ✓
+- Macedonia 12-18 con escala BEG ida+vuelta + Kosovo día 14: MKD=7, SRB=2, KOS=1 ✓
+
+### `FlightInfo` — Codable manual nonisolated (Swift 6)
+
+**Problema**: Swift 6 inferia que la conformancia `Codable` sintetizada de
+`FlightInfo` era `@MainActor`-isolated por estar en el mismo módulo que
+`@Model class Trip`. Cualquier llamada desde computed properties del @Model
+disparaba "Main actor-isolated conformance ... cannot be used in nonisolated
+context" — error compilación en Swift 6 strict mode.
+
+**Solución en 3 pasos**:
+1. Mover `FlightInfo` y `FlightLegInfo` a fichero propio `FlightInfo.swift`
+   (fuera de Trip.swift para no heredar isolation del @Model).
+2. Marcar ambos struct como `Codable, Equatable, Sendable` y proporcionar
+   conformancia Codable MANUAL (init/encode explícitos con `CodingKeys`)
+   en `extension`. La sintetizada hereda contexto, la manual no.
+3. Helpers nonisolated `decodeFlightInfo(from:)` y `encodeFlightInfo(_:)`
+   como funciones libres en FlightInfo.swift. `Trip.flightDetails` getter/
+   setter delega en estas helpers — el JSON encoder/decoder se invoca
+   siempre desde nonisolated context.
+
+`Codable` para `FlightLegInfo` también manual con init `decodeIfPresent` para
+ser tolerante a campos faltantes en datos legacy.
+
+### Bug fallback emoji en `proximos` del perfil
+
+**Síntoma**: en el perfil, año actual, sección Próximos, el emoji 🌐
+(fallback de territorio sin bandera, p.ej. Chipre del Norte) aparecía en
+posición incorrecta — entre Brasil y Argentina en vez de al final tras Chipre.
+El widget grande sí mostraba el orden correcto.
+
+**Causa raíz**: `ProfileSheet.proximos` ordenaba países wantToVisit por
+`country.plannedDate` directamente. Para países pluricontinentales o segmentos
+hijos, `plannedDate` puede quedar STALE — lo seteamos al guardar el segmento
+pero si el usuario edita el viaje varias veces o el segmento se reasigna,
+queda con la fecha de una iteración anterior.
+
+**Fix**: `proximos` ahora calcula `nextDate(country)` buscando primero la
+fecha más temprana de cualquier trip futuro del país (incluyendo children),
+y solo cae a `country.plannedDate` como fallback. Misma fuente de verdad
+que `allProximosFlagsString` del widget.
+
+### Modo vuelo — pulido
+
+**Botón mapa**: el icono `map.fill` cuando `flightMode == true` usaba color
+cobalto fijo. Cambiado a `.primary` → blanco en dark mode, negro en light.
+
+**Contador encima de los botones**: `flightFilterRow()` muestra un Text
+"X vuelos finalizados" / "X vuelos próximos" centrado encima del slider.
+Cuenta tramos reales contando ida + vuelta + repetidos: 30× MAD-BCN ida y
+vuelta = 60 vuelos.
+
+**Etiqueta del slider**: "Visitados" → "Finalizados" para coherencia con
+el resto del perfil.
+
+### Cuadrantes Mi Mapa — pluricontinentales libres
+
+**Cambio de criterio del usuario**: antes filtrábamos pluricontinentales
+(CYP, RUS, TUR, etc.) en cuadrantes según `multiContinentRaw`. Ahora el
+usuario quiere que el filtro NO se aplique — un país pluri puede estar en
+cuadrantes de cualquier zona, independiente de la asignación. Cyprus
+puede estar en cuadrante de Europa Y de Asia simultáneamente.
+
+`AchievementKind.filterCandidatesForZone()` ahora devuelve los isos sin
+filtrar. La asignación pluri sigue afectando a los achievements de
+continentes (`adjustSet`) pero NO a los cuadrantes de usuario.
+
+**Conteo all incluye territorios sin bandera**: `AddQuadrantSheet` ahora
+muestra como elegibles los territorios sin `flagEmoji` cuando el modo de
+conteo es `.all` (249 territorios). Antes los filtraba con `flagEmoji != nil`.
+Render con `FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 17)` para que
+el fallback se vea uniforme.
+
+**Pluri ISOs siempre seleccionables**: `AddQuadrantSheet.flaggedFeatures`
+ahora incluye `Self.pluriIsoCodes` (CYP, RUS, TUR, AZE, GEO, KAZ, EGY) en
+TODAS las zonas, no solo las que coinciden con `zone.isoCodes`. Así el
+usuario puede meter Cyprus en un cuadrante de Asia incluso si geográficamente
+no está en `Asia.isoCodes`.
+
+### Widget grande pantalla principal
+
+- "ÚLTIMOS VISITADOS" → "ÚLTIMOS" (más corto, mismo significado).
+- `prefix(5)` en `topVisitedFlags` → `prefix(9)` para Próximos y Últimos
+  (uniformidad).
+- `flagStrip(title:)` width 100 → 70 para acomodar etiquetas más cortas.
+
+### Widget mediano
+
+- Strip de próximos: `prefix(6) size 17 spacing 5` → `prefix(9) size 15 spacing 4`
+  para que quepan 9 banderas con spacing uniforme.
+- `FlagLabel` fallback (🌐, ✈️) ahora tiene `frame(width: size, height: size)`
+  para que el bounding box coincida con la versión Twemoji — antes los
+  fallbacks tenían tamaño distinto y dejaban "huecos raros" entre flag 5 y 6.
+
+### Widget grande de vuelos (mapa) — `RaskmapFlightWidget`
+
+**Implementación**: nuevo widget large que muestra una captura del mapa con
+la ruta del próximo vuelo dibujada como línea geodésica (gran-círculo).
+
+**Generación del snapshot** (`WidgetDataWriter.syncNextFlightSnapshot`):
+1. Bounding region calculada con sample paramétrico de 64 puntos a lo
+   largo de la geodésica entre dep y arr (no straight-line lat/lng porque
+   los grandes círculos se desvían mucho — sin esto el snapshot saldría
+   mal cuadrado para vuelos transcontinentales).
+2. Padding 1.6× en lat/lon delta para que la línea no quede tangente al
+   borde.
+3. `MKMapSnapshotter` con `mutedStandard` map type, escala 2x.
+4. Dibujado custom encima del snapshot: línea geodésica 96 puntos en
+   cobalto 0.95 alpha, line width 3pt round caps. Marcadores 14pt en
+   cada extremo (anillo blanco + relleno cobalto).
+5. PNG escrito al App Group container como `next_flight_map.png`.
+6. `WidgetCenter.shared.reloadAllTimelines()` tras escribir.
+
+**Helper en ContentView `nextFlightAirportsAny()`**: busca el primer trip ✈️
+futuro de TODOS los trips (no solo el del banner del próximo viaje), para
+que el widget de mapa siempre encuentre algo aunque el banner sea de un
+viaje no-✈️.
+
+**Layout del widget**:
+- Fondo: snapshot del mapa o gradiente nocturno (cobalto + azul medianoche).
+- Overlay con info del vuelo (solo si `nextDays >= 0`):
+  - Pill IATA `MAD → BCN` arriba a la derecha.
+  - HStack inline con bandera, título del viaje (o nombre del país) y
+    countdown `• N días`.
+  - Padding bottom 38 para mantener el bloque en la posición visual de
+    cuando había una tercera línea de countdown debajo.
+- Si la imagen no está aún (snapshotter async la primera vez), muestra
+  el gradiente con la info del vuelo encima — NO "Sin próximo vuelo"
+  como hacía la primera versión que solo chequeaba `imagePath`.
+
+### Tipografía de widgets unificada
+
+Todos los números/textos en widgets pasan a `Satoshi-Bold/Medium/Regular`
+desde `Palatino-Bold` y `system(size:)`. Mantienen `system(size:)` solo los
+emojis (✈️, 🗺️) que necesitan render del sistema. Aplica a SmallView,
+MediumView, LargeView, FlightMapWidgetView.
+
+### `FlightFilterSlider` etiqueta + contador
+
+Etiqueta "Visitados" → "Finalizados". Función `flightLegsCount(filter:)`
+nueva: cuenta tramos reales (not unique routes) con `airports.count - 1` por
+segmento ✈️ + `tripAirports.totalTouches / 2` para legacy. Counts ida + vuelta
++ duplicados (30× MAD-BCN = 60).
+
+### Bug visual del CountryBottomSheet (drag indicator)
+
+Reescrito el header del sheet con `padding(.top, 36)` adicional + `frame(width: 80, height: 80)` en el contenedor del flag para que el drag indicator del sheet no tape la bandera Twemoji. `isoA2` se pasa explícitamente para evitar fallback Text→Twemoji conversion lag en el primer render.
+
+Bottom "Cerrar" eliminado — el drag indicator + sheet dismiss bastan.
+
+### `SubjectiveCategoriesSheet` — reorder + sheet en vez de fullScreenCover
+
+Antes `.fullScreenCover` (presentación distinta al resto). Ahora `.sheet`
+estándar (consistente con MedalleroSheet padre). Botón "Editar" en toolbar
+trailing → modo reorder con List + `onMove`. Persistencia del orden en
+`@AppStorage("subjectiveCategoriesOrder")` como JSON `[String]` de raw
+values. `decodeOrder()` con seen-set asegura que cualquier nueva categoría
+añadida en el código aparezca al final tras un upgrade sin perder el orden
+del usuario.
+
+### `FlowLayoutCentered` — perRow configurable
+
+Año actual del perfil: 5 banderas por línea (cabe en mitad del ancho del
+perfil con divisor central). Años pasados: 10 por línea (ancho completo).
+Antes había `prefix(10)` que cortaba; ahora `perRow` divide pero muestra
+TODAS las banderas (sin truncar).
+
+### Bug split filter pluri en cuadrantes UE (revertido)
+
+Habíamos añadido un filtro que excluía pluricontinentales según asignación
+de zona. Causaba que CYP desapareciera del cuadrante UE default cuando se
+asignaba CYP a Asia. Revertido: `filterCandidatesForZone` ahora devuelve
+los isos sin tocar — el usuario decide libremente. Mantiene la flexibilidad
+para ediciones futuras (función sigue ahí, solo no filtra).
+
+### Splash + loading overlay rediseñados
+
+`SplashView`: gradiente cobalto profundo (#121B3A → #1E336A → #406EC9), pin
+de mapa centrado en círculos concéntricos, "RASKMAP" tracking 8, subtítulo
+"TU MUNDO, EN UN MAPA" tracking 2. Animación: pin cae con spring + scale
+fade-in. Halo radial cobalto detrás del pin. Footer mantiene v.1.0 + año.
+
+`loadingOverlay()` (mientras carga GeoJSON) replica el estilo de splash
+con misma paleta y pin centrado. Antes era system background con globo
+emoji y "Raskmap" Satoshi-Bold 38. Ahora coherente con la marca.
+
+### `ContactSheet` rediseñada
+
+Antes: TextEditor único de 140-180pt + counter 150 chars + botón "Enviar".
+
+Ahora:
+- Header con icono envelope + "Escríbenos" + subtítulo.
+- Pills "PARA: raskmap_soporte@icloud.com" y "ASUNTO: ..." pre-rellenados
+  visibles read-only.
+- Editor del mensaje con label "MENSAJE", placeholder con ejemplo de
+  estructura ("Bug encontrado / Aeropuerto que falta / Sugerencia"),
+  border focus en cobalto, 200pt min height, contador 600 chars.
+- Botón "Enviar mensaje" con icono paperplane, fondo cobalto.
+- `presentationDetents([.large])` con drag indicator.
+
+### Botón Ayuda en pantalla principal
+
+Esquina superior izquierda (espejo del botón modo vuelo). Mismo formato:
+44×44 circular, regularMaterial, shadow. Icon `questionmark`. Tap abre
+overlay con icono `questionmark.circle.fill` cobalto + texto "Si te
+faltan aeropuertos, aerolíneas o has tenido un bug, repórtalo en
+**Ajustes › Contacto**." + botón "Entendido".
+
+### Próximos en perfil — sheet local en vez de root
+
+Antes `onProximosTap = { statusListFilter = .wantToVisit }` triggereaba un
+sheet en el root, lo que requería cerrar el perfil primero (parpadeo).
+Ahora ProfileSheet tiene `@State proximosShown` + sheet local que presenta
+StatusListSheet con handlers locales (modelContext + countries + trips
+disponibles vía init). `editingProximoTrip` y `pendingProximoCountryForDate`
+también son sheets locales del perfil, con dismissal coordinado vía
+DispatchQueue.main.asyncAfter para evitar conflicto sheet-sobre-sheet.
+
+### `CountryBottomSheet` — toggle Próximos como las otras categorías
+
+`onAddNextTrip` ahora actúa como las otras (visited/bucketList): si el país
+ya está en wantToVisit, abre alert de eliminación en vez de añadir otro
+trip. ActionButton label cambia a "🔜 Añadido a próximos" cuando
+`isProximo == true`.
+
+### Toggle "He vivido aquí" — info button
+
+Junto al texto "He vivido aquí" en el sheet de visitas manuales, botón
+`info.circle` que abre overlay explicando "Marca este país como uno en el
+que has vivido. Aparecerá una 🏠 junto a su contador en la lista de
+visitados y se contabiliza como visitado en todas las stats." Mismo formato
+que el info de "Contador manual".
+
+### Confirm card al guardar — rueda de carga 3s
+
+`confirmCardContent` ahora tiene `@State isSaving: Bool`. Al pulsar
+"Guardar" se desactivan ambos botones, se muestra ProgressView en el
+botón Guardar y tras 3s `DispatchQueue.main.asyncAfter` se ejecuta
+`onSave`. UX: da sensación de "trabajo en marcha", evita doble-tap accidental.
+
+### Bug días por trip transit between segments (Hong Kong - Macao - China - Hong Kong)
+
+Trip 15-25 con seg bus MAC 16-17, seg pie CHN 17-21, seg tren HKG 21-25.
+Resultado correcto ahora: HKG=6 (15, 21, 22, 23, 24, 25), MAC=2 (16, 17),
+CHN=5 (17, 18, 19, 20, 21). Días 17 y 21 cuentan para ambos países (transit
+shared). Ver detalles en sección "Algoritmo daysPerCountry — reescritura".
+
+### Países en más de un hemisferio → Países plurihemisferiales
+
+`MultiHemisphereSheet.navigationTitle` renombrada para coherencia con
+"plurihemisferiales" usado en otros sitios.
+
+### Lock al sheet de abecedario — top alignment
+
+`FlagAlphabetSheet` (sheet con todas las banderas A-Z) cuando no hay Pro:
+overlay del candado pasa de `frame(maxHeight: .infinity)` (centrado) a
+`alignment: .top` con `padding(.top, 32)` — el candado y "Función Pro" se
+ven al instante sin tener que scroll-down.
+
+### Aerolíneas/aeropuertos añadidos
+
+- SkyUp MT (Malta): IATA "SQP", country "MT".
+- Chisinau Internacional: IATA "RMO", country "MD" (alternativo a KIV).
+- Foz do Iguaçu: IATA "IGU", country "BR" (separado de IGR Argentina).
+
+### Bug seats x2 / x3 stats
+
+`TransportStatsSheet.topSeats` y `topSeatPositions` filtraban
+`pastTrips` sin excluir `isSegmentChild`. Children copiaban `seg.flightInfo`
+del primary, así que un asiento "7E" rellenado aparecía 1× primary + 1×
+child = 2× en stats (3× con 2 children). Fix: `where !trip.isSegmentChild`.
+
+### Bug países pluricontinentales en cuadrantes — historia
+
+3 iteraciones del usuario:
+1. "Hazlo dinámico" (filtra según asignación). Implementado con `filterCandidatesForZone`.
+2. "Cyprus tiene que aparecer en cuadrante UE default aunque esté asignado a Asia". Excepción por título del cuadrante (contiene "unión europea").
+3. "Cyprus debe poder participar libremente en cualquier cuadrante donde lo meta el usuario". Filtro completamente removido. Documentado en sección "Cuadrantes Mi Mapa".
+
+### Roadmap pendiente — análisis exhaustivo
+
+#### A. UX flujo viajes/tramos (ranking impacto)
+
+1. **Quick-add path**: pantalla única con país + fechas + transporte + toggle "ida y vuelta?". Wizard largo solo desbloqueado con botón "Personalizar". Hoy 80% de viajes simples requieren los 3 pasos completos del wizard.
+2. **Templates de viaje**: 4 botones grandes en AddTripSheet — *Vuelo simple*, *Round-trip con escala*, *Road-trip*, *Multi-tramo* — pre-rellenan estructura típica.
+3. **Inline edit en EditTripSheet**: cada segmento expandible (chevron) sin reabrir AddSegmentSheet. Botón ✏️ solo abre wizard si el usuario lo pide explícitamente.
+4. **Smart defaults entre tramos**: nuevo tramo defaultea `dateFrom = previousTramo.dateTo ?? previousTramo.dateFrom + 1 día`, mismo destino del previo como origen.
+5. **Búsqueda de aeropuerto por ciudad**: "Milán" → ofrece BGY, MXP, LIN. Hoy hay que conocer el IATA.
+6. **"Aplicar a todos los tramos"** en FlightInfoSection: si rellena clase=Turista para ida, ofrece propagar al resto.
+7. **Preview/timeline del viaje** antes de guardar: lista visual cronológica con bandera + transporte + fechas.
+8. **Botón "Duplicar viaje"** en cards de finalizados.
+9. **"Inverso"**: crear vuelta de un viaje pasado en 1 tap.
+10. **Auto-detect round-trip**: si último aeropuerto = primero, marcar `roundTrip` automáticamente.
+11. **Drag-to-reorder segmentos** en EditTripSheet (reusar infra de mapQuadrants).
+12. **Confirm card con default `Aceptar todo`** + tooltip explicativo del stepper.
+13. **"Hoy" / "Mañana" / "Próxima semana"** chips en date picker.
+14. **Layovers en cualquier transporte** (no solo ✈️): bus que cruza países.
+15. **Importar PNR / archivo .ics** (medio/largo plazo).
+
+#### B. Mejoras generales
+
+**Rendimiento**:
+- Migrar a `@Observable` (iOS 17+). `@Query` re-fetches causan caída de FPS al cerrar sheets.
+- Romper ContentView (>12k líneas) en 6-8 ficheros.
+- Cachear `daysPerCountry` por `tripID` en @State.
+- Pre-indexar `featuresByIso` como dict singleton (hoy `topVisitedFlagsString` es O(n²)).
+- Snapshot del widget de vuelo invalidar solo si dep/arr IATA cambian.
+- `setNeedsDisplayIn(rect:)` solo en región visible al cambiar color (parcialmente hecho).
+
+**Funcionalidad**:
+- Búsqueda global tipo Spotlight (países, ciudades, viajes, aerolíneas).
+- Filtros lista finalizados (transporte, año, país, aerolínea).
+- Export CSV/JSON desde Ajustes (cumple GDPR portabilidad + sirve como backup).
+- Notificaciones (24h y 2h antes, check-in 24h antes para vuelos).
+- Heatmap anual estilo GitHub.
+- Comparativa años en wrapped.
+- Mapa con km volados (great-circle entre IATAs).
+- Sugerencias de países cercanos a uno visitado.
+- Compartir viaje individual (no solo wrapped).
+- Tour guiado en primer launch.
+
+**Estética**:
+- Haptics consistentes (medium save, light toggle, soft swipe).
+- Skeleton screens en lugar de overlay con globo.
+- `.matchedGeometryEffect` entre badge → status sheet.
+- Live Activities con countdown en tiempo real.
+- Onboarding con animación de globo + chips de países.
+
+**Pro features de valor**:
+- Personalización avanzada del widget (4 layouts).
+- Mapa con capa satélite/política/dark.
+- Backup encriptado iCloud separado.
+- Múltiples perfiles (familia/trabajo).
+- Export PDF "memoria de viajes" — book anual.
+
+**Arquitectura**:
+- Tests unitarios para `daysPerCountry` (algoritmo más sensible).
+- Snapshot tests para layouts críticos.
+- OSLog estructurado en lugar de print() condicionales.
+- Localización completa EN.
+- `Sendable` strict en todos los modelos.
+
+**Accesibilidad**:
+- VoiceOver labels en todos los iconos (faltan en flightModeButton, helpButton).
+- Dynamic Type comprobar Satoshi escala bien.
+- Respetar `accessibilityReduceMotion` en wrapped.
+- Contraste cobalto #4072D4 cerca del límite WCAG AA.
+
+#### C. Bugs / checks de testing
+
+| # | Severidad | Bug |
+|---|-----------|-----|
+| 1 | Alta | `FinalizadoTripDetailSheet.daysByCountry` recomputa en cada scroll → FPS drop. Cachear en @State. |
+| 2 | Alta | `cachedNextBanner` se actualiza solo en `onChange(of: trips.count)` — no detecta cambios de fecha de un trip existente. |
+| 3 | Media | Borrar último viaje de país visited no resetea automáticamente `Country.status`. |
+| 4 | Media | EditTripSheet con dateFrom > dateTo (error usuario) puede crashear con date arithmetic negativo. |
+| 5 | Media | `selectedCountry` y `pendingDateCountry` pueden coexistir (tap-spam) → segundo sheet en cola. |
+| 6 | Media | Onboarding se vuelve a mostrar tras reset iCloud (username vacío). Necesita flag local `didShowOnboarding`. |
+| 7 | Baja | TextField username sin `.textInputAutocapitalization(.words)` ni `.autocorrectionDisabled()`. |
+| 8 | Baja | `RangeDatePicker` no respeta locale del usuario para primer día de semana. |
+| 9 | Baja | Live Activity colgada si app cerrada forzosamente — falta cleanup en `applicationWillTerminate`. |
+| 10 | Baja | Confirm card aparece detrás del teclado si TextField tenía focus. |
+| 11 | Visual | CountryBottomSheet en iPhone SE: flag 64pt + título + 4 botones no caben en `.fraction(0.50)`. |
+| 12 | Visual | Wrapped 9:16 deja barras laterales en iPhone Pro Max. |
+| 13 | Visual | Drag indicator del sheet del país tapa parte superior del flag (parcialmente arreglado). |
+| 14 | Visual | Banner countdown se solapa con dock cuando `menuPosition == "top"`. |
+| 15 | Visual | Material `.regularMaterial` casi invisible sobre fondos oscuros. |
+| 16 | Visual | `FlowLayoutCentered` con 9+ banderas en SE puede desbordar. |
+| 17 | Datos | `effectiveEndDate` puede devolver `dateFrom` o `distantPast` según fallback. |
+| 18 | Datos | Trip child huérfano (primary borrado) sigue contando. Cleanup periódico. |
+| 19 | Datos | `tripAirports` con count negativo crashea fórmulas. Clamp `>= 0`. |
+| 20 | Datos | Booking ref con caracteres no-ASCII rompe URL del mailto:. Encode con `.urlPathAllowed`. |
+| 21 | Concurrency | `MKMapSnapshotter` callbacks se solapan — escribe el último que termine, no el último pedido. Cancelar previo. |
+| 22 | Persistencia | `legacyVisitedLayoverISOs` puede contener huérfanos si destination cambia. Intersect no en todas las rutas. |
+| 23 | Wrapped | `WrappedStats` recomputa en `.task` aunque exista `cachedStats`. Guard solo evita render del slide. |
+
+**Smoke checks pre-release** (15 puntos):
+1. Crear viaje pasado simple → guardar → aparece en finalizados, perfil, suma 1 contador.
+2. Crear viaje pasado con escala visitada → escala como país visitado + 1 día.
+3. Crear viaje próximo → marca como Próximos, banner countdown, widget.
+4. Editar viaje pasado: cambiar fecha → todos los stats recalculan.
+5. Borrar viaje → países asociados reevalúan.
+6. Cambiar modo conteo → contadores y % actualizan en mapa, perfil, widget.
+7. Asignar país pluricontinental a otra zona → cuadrantes y % regiones recalculan.
+8. Toggle "He vivido aquí" → 🏠 en lista, suma 1 visita.
+9. Live Activity arranca con próximo viaje, countdown, mata al cancelar Pro.
+10. Widgets pequeño/mediano/grande/vuelo se actualizan en App Group.
+11. Sheets cierran sin warning "multiple sheets".
+12. CloudKit sync entre 2 dispositivos en <30s.
+13. Modo offline: app abre, muestra todo, no crashea.
+14. Cambiar sistema a inglés → fechas y formatos se adaptan.
+15. Dynamic Type XL → textos no se cortan.
+
+#### D. App Store readiness
+
+**Hard blockers**:
+
+| Item | Estado | Acción |
+|------|--------|--------|
+| Privacy Policy URL pública | Falta hostear `docs/` en GitHub Pages (mds preparados) | Crear repo, activar Pages, pegar URL |
+| Apple Developer License $99/año | Pendiente | Pagar antes de todo lo demás |
+| iCloud + CloudKit container | Pendiente activar en Capabilities | `iCloud.com.jaime.raskmap` |
+| App Group | En código sí, en Capabilities pendiente | Activar en cada target |
+| Push Notifications capability | Pendiente (necesario CloudKit) | Activar |
+| In-App Purchase capability | Pendiente | Activar |
+| IAP product en App Store Connect | Pendiente | `com.raskmap.pro.lifetime` Non-Consumable |
+| App Privacy questionnaire | Pendiente | Declarar Data Not Collected |
+| Age Rating | Pendiente | 4+ |
+| App icon 1024×1024 sin transparencia | Hay icon, verificar formato | sRGB sin canal alpha |
+| Screenshots todos los tamaños | Pendiente | 6.9" iPhone 16 Pro Max + 13" iPad |
+| Build TestFlight | Pendiente | Probar IAP en sandbox |
+
+**Soft blockers**:
+- **Restore Purchases button** en SubscriptionSheet (Apple lo exige para Non-Consumable). Falta.
+- **Account deletion / "borrar todos mis datos"** desde Ajustes (limpia SwiftData + CloudKit local + AppStorage). Falta.
+- **Localización mínima**: hoy todo en español hardcoded. Declarar solo `es` o añadir `en`.
+- **Permisos justificados**: `Info.plist` con `NSLocationWhenInUseUsageDescription` claro. Verificar texto.
+- **Crash-free builds**: smoke tests de los 15 checks anteriores.
+- **No menciones a otras tiendas / formas de pago externas** (Patreon, Stripe...).
+- **No strings tipo "TODO" o lorem ipsum visibles**.
+- **Watch app target visible pero placeholder vacío**: completar o quitar del scheme.
+
+**Política de Privacidad — verificar copy in-app == copy pública**:
+Apple compara texto in-app vs URL pública. Si difieren → rechazo. Si en algún
+momento añades AdMob (mencionado en CONTEXT.md como pendiente decidir),
+actualizar AMBAS copies + App Privacy questionnaire.
+
+**Atribuciones técnicas (verificar visibles in-app)**:
+- Twemoji CC-BY 4.0 ✓
+- Natural Earth (Public Domain — opcional pero recomendable)
+- OpenFlights (ODL — atribución requerida)
+- OurAirports (Public Domain — opcional)
+- SF Symbols (Apple license, no requiere atribución)
+
+**Performance reviewers prueban**:
+- Tiempo desde tap hasta interactivo: <3s en iPhone 12.
+- 60fps consistentes en scroll de lista de países.
+- No memory leaks tras 10 min de uso.
+- Battery <5% en 30 min uso normal.
+
+**Orden recomendado**:
+1. Pagar license + activar capabilities (1 día).
+2. Hostear docs/ en GitHub Pages (15 min).
+3. Crear IAP en App Store Connect (1h).
+4. Añadir botón "Restaurar compras" + "Borrar todos mis datos" (2h código).
+5. Smoke test los 15 checks en device físico (1 día).
+6. Capturas + descripción + age rating + privacy questionnaire (medio día).
+7. TestFlight con 3-5 testers reales mínimo 1 semana.
+8. Submit → review típicamente 24-48h.
+
+Más probable rechazo inicial: **falta de Restore Purchases** y/o
+**discrepancia entre política pública y App Privacy questionnaire**.
+
+---
+
+## Cambios recientes (2026-04-27)
+
+Iteración larga sobre QA visual + bugs de propagación de estado. Tres bloques
+de cambios: ajustes de widget/UI/UX, propagación correcta de Quiero→Próximos
+para multi-país, datos extra en aeropuertos/aerolíneas/asientos.
+
+### Task 1 — Widget grande: "ÚLTIMOS VISITADOS" en vez de "MÁS VISITADOS"/"NUEVOS"
+
+**Cambio:** la franja de "MÁS VISITADOS" del widget grande ahora se llama
+"ÚLTIMOS VISITADOS" y se ordena por **fecha del último viaje finalizado**
+(más reciente a la izquierda) en vez de por días totales pasados. Eliminada
+la franja "NUEVOS" (era duplicada visualmente: usaba el mismo dataset
+invertido).
+
+**Sites:**
+- `ContentView.swift` `topVisitedFlagsString` (~línea 384) reescrito: itera
+  trips, registra `lastDateByIso[t.isoCode] = max(end, prev)` solo para fechas
+  pasadas, ordena visited countries por `lastDateByIso[iso] desc, isoCode asc`.
+- `RaskmapWidget.swift` `LargeView` (~línea 481): elimina la 3ª `flagStrip`
+  ("NUEVOS"), renombra "MÁS VISITADOS" → "ÚLTIMOS VISITADOS".
+- `flagStrip()` helper: aumenta `frame(width: 84 → 100)` + `lineLimit(1) +
+  minimumScaleFactor(0.8)` para que el título más largo quepa.
+
+### Task 2 — `Países en más de un hemisferio` → `Países plurihemisferiales`
+
+`MultiHemisphereSheet.navigationTitle` (~línea 11307) renombrado. Usuario
+prefería el término técnico-conciso. La fila del menú en Ajustes y el
+overlay informativo siguen llamándose como antes (más descriptivos).
+
+### Task 3 — Pantalla `FlagAlphabetSheet` sin Pro: candado arriba
+
+**Bug:** sin Pro, el overlay de "Función Pro" (lock + texto) se centraba
+verticalmente con `frame(maxWidth: .infinity, maxHeight: .infinity)` sobre
+una `ScrollView` vacía visualmente. Quedaba flotando en mitad de la pantalla
+sin contexto.
+
+**Fix (`ContentView.swift` ~línea 11093):**
+- `.overlay { ... }` → `.overlay(alignment: .top) { ... }`.
+- Eliminado `maxHeight: .infinity`, sustituido por `padding(.top, 32)`.
+- Resultado: el candado y "Función Pro" aparecen anclados arriba, justo
+  debajo del navigation bar — más cerca del título y deja claro que el
+  contenido completo está bloqueado.
+
+### Task 4 — `SubjectiveCategoriesSheet`: presentación + reorden
+
+**Bugs reportados:**
+1. Se presentaba con `fullScreenCover` (corte abrupto de pantalla completa);
+   el resto de sheets de "Premios personales" usan `sheet` modal estándar.
+2. No había forma de reordenar las 11 categorías (Sobrevalorados, Infravalorados,
+   Más sucios, etc.).
+
+**Fix (`ContentView.swift`):**
+- Cambio `.fullScreenCover(isPresented: $showSubjectiveCategories)` →
+  `.sheet(...)` (~línea 10570). Misma transición visual que MedalleroSheet.
+- `SubjectiveCategoriesSheet` rediseñado:
+  - Nuevo `@AppStorage("subjectiveCategoriesOrder")` con `[String]` JSON-encoded
+    de los `rawValue` de cada `SubjectiveCategory`.
+  - Helpers `decodeOrder()` (lee + appendea categorías nuevas no presentes en
+    el storage para forward-compat) y `saveOrder(_ cats:)`.
+  - Toolbar trailing: botón "Editar"/"Listo" alterna `@State isReordering`.
+  - En modo reorden: `List` con `.environment(\.editMode, .constant(.active))`
+    + `.onMove` que persiste el orden tras cada drag. Filas simplificadas
+    (solo emoji + título, sin medallas) para legibilidad.
+  - Modo normal: `ScrollView` con las `categoryRow(cat)` completas, ahora
+    iterando `decodeOrder()` en vez de `SubjectiveCategory.allCases`.
+
+### Task 5 — `AddSegmentSheet`: pregunta en pasado para viajes ya hechos
+
+**Cambio (`AddSegmentSheet.swift` ~línea 282):**
+```swift
+Text(isForFuture ? "¿Cómo vas a viajar?" : "¿Cómo viajaste?")
+```
+Antes era siempre "¿Cómo vas a viajar?" (presente/futuro), incluso cuando
+el wizard se abría desde un viaje pasado. Coherente con `isForFuture` que
+ya se usa en otros toggles del mismo wizard ("¿Harás parada en?" vs
+"¿Visitaste alguna escala?").
+
+### Task 6 — Aerolínea SkyUp MT añadida
+
+`Raskmap/airlines.json` (al final): `{"iata": "SQP", "name": "SkyUp MT",
+"country": "MT"}`. Aerolínea maltesa subsidiaria de SkyUp Airlines (UA).
+
+### Task 7 — Aeropuertos Chisinau (RMO) + Foz do Iguaçu (IGU) añadidos
+
+`Raskmap/airports.json` y `Raskmap/airport_coords.json`:
+- **RMO** "Chisinau Internacional" (MD) — segundo IATA usado para el
+  internacional de Chișinău; mismas coords que `KIV` (46.9277, 28.931).
+- **IGU** "Foz do Iguaçu" (BR) — lado brasileño de las cataratas
+  (las cataratas argentinas tienen `IGR`/Puerto Iguazú). Coords
+  (-25.6003, -54.485).
+
+### Task 8 — Rueda de carga de 3s al confirmar viaje
+
+**Cambio (`confirmCardContent`, `ContentView.swift` ~línea 7503):**
+- Nuevo `@State isSaving: Bool = false`.
+- El botón "Guardar" del confirm-card (visitConfirmCard / editVisitConfirmCard
+  / plannedConfirmCard) al pulsarse:
+  1. Setea `isSaving = true` (deshabilita ambos botones, sustituye texto
+     por `ProgressView().tint(.white)`).
+  2. `DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { onSave() }`.
+- "Cancelar" también queda `.disabled(isSaving)` para evitar interrumpir
+  a mitad la transacción de guardado.
+
+Razón: SwiftData + recálculo de logros + sync widget hace que el guardado
+sienta instantáneo pero ejecute trabajo en background; los 3 s dan tiempo
+visual al usuario y previenen taps accidentales en pantallas siguientes
+mientras la propagación termina.
+
+### Task 9 — Bug: países en Quiero/none no pasan a Próximos en multi-país
+
+**Reproducible:** Chipre (`.bucketList` o `.none`) y Chipre del Norte
+(`.bucketList` o `.none`) marcadas como Quiero. Crear viaje futuro a Chipre
+con segmento ✈️ (Chipre) + segmento 🚶 (Chipre del Norte). Antes:
+- Chipre se marcaba `.wantToVisit` ✓ (vía `onSave` del root).
+- Chipre del Norte se quedaba en su estado anterior — el path de creación
+  de child trips solo gestionaba el caso `firstDate <= today` (marcar
+  visitado). Para fechas futuras NO había código que tocara el `Country`
+  del segment-child.
+
+**Fix (`saveTrip` `AddTripSheet.swift` ~línea 6643 + `performEditSave`
+`EditTripSheet.swift` ~línea 9114):**
+- Branch `else` para fechas futuras: si el `Country` existe y NO está ya
+  visitado/lived, lo promociona a `.wantToVisit` y registra
+  `plannedDate/plannedDateTo/transport` del segmento si es la fecha más
+  cercana (`firstDate < countryRecord.plannedDate!`).
+- Si el `Country` no existe (territorio sin record previo), lo crea con
+  `Country(name:, isoCode:, status: .wantToVisit)` y los datos del segmento.
+
+Resultado: para el caso reportado, ambos países (Chipre + Chipre del Norte)
+quedan en Próximos con sus respectivos transportes (✈️ y 🚶).
+
+### Task 10 — Bug: asientos cuentan N veces según número de vuelos
+
+**Reproducible:** trip con 2 vuelos (segmentos ✈️ a 2 países diferentes).
+Rellenar asiento "7E" solo en uno. Stats mostraban "7E x2". Con 3 vuelos,
+"7E x3". Etc.
+
+**Diagnóstico:** los segment-children copian `tripSegments = [seg]` del
+primario completo (incluyendo `seg.flightInfo`). `topSeats` y
+`topSeatPositions` (`TransportStatsSheet`, ~líneas 7829 y 7855) iteraban
+TODOS los `pastTrips` sin filtrar `isSegmentChild`, así que cada copia del
+seg sumaba +1 al contador del asiento.
+
+**Fix:** añadir `where !trip.isSegmentChild` al loop. Otros stats
+(topAirports, topAirlines) ya tenían este filtro — los asientos eran el
+único hueco.
+
+### Task 11 — Bug visual: fronteras entre países visitados parecen más gruesas
+
+**Reproducible:** con dos países adyacentes ambos visitados (ej. Chequia +
+Alemania), la frontera entre ellos parece visualmente ~1pt; con uno visitado
+y otro no, parece ~0.5pt; entre dos visitados con vértices coincidentes
+(ej. Chequia + Eslovaquia, dataset Natural Earth), parece ~0.5pt. Inconsistente.
+
+**Causa:** `applyStyle` (`RaskMapView.swift` ~línea 350) seteaba
+`strokeColor = black 0.35α, lineWidth = 0.5` para todos los polígonos
+coloreados. Cada polígono pinta su borde — donde dos vértices coinciden,
+los dos strokes se solapan visualmente y se ven igual de finos; donde no
+coinciden (gap sub-píxel en geometría), los dos strokes pintan píxeles
+adyacentes y la línea total parece ~1pt.
+
+**Fix:** eliminar el stroke de polígonos coloreados no resaltados. La
+diferencia de color de relleno entre países adyacentes ya crea el límite
+visual; sin stroke no hay solapamiento posible.
+
+```swift
+} else if highlighted {
+    renderer.strokeColor = UIColor.black.withAlphaComponent(0.85)
+    renderer.lineWidth   = 1.0
+} else {
+    renderer.strokeColor = UIColor.clear
+    renderer.lineWidth   = 0
+}
+```
+
+Resultado: todas las fronteras visitado-visitado se ven uniformes (sin
+stroke); el contorno negro solo aparece al hacer tap (highlighted) sobre
+un país.
+
+### Task 12 — `FinalizadosListSheet`: título por país con más días
+
+**Cambio:** cuando un trip tiene varios países (segmentos), la fila del
+listado de finalizados ahora muestra el país donde el usuario pasó **más
+días** (en lugar del `trip.isoCode` primario). Empate → primer país por
+orden alfabético de ISO A3.
+
+**Implementación (`ContentView.swift` ~línea 2310):**
+- Nuevos helpers que aceptan `iso: String` (en vez de `Country`):
+  `displayName(for: iso)`, `flagEmoji(for: iso)`, `isoA2(for: iso)`.
+- Helper `mainCountryIso(for row:)`: usa `daysPerCountry(trips: [trip])`,
+  busca el max, ordena empates por ISO A3 asc, devuelve el primero.
+  Fallback a `row.country.isoCode` si el trip no tiene days computables.
+- El `ForEach` de la lista calcula `mainIso = mainCountryIso(for: row)` y
+  pasa ese iso a las helpers de display (flag + name).
+- Mensaje del confirmation dialog de eliminar también usa el `mainIso` para
+  el país mostrado.
+
+Razón: para un trip que pasó 1 día en Chipre y 6 días en Chipre del Norte,
+mostrar "Chipre" era engañoso; ahora muestra "Chipre del Norte".
+
+### Task 13 — `FinalizadoTripDetailSheet`: días por país
+
+**Cambio:** la sheet de detalle del viaje finalizado ahora incluye una
+sección nueva "DÍAS POR PAÍS" debajo de los tramos. Lista cada país
+involucrado en el trip con su contador de días, ordenado por días desc
+(tiebreak alfabético por iso).
+
+**Implementación (`ContentView.swift` ~línea 2480):**
+- Computed `daysByCountry: [(iso: String, days: Int)]`:
+  - Si `row.trip == nil` (Country.plannedDate sin Trip object), atribuye el
+    rango entero al `row.country.isoCode`.
+  - Si hay trip, usa `daysPerCountry(trips: [trip])` y mapea a tuplas
+    ordenadas.
+- Sección renderizada con `RoundedRectangle(cornerRadius: 14)` + filas
+  `[TwemojiFlag + nombre + Spacer + "X días"]` separadas por hairlines.
+  Usa la pluralización "1 día"/"X días".
+
+Razón: con trips multi-país el desglose de días era invisible; el usuario
+quería ver el reparto exacto. Ya estaba calculado por `daysPerCountry` para
+otros usos (widget, wrapped); aquí se reutiliza.
+
 ## Cambios recientes (2026-04-26 · iteración 2)
 
 Segunda tanda del día, sobre los bugs anteriores: dedup de toggles de

@@ -1343,5 +1343,10 @@
     "iata": "2W",
     "name": "World2Fly",
     "country": "PT"
+  },
+  {
+    "iata": "SQP",
+    "name": "SkyUp MT",
+    "country": "MT"
   }
 ]

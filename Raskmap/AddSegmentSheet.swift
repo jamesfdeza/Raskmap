@@ -72,7 +72,8 @@ struct AddSegmentSheet: View {
         let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
     }()
 
-    init(features: [CountryFeature], isForFuture: Bool, initialSegment: TripSegment? = nil, onAdd: @escaping (TripSegment) -> Void) {
+    init(features: [CountryFeature], isForFuture: Bool, initialSegment: TripSegment? = nil,
+         existingSegments: [TripSegment] = [], onAdd: @escaping (TripSegment) -> Void) {
         self.features = features
         self.isForFuture = isForFuture
         self.initialSegment = initialSegment
@@ -85,8 +86,9 @@ struct AddSegmentSheet: View {
             names[f.isoCode] = f.localizedName.folding(options: opts, locale: .current)
         }
         self.normalizedNames = names
-        let today = Calendar.current.startOfDay(for: Date())
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)
                      ?? today.addingTimeInterval(86_400)
         if let seg = initialSegment {
             _selectedTransport = State(initialValue: seg.transport)
@@ -102,12 +104,20 @@ struct AddSegmentSheet: View {
             } else {
                 _selectedIsoCodes = State(initialValue: Set(seg.isoCodes))
             }
+        } else if let firstExisting = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom }).first {
+            // Si ya hay tramos en el viaje, el nuevo arranca dentro del rango del primero
+            // (start + 1 día). Sin fecha de vuelta por defecto.
+            let firstStart = cal.startOfDay(for: firstExisting.dateFrom)
+            let firstEnd   = cal.startOfDay(for: firstExisting.dateTo ?? firstExisting.dateFrom)
+            let candidate = cal.date(byAdding: .day, value: 1, to: firstStart) ?? firstStart
+            let suggested = candidate <= firstEnd ? candidate : firstStart
+            _dateFrom = State(initialValue: suggested)
+            _dateTo = State(initialValue: nil)
         } else {
+            // Primer tramo del viaje: arranca hoy/mañana sin vuelta.
             let from = isForFuture ? tomorrow : today
             _dateFrom = State(initialValue: from)
-            _dateTo = State(initialValue:
-                Calendar.current.date(byAdding: .day, value: 1, to: from)
-                    ?? from.addingTimeInterval(86_400))
+            _dateTo = State(initialValue: nil)
         }
     }
 
@@ -279,7 +289,7 @@ struct AddSegmentSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Transporte")
                         .font(.custom("Satoshi-Bold", size: 28))
-                    Text("¿Cómo vas a viajar?")
+                    Text(isForFuture ? "¿Cómo vas a viajar?" : "¿Cómo viajaste?")
                         .font(.palatino(.subheadline))
                         .foregroundStyle(.secondary)
                 }

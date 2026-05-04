@@ -2202,6 +2202,12 @@
     "country": "AR"
   },
   {
+    "iata": "IGU",
+    "name": "Foz do Iguaçu",
+    "city": "Foz do Iguaçu",
+    "country": "BR"
+  },
+  {
     "iata": "IKA",
     "name": "Teherán Imam Jomeini",
     "city": "Teherán",
@@ -2488,6 +2494,12 @@
     "name": "Kerry",
     "city": "Kerry",
     "country": "IE"
+  },
+  {
+    "iata": "RMO",
+    "name": "Chisinau Internacional",
+    "city": "Chisinau",
+    "country": "MD"
   },
   {
     "iata": "KIV",

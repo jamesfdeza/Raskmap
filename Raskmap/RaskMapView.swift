@@ -371,11 +371,12 @@ struct RaskMapView: UIViewRepresentable {
             if isAntarctica {
                 renderer.strokeColor = UIColor.clear
                 renderer.lineWidth   = 0
+            } else if highlighted {
+                renderer.strokeColor = UIColor.black.withAlphaComponent(0.85)
+                renderer.lineWidth   = 1.0
             } else {
-                renderer.strokeColor = highlighted
-                    ? UIColor.black.withAlphaComponent(0.85)
-                    : UIColor.black.withAlphaComponent(0.35)
-                renderer.lineWidth   = highlighted ? 1.0 : 0.5
+                renderer.strokeColor = UIColor.clear
+                renderer.lineWidth   = 0
             }
         }
     }

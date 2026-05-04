@@ -103,8 +103,13 @@ struct FlagLabel: View {
                 .accessibilityLabel(Locale(identifier: "es")
                     .localizedString(forRegionCode: iso) ?? iso)
         } else {
+            // Fallback (🌐, ✈️, banderas no soportadas): mismo bounding box
+            // que la versión Twemoji para que las strips de banderas
+            // mantengan spacing uniforme entre items.
             Text(emoji)
                 .font(.system(size: size))
+                .frame(width: size, height: size)
+                .minimumScaleFactor(0.5)
         }
     }
 }

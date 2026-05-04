@@ -189,12 +189,12 @@ private struct SmallView: View {
     let entry: RaskmapEntry
 
     var body: some View {
-        if entry.nextDays < 0 || entry.nextFlag.isEmpty {
+        if entry.nextDays < 0 {
             VStack(alignment: .leading, spacing: 4) {
                 Text("✈️").font(.system(size: 28))
                 Spacer()
                 Text("Sin próximo\nviaje")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.custom("Satoshi-Medium", size: 13))
                     .foregroundStyle(.white.opacity(0.8))
                     .multilineTextAlignment(.leading)
             }
@@ -203,33 +203,34 @@ private struct SmallView: View {
             .containerBackground(entry.bgColor, for: .widget)
         } else {
             let displayName = entry.nextTitle.isEmpty ? entry.nextName : entry.nextTitle
+            let safeFlag = entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag
             ZStack(alignment: .topLeading) {
                 Text(entry.nextTransport.isEmpty ? "✈️" : entry.nextTransport)
                     .font(.system(size: 26))
                 if !entry.nextBookingRef.isEmpty {
                     Text("#\(entry.nextBookingRef)")
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .font(.custom("Satoshi-Bold", size: 13))
                         .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
-                        FlagLabel(emoji: entry.nextFlag, size: 14)
+                        FlagLabel(emoji: safeFlag, size: 14)
                         Text(displayName)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.custom("Satoshi-Bold", size: 13))
                             .foregroundStyle(raskmapBlue)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
                     Text(daysLabel(entry.nextDays))
-                        .font(.system(size: 22, weight: .medium))
+                        .font(.custom("Satoshi-Medium", size: 22))
                         .foregroundStyle(.white)
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
                     if let d = entry.nextDateFrom {
                         Text(widgetDateFormatter.string(from: d))
-                            .font(.system(size: 12))
+                            .font(.custom("Satoshi-Regular", size: 12))
                             .foregroundStyle(.white.opacity(0.55))
                             .lineLimit(1)
                     }
@@ -283,9 +284,9 @@ private struct MediumView: View {
                     }
                 }
 
-                if entry.nextDays >= 0, !entry.nextFlag.isEmpty {
+                if entry.nextDays >= 0 {
                     HStack(alignment: .center, spacing: 12) {
-                        FlagLabel(emoji: entry.nextFlag, size: 52)
+                        FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 52)
                             .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(entry.nextName.isEmpty ? "—" : entry.nextName)
@@ -338,7 +339,7 @@ private struct MediumView: View {
                             .font(.custom("Satoshi-Bold", size: 8))
                             .tracking(1.2)
                             .foregroundStyle(.white.opacity(0.55))
-                        FlagStrip(flags: String(upcomingFlagsSkippingFirst.prefix(6)), size: 17, spacing: 5)
+                        FlagStrip(flags: String(upcomingFlagsSkippingFirst.prefix(9)), size: 15, spacing: 4)
                             .lineLimit(1)
                     }
                 }
@@ -356,18 +357,18 @@ private struct MediumView: View {
             VStack(spacing: 4) {
                 Spacer()
                 Text("\(entry.visited)")
-                    .font(.custom("Palatino-Bold", size: 52))
+                    .font(.custom("Satoshi-Bold", size: 52))
                     .foregroundStyle(.white)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                 Text(entry.mode.visitedLabel)
-                    .font(.custom("Palatino", size: 10))
+                    .font(.custom("Satoshi-Regular", size: 10))
                     .foregroundStyle(.white.opacity(0.9))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                 Spacer()
                 Text(entry.mode.label)
-                    .font(.custom("Palatino", size: 9))
+                    .font(.custom("Satoshi-Regular", size: 9))
                     .foregroundStyle(.white.opacity(0.6))
             }
             .frame(width: 104)
@@ -395,8 +396,8 @@ private struct LargeView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 14) {
-                if entry.nextDays >= 0, !entry.nextFlag.isEmpty {
-                    FlagLabel(emoji: entry.nextFlag, size: 60)
+                if entry.nextDays >= 0 {
+                    FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 60)
                         .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -474,17 +475,13 @@ private struct LargeView: View {
                 .frame(height: 0.5)
                 .padding(.horizontal, 16)
 
-            // Tres flag-strips: PRÓXIMOS, MÁS VISITADOS y NUEVOS DESTINOS — el
-            // tercero usa el mismo dataset de "más visitados" pero invertido
-            // (los más recientes/menos repetidos quedan al final del string),
-            // así rellenamos visualmente la zona inferior antes vacía.
+            // Dos flag-strips: PRÓXIMOS y ÚLTIMOS — máximo 9 banderas cada
+            // uno. ÚLTIMOS usa `topVisitedFlags` ya ordenado por fecha del
+            // último viaje finalizado (más reciente a la izquierda).
             VStack(alignment: .leading, spacing: 12) {
                 let upcomingRest = String(entry.upcomingFlags.dropFirst())
-                flagStrip(title: "PRÓXIMOS", flags: upcomingRest, placeholder: "Sin viajes futuros")
-                flagStrip(title: "MÁS VISITADOS", flags: entry.topVisitedFlags, placeholder: "Registra tu primer viaje")
-                flagStrip(title: "NUEVOS",
-                          flags: String(entry.topVisitedFlags.reversed()),
-                          placeholder: "Sin destinos recientes")
+                flagStrip(title: "PRÓXIMOS", flags: upcomingRest, placeholder: "Sin viajes futuros", maxCount: 9)
+                flagStrip(title: "ÚLTIMOS", flags: entry.topVisitedFlags, placeholder: "Registra tu primer viaje", maxCount: 9)
             }
             .padding(.horizontal, 18)
             .padding(.top, 14)
@@ -535,7 +532,7 @@ private struct LargeView: View {
     private func statCell(value: Int, label: String) -> some View {
         VStack(spacing: 2) {
             Text("\(value)")
-                .font(.custom("Palatino-Bold", size: 26))
+                .font(.custom("Satoshi-Bold", size: 26))
                 .foregroundStyle(.white)
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
@@ -549,20 +546,22 @@ private struct LargeView: View {
     }
 
     @ViewBuilder
-    private func flagStrip(title: String, flags: String, placeholder: String) -> some View {
+    private func flagStrip(title: String, flags: String, placeholder: String, maxCount: Int = 9) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Text(title)
                 .font(.custom("Satoshi-Bold", size: 9))
                 .tracking(1.4)
                 .foregroundStyle(.white.opacity(0.7))
-                .frame(width: 84, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 70, alignment: .leading)
             if flags.isEmpty {
                 Text(placeholder)
                     .font(.custom("Satoshi-Regular", size: 11))
                     .foregroundStyle(.white.opacity(0.5))
                     .lineLimit(1)
             } else {
-                FlagStrip(flags: String(flags.prefix(9)), size: 18, spacing: 4)
+                FlagStrip(flags: String(flags.prefix(maxCount)), size: 18, spacing: 4)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -582,6 +581,159 @@ struct RaskmapWidget: Widget {
         .configurationDisplayName("Raskmap")
         .description("Próximo viaje y resumen de visitados.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+    }
+}
+
+// MARK: - Widget de mapa de vuelo (large)
+//
+// Variante del widget grande que muestra una captura del mapa con la ruta
+// del próximo vuelo trazada. La imagen la genera la app principal con
+// `MKMapSnapshotter` y la deja en el App Group como `next_flight_map.png`.
+
+struct FlightMapEntry: TimelineEntry {
+    let date: Date
+    let imagePath: String?
+    let depIATA: String
+    let arrIATA: String
+    let nextFlag: String
+    let nextName: String
+    let nextTitle: String
+    let nextDays: Int
+    let nextDateFrom: Date?
+}
+
+struct FlightMapProvider: TimelineProvider {
+    func placeholder(in context: Context) -> FlightMapEntry {
+        FlightMapEntry(date: .now, imagePath: nil, depIATA: "MAD", arrIATA: "NRT",
+                       nextFlag: "🇯🇵", nextName: "Tokio", nextTitle: "", nextDays: 18,
+                       nextDateFrom: Calendar.current.date(byAdding: .day, value: 18, to: .now))
+    }
+    func getSnapshot(in context: Context, completion: @escaping (FlightMapEntry) -> Void) {
+        completion(makeEntry())
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<FlightMapEntry>) -> Void) {
+        let entry = makeEntry()
+        let next  = Calendar.current.date(byAdding: .minute, value: 15, to: .now)!
+        completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+    private func makeEntry() -> FlightMapEntry {
+        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.jaime.raskmap")
+        let imgURL = container?.appendingPathComponent("next_flight_map.png")
+        let imgPath: String? = (imgURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0.path : nil })
+        let dateFromTS = sharedDefaults?.double(forKey: "widget_next_date") ?? 0
+        return FlightMapEntry(
+            date: .now,
+            imagePath: imgPath,
+            depIATA:  stringFromShared("widget_next_flight_dep_iata"),
+            arrIATA:  stringFromShared("widget_next_flight_arr_iata"),
+            nextFlag: stringFromShared("widget_next_flag"),
+            nextName: stringFromShared("widget_next_name"),
+            nextTitle: stringFromShared("widget_next_title"),
+            nextDays: sharedDefaults?.object(forKey: "widget_next_days") as? Int ?? -1,
+            nextDateFrom: dateFromTS > 0 ? Date(timeIntervalSince1970: dateFromTS) : nil
+        )
+    }
+}
+
+struct FlightMapWidgetView: View {
+    let entry: FlightMapEntry
+
+    private var hasFlight: Bool {
+        entry.nextDays >= 0
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            // Fondo: captura del mapa si existe; en su defecto, gradiente.
+            // El gradiente de fondo siempre está presente para evitar que
+            // un fallo de carga deje el widget en blanco.
+            LinearGradient(
+                colors: [
+                    Color(red: 0x12/255, green: 0x1B/255, blue: 0x3A/255),
+                    Color(red: 0x40/255, green: 0x6E/255, blue: 0xC9/255)
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            if let path = entry.imagePath, let img = UIImage(contentsOfFile: path) {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            } else if !hasFlight {
+                // Sólo mostramos placeholder de "sin vuelo" si no hay ningún
+                // próximo vuelo. Si hay vuelo pero la imagen aún no se ha
+                // generado (snapshotter async la primera vez), dejamos el
+                // gradiente y la info del vuelo encima.
+                VStack(spacing: 8) {
+                    Image(systemName: "airplane")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("Sin próximo vuelo")
+                        .font(.custom("Satoshi-Bold", size: 13))
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // Overlay con info del vuelo (solo si hay vuelo registrado).
+            // Layout fijo: la fila IATA arriba a la derecha, y la fila
+            // bandera + título + countdown abajo a la izquierda. Eliminado
+            // el bloque de "en N días" debajo — el countdown va ahora
+            // inline con el nombre del país/título del viaje.
+            if hasFlight {
+                LinearGradient(
+                    colors: [Color.black.opacity(0.0), Color.black.opacity(0.55)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        if !entry.depIATA.isEmpty && !entry.arrIATA.isEmpty {
+                            Text("\(entry.depIATA) → \(entry.arrIATA)")
+                                .font(.custom("Satoshi-Bold", size: 13))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(.ultraThinMaterial, in: Capsule())
+                        }
+                        Spacer()
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 28)
+                        let title = entry.nextTitle.isEmpty
+                            ? (entry.nextName.isEmpty ? "Próximo vuelo" : entry.nextName)
+                            : entry.nextTitle
+                        Text(title)
+                            .font(.custom("Satoshi-Bold", size: 22))
+                            .foregroundStyle(.white)
+                            .lineLimit(1).minimumScaleFactor(0.55)
+                        Text("• \(entry.nextDays == 1 ? "1 día" : "\(entry.nextDays) días")")
+                            .font(.custom("Satoshi-Bold", size: 13))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                // Mantenemos la posición original del bloque (cuando había
+                // un texto extra debajo del countdown). Sin este padding
+                // bottom el bloque cae al borde y se ve "más abajo" que en
+                // el diseño original.
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 38)
+            }
+        }
+        .containerBackground(Color.black, for: .widget)
+    }
+}
+
+struct RaskmapFlightWidget: Widget {
+    let kind = "RaskmapFlight"
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: FlightMapProvider()) { entry in
+            FlightMapWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Raskmap · Vuelo")
+        .description("Mapa con la ruta de tu próximo vuelo.")
+        .supportedFamilies([.systemLarge])
         .contentMarginsDisabled()
     }
 }
