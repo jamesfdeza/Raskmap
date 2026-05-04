@@ -104,13 +104,19 @@ struct AddSegmentSheet: View {
             } else {
                 _selectedIsoCodes = State(initialValue: Set(seg.isoCodes))
             }
-        } else if let firstExisting = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom }).first {
-            // Si ya hay tramos en el viaje, el nuevo arranca dentro del rango del primero
-            // (start + 1 día). Sin fecha de vuelta por defecto.
-            let firstStart = cal.startOfDay(for: firstExisting.dateFrom)
-            let firstEnd   = cal.startOfDay(for: firstExisting.dateTo ?? firstExisting.dateFrom)
-            let candidate = cal.date(byAdding: .day, value: 1, to: firstStart) ?? firstStart
-            let suggested = candidate <= firstEnd ? candidate : firstStart
+        } else if !existingSegments.isEmpty {
+            // Smart default: el nuevo tramo arranca justo después del último
+            // tramo existente (by chronology). Si el último seg tiene `dateTo`,
+            // el nuevo arranca ese mismo día (transit shared); si no, día siguiente.
+            // Si el destino del último seg es distinto a la base del trip, lo
+            // usamos como "país de origen" inferido para el nuevo tramo.
+            let sorted = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
+            let last = sorted.last!
+            let lastEnd = cal.startOfDay(for: last.dateTo ?? last.dateFrom)
+            let nextDay = cal.date(byAdding: .day, value: 1, to: lastEnd) ?? lastEnd
+            // Si lastEnd > tFrom (no es realista), defaulteamos a lastEnd para
+            // permitir transit shared. Si no, day-after-last.
+            let suggested = (last.dateTo != nil) ? lastEnd : nextDay
             _dateFrom = State(initialValue: suggested)
             _dateTo = State(initialValue: nil)
         } else {
@@ -508,6 +514,11 @@ struct AddSegmentSheet: View {
                 }
                 .padding(.horizontal, 24).padding(.bottom, 10)
 
+                // Quick chips de fecha — atajan al usuario en casos comunes.
+                quickDateChips(isOneWayFlight: isOneWayFlight)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 10)
+
                 RangeDatePicker(
                     dateFrom: $dateFrom, dateTo: $dateTo, pickingFrom: $pickingFrom,
                     minDate: isForFuture ? tomorrow : nil,
@@ -615,5 +626,47 @@ struct AddSegmentSheet: View {
             .background(active ? accent.opacity(0.08) : Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(active ? accent.opacity(0.3) : Color.clear, lineWidth: 1.5))
         }.buttonStyle(.plain)
+    }
+
+    /// Chips rápidos para fechas comunes — saltan el scroll del calendario.
+    /// Para `isForFuture`: Mañana / +1 sem / +2 sem.
+    /// Para pasado: Hoy / Ayer / -1 sem.
+    @ViewBuilder
+    private func quickDateChips(isOneWayFlight: Bool) -> some View {
+        let cal = Calendar.current
+        let now = cal.startOfDay(for: Date())
+        let chips: [(label: String, value: Date)] = {
+            if isForFuture {
+                let plus1d = cal.date(byAdding: .day, value: 1, to: now) ?? now
+                let plus1w = cal.date(byAdding: .day, value: 7, to: now) ?? now
+                let plus2w = cal.date(byAdding: .day, value: 14, to: now) ?? now
+                return [("Mañana", plus1d), ("Próx. semana", plus1w), ("En 2 sem.", plus2w)]
+            } else {
+                let minus1d = cal.date(byAdding: .day, value: -1, to: now) ?? now
+                let minus1w = cal.date(byAdding: .day, value: -7, to: now) ?? now
+                return [("Hoy", now), ("Ayer", minus1d), ("Hace 1 sem.", minus1w)]
+            }
+        }()
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                    Button {
+                        if pickingFrom {
+                            dateFrom = chip.value
+                            if let to = dateTo, chip.value > to { dateTo = nil }
+                        } else if !isOneWayFlight {
+                            dateTo = chip.value < dateFrom ? nil : chip.value
+                        }
+                    } label: {
+                        Text(chip.label)
+                            .font(.custom("Satoshi-Bold", size: 12))
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Color(.systemGray5), in: Capsule())
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }

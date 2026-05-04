@@ -56,6 +56,7 @@ struct ContentView: View {
     @AppStorage("didShowLocationToast") private var didShowLocationToast: Bool = false
     @State private var showLocationToast: Bool = false
     @State private var showOnboarding: Bool = false
+    @AppStorage("didShowOnboarding") private var didShowOnboarding: Bool = false
     @State private var usernameInput: String = ""
     @State private var onboardingStep: Int = 0
     @State private var isLoadingFeatures: Bool = true
@@ -439,8 +440,16 @@ struct ContentView: View {
         return nil
     }
 
+    /// Pre-índice de features por ISO. Se invocaba O(n²) antes desde
+    /// `topVisitedFlagsString` y `allProximosFlagsString` (cada bandera hacía
+    /// `features.first(where:)`). Este dict reduce a O(1) por lookup.
+    private var featuresByIso: [String: CountryFeature] {
+        Dictionary(uniqueKeysWithValues: features.map { ($0.isoCode, $0) })
+    }
+
     private var allProximosFlagsString: String {
         let today = Calendar.current.startOfDay(for: Date())
+        let byIsoIndex = featuresByIso
         // Para cada iso, la PRIMERA fecha futura que tengamos (de cualquier
         // trip futuro de ese país, incluyendo children por segmentos). Si no
         // hay trip pero sí `country.plannedDate`, usamos eso. Esto evita que
@@ -460,7 +469,7 @@ struct ContentView: View {
         }
         var byIso: [String: (flag: String, date: Date)] = [:]
         func add(iso: String, date: Date) {
-            let flag = features.first(where: { $0.isoCode == iso })?.flagEmoji ?? "🌐"
+            let flag = byIsoIndex[iso]?.flagEmoji ?? "🌐"
             byIso[iso] = (flag, date)
         }
         for country in countries where country.status == .wantToVisit {
@@ -485,6 +494,7 @@ struct ContentView: View {
     /// (más reciente primero). Hasta 12 para el widget grande.
     private var topVisitedFlagsString: String {
         let today = Date()
+        let byIsoIndex = featuresByIso
         let visited = countries.filter { $0.status == .visited || $0.status == .lived }
         let lastDateByIso: [String: Date] = trips.reduce(into: [:]) { acc, t in
             let end = t.dateTo ?? t.dateFrom
@@ -499,7 +509,7 @@ struct ContentView: View {
             return lhs.isoCode < rhs.isoCode
         }
         return sorted.prefix(12).map { c in
-            features.first(where: { $0.isoCode == c.isoCode })?.flagEmoji ?? "🌐"
+            byIsoIndex[c.isoCode]?.flagEmoji ?? "🌐"
         }.joined()
     }
 
@@ -591,12 +601,25 @@ struct ContentView: View {
             .onChange(of: _appFontFamily) { _, family in handleFontFamilyChange(family) }
     }
 
+    /// Fingerprint compacto de los trips: dispara `handleTripsCountChange` no
+    /// solo al insertar/borrar (count), sino también cuando un trip existente
+    /// cambia `dateFrom`, `dateTo`, `transport` o `isoCode`. Antes el banner
+    /// del próximo viaje y el snapshot del widget de mapa quedaban stale al
+    /// editar un trip sin alterar el número total.
+    private var tripsFingerprint: String {
+        trips.map { t in
+            "\(t.isoCode)|\(t.dateFrom.timeIntervalSince1970)|\(t.dateTo?.timeIntervalSince1970 ?? 0)|\(t.transport ?? "")"
+        }
+        .sorted()
+        .joined(separator: "·")
+    }
+
     @ViewBuilder
     private func bodyWithAchievementHandlers() -> some View {
         bodyWithCoreHandlers()
             .onChange(of: multiContinentRaw) { _, _ in checkAndShowAchievementToasts() }
             .onChange(of: multiHemisphereRaw) { _, _ in checkAndShowAchievementToasts() }
-            .onChange(of: trips.count) { _, _ in handleTripsCountChange() }
+            .onChange(of: tripsFingerprint) { _, _ in handleTripsCountChange() }
             .onChange(of: mapQuadrantsData) { _, _ in checkAndShowAchievementToasts() }
             .onChange(of: visitedCountAll) { _, newCount in handleVisitedCountChange(newCount) }
             .onChange(of: countingModeRaw) { _, newMode in handleCountingModeChange(newMode) }
@@ -1323,6 +1346,9 @@ struct ContentView: View {
                 VStack(spacing: 14) {
                     TextField("Tu nombre de usuario", text: $usernameInput)
                         .font(.palatino(.body))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .submitLabel(.done)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1395,6 +1421,7 @@ struct ContentView: View {
             Button(action: {
                 showOnboarding = false
                 onboardingStep = 0
+                didShowOnboarding = true
             }) {
                 Text("Empezar a explorar")
                     .font(.palatino(.body, weight: .bold))
@@ -1845,7 +1872,10 @@ struct ContentView: View {
             let af = nextFlightAirportsAny()
             WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
         }
-        if username.isEmpty { showOnboarding = true }
+        // Onboarding: solo si NO se ha completado nunca antes (flag local).
+        // Antes el check era `username.isEmpty`, lo que volvía a abrirlo si
+        // CloudKit reseteaba el username (TestFlight reinstall, sign-out, etc).
+        if !didShowOnboarding && username.isEmpty { showOnboarding = true }
         flightModeHasRoutes = FlightRoutesBuilder.hasAnyRoute(in: trips, filter: flightRouteFilter)
         locationManager.requestAndStart()
         autoMarkArrivedTripsAndPlans()
@@ -2661,6 +2691,12 @@ struct FinalizadoTripDetailSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// `daysPerCountry` es O(días * segmentos) y se llamaba en cada render
+    /// del scroll (FPS drops con muchos países). Cacheamos por `tripID` y solo
+    /// recomputamos en `.onAppear` o si cambia el row.
+    @State private var cachedDays: [(iso: String, days: Int)] = []
+    @State private var cachedTripFingerprint: String = ""
+
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -2669,17 +2705,13 @@ struct FinalizadoTripDetailSheet: View {
         return f
     }()
 
-    // Helpers — idénticos a FinalizadosListSheet pero operando sobre iso A3 crudo
-    // (porque los `TripSegment.isoCodes` ya son strings A3, no Country).
-    private func displayName(for iso: String) -> String {
-        features.first(where: { $0.isoCode == iso })?.localizedName ?? iso
+    /// Lookup O(1) por iso. Si `features` cambia por viewBuilder, se rebuilda.
+    private var byIso: [String: CountryFeature] {
+        Dictionary(uniqueKeysWithValues: features.map { ($0.isoCode, $0) })
     }
-    private func isoA2(for iso: String) -> String {
-        features.first(where: { $0.isoCode == iso })?.isoA2 ?? ""
-    }
-    private func flagEmoji(for iso: String) -> String {
-        features.first(where: { $0.isoCode == iso })?.flagEmoji ?? "🌐"
-    }
+    private func displayName(for iso: String) -> String { byIso[iso]?.localizedName ?? iso }
+    private func isoA2(for iso: String) -> String { byIso[iso]?.isoA2 ?? "" }
+    private func flagEmoji(for iso: String) -> String { byIso[iso]?.flagEmoji ?? "🌐" }
 
     /// Segmentos del trip en orden cronológico. Vacío si el trip no tiene
     /// segmentos embebidos (viaje simple de un único país + transporte).
@@ -2687,18 +2719,35 @@ struct FinalizadoTripDetailSheet: View {
         (row.trip?.tripSegments ?? []).sorted { $0.dateFrom < $1.dateFrom }
     }
 
-    /// Días por país calculados sobre el trip (ordenados desc por días, tiebreak alfabético).
+    /// Fingerprint que detecta cambios en el trip (fechas, segs) para
+    /// invalidar el cache de días.
+    private var tripFingerprint: String {
+        guard let t = row.trip else {
+            return "c|\(row.country.isoCode)|\(row.dateFrom?.timeIntervalSince1970 ?? 0)|\(row.dateTo?.timeIntervalSince1970 ?? 0)"
+        }
+        let segPart = segments.map {
+            "\($0.dateFrom.timeIntervalSince1970)-\($0.dateTo?.timeIntervalSince1970 ?? 0)-\($0.transport)-\($0.isoCodes.sorted().joined(separator: ","))"
+        }.joined(separator: ";")
+        return "t|\(t.isoCode)|\(t.dateFrom.timeIntervalSince1970)|\(t.dateTo?.timeIntervalSince1970 ?? 0)|\(segPart)"
+    }
+
     private var daysByCountry: [(iso: String, days: Int)] {
+        cachedDays
+    }
+
+    private func recomputeDays() {
+        let fp = tripFingerprint
+        guard fp != cachedTripFingerprint else { return }
+        cachedTripFingerprint = fp
         guard let trip = row.trip else {
-            // Trip sin objeto Trip (sólo Country.plannedDate) — el rango total
-            // se atribuye a la única country.
             let from = row.dateFrom ?? Date()
             let to = row.dateTo ?? from
             let cnt = max(1, (Calendar.current.dateComponents([.day], from: from, to: to).day ?? 0) + 1)
-            return [(row.country.isoCode, cnt)]
+            cachedDays = [(row.country.isoCode, cnt)]
+            return
         }
         let map = daysPerCountry(trips: [trip])
-        return map.map { (iso: $0.key, days: $0.value) }.sorted {
+        cachedDays = map.map { (iso: $0.key, days: $0.value) }.sorted {
             if $0.days != $1.days { return $0.days > $1.days }
             return $0.iso < $1.iso
         }
@@ -2876,6 +2925,7 @@ struct FinalizadoTripDetailSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .onAppear { recomputeDays() }
         .appColorScheme()
     }
 }
@@ -4676,6 +4726,10 @@ struct SettingsSheet: View {
     var onClearStatus: (CountryStatus) -> Void = { _ in }
 
     @State private var pendingClear: CountryStatus? = nil
+    @State private var showWipeConfirm: Bool = false
+    @State private var showWipeFinalConfirm: Bool = false
+    @State private var isWiping: Bool = false
+    @State private var showWipeDoneToast: Bool = false
     @State private var showImagePicker: Bool = false
     @State private var usernameDraft: String = ""
     @FocusState private var usernameFocused: Bool
@@ -4685,6 +4739,7 @@ struct SettingsSheet: View {
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @State private var showCountingToast: Bool = false
     @State private var showResetToast: Bool = false
@@ -5226,6 +5281,40 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
 
+                    // ── Borrar todos mis datos (App Store / GDPR) ──
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Datos")
+                            .font(.palatino(.subheadline, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        Button {
+                            showWipeConfirm = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 24)
+                                Text("Borrar todos mis datos")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.red)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        Text("Elimina todos los países, viajes, premios y preferencias guardados en este dispositivo. Si tienes iCloud activo, también se eliminarán los datos de tu nube tras la siguiente sincronización.")
+                            .font(.palatino(.caption))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                    }
+                    .padding(.horizontal, 24)
+
                     #if DEBUG
                     // ── Dev: simular planes Pro ──
                     VStack(spacing: 4) {
@@ -5291,13 +5380,29 @@ struct SettingsSheet: View {
             } message: {
                 Text("Se eliminarán todos los países de Bucket list. Esta acción no se puede deshacer.")
             }
+            // Wipe completo (App Store / GDPR): paso 1 — aviso, paso 2 — confirmación final.
+            .alert("¿Borrar todos tus datos?", isPresented: $showWipeConfirm) {
+                Button("Continuar", role: .destructive) { showWipeFinalConfirm = true }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Vas a borrar TODOS los países, viajes, premios, listas y preferencias. Esta acción no se puede deshacer.")
+            }
+            .alert("Confirmación final", isPresented: $showWipeFinalConfirm) {
+                Button("Sí, borrar todo", role: .destructive) {
+                    Task { await wipeAllData() }
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Última oportunidad. Si tienes iCloud activo los datos también se eliminarán de tu nube tras la siguiente sincronización.")
+            }
             .overlay {
-                if showCountingToast || showResetToast {
+                if showCountingToast || showResetToast || showWipeDoneToast {
                     VStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 36))
                             .foregroundStyle(.white)
-                        Text(showCountingToast ? "Conteo actualizado" : "Colores restablecidos")
+                        Text(showWipeDoneToast ? "Datos borrados" :
+                             (showCountingToast ? "Conteo actualizado" : "Colores restablecidos"))
                             .font(.palatino(.subheadline, weight: .bold))
                             .foregroundStyle(.white)
                     }
@@ -5309,6 +5414,7 @@ struct SettingsSheet: View {
             }
             .animation(.easeInOut(duration: 0.2), value: showCountingToast)
             .animation(.easeInOut(duration: 0.2), value: showResetToast)
+            .animation(.easeInOut(duration: 0.2), value: showWipeDoneToast)
         }
         .fullScreenCover(isPresented: $showImagePicker) {
             PassportPickerSheet(selection: $selectedPassport)
@@ -5403,6 +5509,70 @@ struct SettingsSheet: View {
             pendingBucketListColor = colorTheme.bucketListColor
         }
         .appColorScheme()
+    }
+
+    /// Borra todos los datos persistidos del usuario (cumplimiento App Store
+    /// y GDPR Art. 17 — derecho al olvido). Limpia SwiftData, AppStorage,
+    /// cualquier preferencia local y el estado del widget en App Group.
+    /// CloudKit se sincroniza automáticamente por @Query y borra remoto.
+    private func wipeAllData() async {
+        await MainActor.run {
+            isWiping = true
+            // 1) SwiftData
+            do {
+                try modelContext.delete(model: Trip.self)
+                try modelContext.delete(model: Country.self)
+                try modelContext.delete(model: PersonalAwardModel.self)
+                try modelContext.save()
+            } catch {
+                #if DEBUG
+                print("⚠️ Wipe SwiftData error: \(error)")
+                #endif
+            }
+            // 2) AppStorage / UserDefaults estándar
+            let defaults = UserDefaults.standard
+            let keysToWipe: [String] = [
+                "username", "didShowOnboarding", "didShowLocationToast",
+                "showBucketList", "showCountdown",
+                "topTable", "multiContinentRaw", "multiHemisphereRaw",
+                "appFontFamily", "favoriteAirport", "isRaskmapPro", "raskmapProPlanID",
+                "raskmapProByCode", "mapQuadrantsData", "didInsertDefaultQuadrants",
+                "earnedPassportAchievementsRaw", "liveActivityEnabled", "neverShowReview",
+                "selectedPassport", "personalList1Title", "personalList1Content",
+                "personalList2Title", "personalList2Content",
+                "subjectiveCategoriesTable", "subjectiveCategoriesOrder",
+                "color_visited", "color_wantToVisit", "color_bucketList", "color_lived",
+                "widgetBgColorHex", "menuPosition", "countingMode"
+            ]
+            for k in keysToWipe { defaults.removeObject(forKey: k) }
+            // 3) App Group del widget
+            if let store = UserDefaults(suiteName: "group.com.jaime.raskmap") {
+                for key in store.dictionaryRepresentation().keys {
+                    store.removeObject(forKey: key)
+                }
+            }
+            // 4) Snapshot del mapa de vuelo en disco (si existe)
+            if let url = FileManager.default
+                .containerURL(forSecurityApplicationGroupIdentifier: "group.com.jaime.raskmap")?
+                .appendingPathComponent("next_flight_map.png") {
+                try? FileManager.default.removeItem(at: url)
+            }
+            // 5) Live Activities activas
+            if #available(iOS 16.1, *) {
+                Task { @MainActor in
+                    for activity in Activity<RaskmapTripAttributes>.activities {
+                        await activity.end(nil, dismissalPolicy: .immediate)
+                    }
+                }
+            }
+            isWiping = false
+            withAnimation { showWipeDoneToast = true }
+        }
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        await MainActor.run {
+            withAnimation { showWipeDoneToast = false }
+            dismiss()
+        }
     }
 }
 
@@ -5558,9 +5728,18 @@ struct ContactSheet: View {
                     Button {
                         if MFMailComposeViewController.canSendMail() {
                             showMailComposer = true
-                        } else if let url = URL(string: "mailto:raskmap_soporte@icloud.com?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(messageText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
-                            UIApplication.shared.open(url)
-                            dismiss()
+                        } else {
+                            // Encoding tight para mailto: query — `&`, `=`, `?`, `#` y `+`
+                            // se reservan como separadores y rompen el parser del cliente
+                            // de correo si aparecen sin codificar dentro del subject/body.
+                            var allowed = CharacterSet.urlQueryAllowed
+                            allowed.remove(charactersIn: "&=?#+")
+                            let s = subject.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+                            let b = messageText.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+                            if let url = URL(string: "mailto:raskmap_soporte@icloud.com?subject=\(s)&body=\(b)") {
+                                UIApplication.shared.open(url)
+                                dismiss()
+                            }
                         }
                     } label: {
                         HStack(spacing: 8) {
@@ -13304,12 +13483,22 @@ struct SubscriptionSheet: View {
                             Button {
                                 Task { await restorePurchases() }
                             } label: {
-                                Text("Restaurar compra")
-                                    .font(.palatino(.footnote))
-                                    .foregroundStyle(.purple)
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Text("Restaurar compras")
+                                        .font(.palatino(.body, weight: .bold))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.purple.opacity(0.12),
+                                            in: RoundedRectangle(cornerRadius: 14))
+                                .foregroundStyle(.purple)
                             }
                             .buttonStyle(.plain)
                             .disabled(isPurchasing)
+                            .accessibilityLabel("Restaurar compras anteriores")
+                            .accessibilityHint("Verifica con tu Apple ID si ya compraste Raskmap Pro previamente")
                         }
                         .padding(.horizontal, 32)
 

@@ -100,12 +100,23 @@ struct WidgetDataWriter {
         sharedContainerURL?.appendingPathComponent("next_flight_map.png")
     }
 
+    /// Snapshotter actualmente en curso. Si el usuario cambia de viaje 5 veces
+    /// rápido (o se reentra en `handleTripsCountChange`), el callback async
+    /// del previo se solaparía y podría escribir una imagen "vieja" sobre la
+    /// "nueva". Mantenemos referencia para cancelar el anterior antes de
+    /// arrancar uno nuevo.
+    nonisolated(unsafe) private static var pendingSnapshotter: MKMapSnapshotter?
+
     /// Genera (en background) un snapshot del próximo vuelo con la línea
     /// gran-circular dibujada y lo guarda en el App Group para que el widget
     /// lo pueda cargar como `UIImage(contentsOfFile:)`.
     /// Pasar `nil` borra el snapshot existente (sin próximo vuelo).
     static func syncNextFlightSnapshot(depIATA: String?, arrIATA: String?, depCoord: CLLocationCoordinate2D?, arrCoord: CLLocationCoordinate2D?) {
         guard let url = flightSnapshotURL else { return }
+        // Cancela cualquier snapshot en curso para evitar callbacks que escriban
+        // imágenes obsoletas encima del último estado pedido.
+        pendingSnapshotter?.cancel()
+        pendingSnapshotter = nil
         guard let depCoord, let arrCoord, depIATA != nil, arrIATA != nil else {
             try? FileManager.default.removeItem(at: url)
             store?.set("", forKey: "widget_next_flight_dep_iata")
@@ -128,8 +139,13 @@ struct WidgetDataWriter {
         opts.mapType = .mutedStandard
 
         let snapshotter = MKMapSnapshotter(options: opts)
-        snapshotter.start(with: .global(qos: .userInitiated)) { snapshot, _ in
-            guard let snapshot else { return }
+        pendingSnapshotter = snapshotter
+        snapshotter.start(with: .global(qos: .userInitiated)) { snapshot, error in
+            // Si ya no somos el snapshotter activo (cancelado o reemplazado),
+            // descartamos el resultado para no sobrescribir imagen más reciente.
+            guard pendingSnapshotter === snapshotter else { return }
+            pendingSnapshotter = nil
+            guard error == nil, let snapshot else { return }
             let composed = composeFlightImage(snapshot: snapshot, dep: depCoord, arr: arrCoord)
             if let data = composed.pngData() {
                 try? data.write(to: url, options: .atomic)
