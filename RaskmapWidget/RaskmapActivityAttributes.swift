@@ -10,5 +10,6 @@ struct RaskmapTripAttributes: ActivityAttributes {
         var flagEmoji: String
         var tripName: String
         var daysRemaining: Int
+        var transportEmoji: String
     }
 }

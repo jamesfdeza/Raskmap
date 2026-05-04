@@ -5,7 +5,6 @@
 
 import WidgetKit
 import SwiftUI
-import AppIntents
 
 private let appGroupID = "group.com.jaime.raskmap"
 
@@ -15,6 +14,10 @@ private var sharedDefaults: UserDefaults? { UserDefaults(suiteName: appGroupID) 
 
 func intFromShared(_ key: String) -> Int {
     sharedDefaults?.integer(forKey: key) ?? 0
+}
+
+func stringFromShared(_ key: String) -> String {
+    sharedDefaults?.string(forKey: key) ?? ""
 }
 
 // MARK: - Modo de conteo
@@ -38,46 +41,43 @@ enum WCountingMode: String, CaseIterable {
         default:  return "Territorios visitados"
         }
     }
-}
 
-// MARK: - Intent
+    var shortLabel: String {
+        switch self {
+        case .un:     return "ONU"
+        case .unPlus: return "ONU+OBS"
+        case .all:    return "TODOS"
+        }
+    }
 
-enum IntentMode: String, AppEnum {
-    case un     = "un"
-    case unPlus = "unPlus"
-    case all    = "all"
-
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Modo de conteo"
-    static var caseDisplayRepresentations: [IntentMode: DisplayRepresentation] = [
-        .un:     "ONU (193)",
-        .unPlus: "ONU + obs. (195)",
-        .all:    "Todos (244)"
-    ]
-}
-
-struct RaskmapIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "Modo de conteo"
-    static var description = IntentDescription("Elige qué territorios contar en el widget.")
-
-    @Parameter(title: "Modo", default: .un)
-    var mode: IntentMode
+    var total: Int {
+        switch self {
+        case .un:     return 193
+        case .unPlus: return 195
+        case .all:    return 249
+        }
+    }
 }
 
 // MARK: - Entry
 
 struct RaskmapEntry: TimelineEntry {
     let date: Date
-    let transport: String   // emoji, "" = no trip
-    let tripFlag: String
-    let tripName: String
-    let tripTitle: String   // custom trip title, "" = use tripName
-    let daysRemaining: Int  // -1 = no trip
-    let tripDateFrom: Date?
+    let mode: WCountingMode
+    let visited: Int
+    let visitedUN: Int
+    let visitedUNPlus: Int
+    let visitedAll: Int
     let bgColor: Color
-    let visitedCount: Int      // countries visited (mode from settings)
-    let countingMode: WCountingMode
-    let upcomingFlags: String  // concatenated flag emojis for upcoming trips
-    let bookingRef: String     // localizador vuelo, "" = no disponible
+    let nextFlag: String
+    let nextDays: Int
+    let nextName: String
+    let nextTitle: String
+    let nextTransport: String
+    let nextDateFrom: Date?
+    let nextBookingRef: String
+    let upcomingFlags: String
+    let topVisitedFlags: String
 }
 
 // MARK: - Provider
@@ -86,13 +86,17 @@ struct RaskmapProvider: TimelineProvider {
     typealias Entry = RaskmapEntry
 
     func placeholder(in context: Context) -> RaskmapEntry {
-        RaskmapEntry(date: .now, transport: "✈️", tripFlag: "🇯🇵",
-                     tripName: "Japón", tripTitle: "",
-                     daysRemaining: 42,
-                     tripDateFrom: Calendar.current.date(byAdding: .day, value: 42, to: .now),
-                     bgColor: colorFromShared(),
-                     visitedCount: 42, countingMode: .un, upcomingFlags: "🇯🇵🇫🇷🇩🇪",
-                     bookingRef: "ABC123")
+        RaskmapEntry(
+            date: .now, mode: .un, visited: 42,
+            visitedUN: 42, visitedUNPlus: 45, visitedAll: 48,
+            bgColor: colorFromShared(),
+            nextFlag: "🇯🇵", nextDays: 18, nextName: "Tokio", nextTitle: "",
+            nextTransport: "✈️",
+            nextDateFrom: Calendar.current.date(byAdding: .day, value: 18, to: .now),
+            nextBookingRef: "ABC123",
+            upcomingFlags: "🇯🇵🇩🇪🇫🇷🇮🇹🇬🇧🇪🇸",
+            topVisitedFlags: "🇪🇸🇫🇷🇮🇹🇺🇸🇯🇵🇩🇪🇵🇹🇳🇱"
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (RaskmapEntry) -> Void) {
@@ -106,30 +110,29 @@ struct RaskmapProvider: TimelineProvider {
     }
 
     private func makeEntry() -> RaskmapEntry {
-        let flag      = sharedDefaults?.string(forKey: "widget_next_flag") ?? ""
-        let days      = sharedDefaults?.integer(forKey: "widget_next_days") ?? -1
-        let name      = sharedDefaults?.string(forKey: "widget_next_name") ?? ""
-        let transport = sharedDefaults?.string(forKey: "widget_next_transport") ?? ""
+        let modeRaw = stringFromShared("widget_counting_mode")
+        let mode = WCountingMode(rawValue: modeRaw) ?? .un
+        let visited = intFromShared("widget_visited_\(mode.rawValue)")
         let dateFromTS = sharedDefaults?.double(forKey: "widget_next_date") ?? 0
         let dateFrom: Date? = dateFromTS > 0 ? Date(timeIntervalSince1970: dateFromTS) : nil
-        let modeRaw   = sharedDefaults?.string(forKey: "widget_counting_mode") ?? "un"
-        let mode      = WCountingMode(rawValue: modeRaw) ?? .un
-        let visited   = sharedDefaults?.integer(forKey: "widget_visited_\(mode.rawValue)") ?? 0
-        let upcoming  = sharedDefaults?.string(forKey: "widget_all_flags") ?? ""
-        let booking   = sharedDefaults?.string(forKey: "widget_next_booking") ?? ""
-        let title     = sharedDefaults?.string(forKey: "widget_next_title") ?? ""
-        return RaskmapEntry(date: .now,
-                            transport: transport.isEmpty ? "✈️" : transport,
-                            tripFlag: flag.isEmpty ? "🌍" : flag,
-                            tripName: name,
-                            tripTitle: title,
-                            daysRemaining: days,
-                            tripDateFrom: dateFrom,
-                            bgColor: colorFromShared(),
-                            visitedCount: visited,
-                            countingMode: mode,
-                            upcomingFlags: upcoming,
-                            bookingRef: booking)
+        return RaskmapEntry(
+            date: .now,
+            mode: mode,
+            visited: visited,
+            visitedUN:     intFromShared("widget_visited_un"),
+            visitedUNPlus: intFromShared("widget_visited_unPlus"),
+            visitedAll:    intFromShared("widget_visited_all"),
+            bgColor: colorFromShared(),
+            nextFlag:      stringFromShared("widget_next_flag"),
+            nextDays:      sharedDefaults?.object(forKey: "widget_next_days") as? Int ?? -1,
+            nextName:      stringFromShared("widget_next_name"),
+            nextTitle:     stringFromShared("widget_next_title"),
+            nextTransport: stringFromShared("widget_next_transport"),
+            nextDateFrom:  dateFrom,
+            nextBookingRef: stringFromShared("widget_next_booking"),
+            upcomingFlags:   stringFromShared("widget_all_flags"),
+            topVisitedFlags: stringFromShared("widget_top_visited_flags")
+        )
     }
 }
 
@@ -146,7 +149,7 @@ private func colorFromShared() -> Color {
     return Color(red: r, green: g, blue: b)
 }
 
-// MARK: - Days label helper
+// MARK: - Helpers
 
 private func daysLabel(_ days: Int) -> String {
     if days == 1 { return "1 día" }
@@ -154,8 +157,6 @@ private func daysLabel(_ days: Int) -> String {
     let months = max(1, days / 30)
     return "+\(months) meses"
 }
-
-// MARK: - View helpers
 
 private let widgetDateFormatter: DateFormatter = {
     let f = DateFormatter()
@@ -166,18 +167,34 @@ private let widgetDateFormatter: DateFormatter = {
 
 private let raskmapBlue = Color(red: 0x53/255.0, green: 0xA3/255.0, blue: 0xFE/255.0)
 
-// MARK: - Small widget
+// MARK: - Views
 
-private struct RaskmapSmallView: View {
+struct RaskmapWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: RaskmapEntry
 
     var body: some View {
-        if entry.daysRemaining < 0 {
+        switch family {
+        case .systemSmall:  SmallView(entry: entry)
+        case .systemMedium: MediumView(entry: entry)
+        case .systemLarge:  LargeView(entry: entry)
+        default:            SmallView(entry: entry)
+        }
+    }
+}
+
+// MARK: - Small (próximo viaje)
+
+private struct SmallView: View {
+    let entry: RaskmapEntry
+
+    var body: some View {
+        if entry.nextDays < 0 {
             VStack(alignment: .leading, spacing: 4) {
                 Text("✈️").font(.system(size: 28))
                 Spacer()
                 Text("Sin próximo\nviaje")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.custom("Satoshi-Medium", size: 13))
                     .foregroundStyle(.white.opacity(0.8))
                     .multilineTextAlignment(.leading)
             }
@@ -185,34 +202,35 @@ private struct RaskmapSmallView: View {
             .padding(15)
             .containerBackground(entry.bgColor, for: .widget)
         } else {
-            let displayName = entry.tripTitle.isEmpty ? entry.tripName : entry.tripTitle
+            let displayName = entry.nextTitle.isEmpty ? entry.nextName : entry.nextTitle
+            let safeFlag = entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag
             ZStack(alignment: .topLeading) {
-                Text(entry.transport)
+                Text(entry.nextTransport.isEmpty ? "✈️" : entry.nextTransport)
                     .font(.system(size: 26))
-                if !entry.bookingRef.isEmpty {
-                    Text("#\(entry.bookingRef)")
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                if !entry.nextBookingRef.isEmpty {
+                    Text("#\(entry.nextBookingRef)")
+                        .font(.custom("Satoshi-Bold", size: 13))
                         .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
-                        Text(entry.tripFlag).font(.system(size: 14))
+                        FlagLabel(emoji: safeFlag, size: 14)
                         Text(displayName)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.custom("Satoshi-Bold", size: 13))
                             .foregroundStyle(raskmapBlue)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
-                    Text(daysLabel(entry.daysRemaining))
-                        .font(.system(size: 22, weight: .medium))
+                    Text(daysLabel(entry.nextDays))
+                        .font(.custom("Satoshi-Medium", size: 22))
                         .foregroundStyle(.white)
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
-                    if let d = entry.tripDateFrom {
+                    if let d = entry.nextDateFrom {
                         Text(widgetDateFormatter.string(from: d))
-                            .font(.system(size: 12))
+                            .font(.custom("Satoshi-Regular", size: 12))
                             .foregroundStyle(.white.opacity(0.55))
                             .lineLimit(1)
                     }
@@ -226,236 +244,501 @@ private struct RaskmapSmallView: View {
     }
 }
 
-// MARK: - Medium widget
+// MARK: - Medium
 
-private struct RaskmapMediumView: View {
+private struct MediumView: View {
     let entry: RaskmapEntry
 
+    private var upcomingFlagsSkippingFirst: String {
+        String(entry.upcomingFlags.dropFirst())
+    }
+
+    /// Formatea `nextDateFrom` como "vie · 15 may" (corto, locale es).
+    private var formattedNextDate: String? {
+        guard let d = entry.nextDateFrom else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "es_ES")
+        f.dateFormat = "EEE · d MMM"
+        return f.string(from: d).lowercased()
+    }
+
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            HStack(spacing: 0) {
-                // Left: transport emoji
-                ZStack {
-                    if entry.daysRemaining < 0 {
-                        Text("✈️").font(.system(size: 40))
-                    } else {
-                        Text(entry.transport).font(.system(size: 40))
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 5) {
+                    Text("PRÓXIMO VIAJE")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .tracking(1.6)
+                        .foregroundStyle(.white.opacity(0.75))
+                    if !entry.nextTransport.isEmpty {
+                        Text(entry.nextTransport)
+                            .font(.system(size: 11))
+                            .opacity(0.75)
                     }
-                }
-                .frame(maxHeight: .infinity)
-                .frame(width: 70)
-
-                // Divider
-                Rectangle()
-                    .fill(.white.opacity(0.25))
-                    .frame(width: 1)
-                    .padding(.vertical, 10)
-
-                // Right: trip info
-                if entry.daysRemaining < 0 {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Sin próximo viaje")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.8))
-                        Text("Añade un viaje planificado\npara verlo aquí")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .multilineTextAlignment(.leading)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .padding(.leading, 14)
-                } else {
-                    let displayName = entry.tripTitle.isEmpty ? entry.tripName : entry.tripTitle
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 5) {
-                            Text(entry.tripFlag).font(.system(size: 18))
-                            Text(displayName)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(raskmapBlue)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        Text(daysLabel(entry.daysRemaining))
-                            .font(.system(size: 32, weight: .medium))
-                            .foregroundStyle(.white)
-                            .minimumScaleFactor(0.5)
+                    if !entry.nextBookingRef.isEmpty {
+                        Text("· #\(entry.nextBookingRef)")
+                            .font(.custom("Satoshi-Bold", size: 9))
+                            .tracking(0.8)
+                            .foregroundStyle(.white.opacity(0.55))
                             .lineLimit(1)
-                        if let d = entry.tripDateFrom {
-                            Text(widgetDateFormatter.string(from: d))
-                                .font(.system(size: 13))
-                                .foregroundStyle(.white.opacity(0.55))
+                    }
+                }
+
+                if entry.nextDays >= 0 {
+                    HStack(alignment: .center, spacing: 12) {
+                        FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 52)
+                            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(entry.nextName.isEmpty ? "—" : entry.nextName)
+                                .font(.custom("Satoshi-Bold", size: 19))
+                                .foregroundStyle(.white)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.65)
+                            HStack(spacing: 4) {
+                                Text("en")
+                                    .font(.custom("Satoshi-Regular", size: 11))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                Text("\(entry.nextDays)")
+                                    .font(.custom("Satoshi-Bold", size: 17))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.white)
+                                Text(entry.nextDays == 1 ? "DÍA" : "DÍAS")
+                                    .font(.custom("Satoshi-Bold", size: 9))
+                                    .tracking(1.2)
+                                    .foregroundStyle(.white.opacity(0.75))
+                            }
+                            if let dateLabel = formattedNextDate {
+                                Text(dateLabel)
+                                    .font(.custom("Satoshi-Regular", size: 10))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                    .lineLimit(1)
+                            }
                         }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .padding(.leading, 14)
+                } else {
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("🗺️")
+                            .font(.system(size: 44))
+                            .opacity(0.85)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Sin viajes")
+                                .font(.custom("Satoshi-Bold", size: 17))
+                                .foregroundStyle(.white)
+                            Text("planea el siguiente")
+                                .font(.custom("Satoshi-Regular", size: 11))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                if !upcomingFlagsSkippingFirst.isEmpty {
+                    HStack(alignment: .center, spacing: 8) {
+                        Text("PRÓXIMOS")
+                            .font(.custom("Satoshi-Bold", size: 8))
+                            .tracking(1.2)
+                            .foregroundStyle(.white.opacity(0.55))
+                        FlagStrip(flags: String(upcomingFlagsSkippingFirst.prefix(9)), size: 15, spacing: 4)
+                            .lineLimit(1)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 20)
+            .padding(.trailing, 4)
+            .padding(.vertical, 18)
 
-            if entry.daysRemaining >= 0, !entry.bookingRef.isEmpty {
-                Text("#\(entry.bookingRef)")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.75))
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 0.5)
+                .padding(.vertical, 22)
+
+            VStack(spacing: 4) {
+                Spacer()
+                Text("\(entry.visited)")
+                    .font(.custom("Satoshi-Bold", size: 52))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.5)
                     .lineLimit(1)
-                    .padding(.trailing, 15)
-                    .padding(.top, 5)
+                Text(entry.mode.visitedLabel)
+                    .font(.custom("Satoshi-Regular", size: 10))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                Spacer()
+                Text(entry.mode.label)
+                    .font(.custom("Satoshi-Regular", size: 9))
+                    .foregroundStyle(.white.opacity(0.6))
             }
+            .frame(width: 104)
+            .padding(.vertical, 18)
+            .padding(.horizontal, 8)
         }
-        .padding(5)
         .containerBackground(entry.bgColor, for: .widget)
     }
 }
 
-// MARK: - Large widget
+// MARK: - Large
 
-private struct RaskmapLargeView: View {
+private struct LargeView: View {
     let entry: RaskmapEntry
 
+    /// Misma formateo que MediumView — "vie · 15 may".
+    private var formattedNextDate: String? {
+        guard let d = entry.nextDateFrom else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "es_ES")
+        f.dateFormat = "EEE · d MMM"
+        return f.string(from: d).lowercased()
+    }
+
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-          VStack(alignment: .leading, spacing: 0) {
-            // Top: próximo viaje (like small but more room)
-            if entry.daysRemaining < 0 {
-                HStack(spacing: 10) {
-                    Text("✈️").font(.system(size: 36))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Sin próximo viaje")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.8))
-                        Text("Añade un viaje planificado")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 8)
-            } else {
-                let displayName = entry.tripTitle.isEmpty ? entry.tripName : entry.tripTitle
-                ZStack(alignment: .topLeading) {
-                    Text(entry.transport).font(.system(size: 32))
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                if entry.nextDays >= 0 {
+                    FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 60)
+                        .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
+
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 5) {
-                            Text(entry.tripFlag).font(.system(size: 18))
-                            Text(displayName)
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(raskmapBlue)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
+                            Text("PRÓXIMO VIAJE")
+                                .font(.custom("Satoshi-Bold", size: 10))
+                                .tracking(1.8)
+                                .foregroundStyle(.white.opacity(0.75))
+                            if !entry.nextTransport.isEmpty {
+                                Text(entry.nextTransport)
+                                    .font(.system(size: 11))
+                                    .opacity(0.75)
+                            }
                         }
-                        Text(daysLabel(entry.daysRemaining))
-                            .font(.system(size: 36, weight: .medium))
+                        Text(entry.nextName.isEmpty ? "—" : entry.nextName)
+                            .font(.custom("Satoshi-Bold", size: 24))
                             .foregroundStyle(.white)
-                            .minimumScaleFactor(0.5)
                             .lineLimit(1)
-                        if let d = entry.tripDateFrom {
-                            Text(widgetDateFormatter.string(from: d))
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(0.55))
+                            .minimumScaleFactor(0.65)
+                        if let dateLabel = formattedNextDate {
+                            Text(dateLabel)
+                                .font(.custom("Satoshi-Regular", size: 11))
+                                .foregroundStyle(.white.opacity(0.65))
+                                .lineLimit(1)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 48)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 8)
-            }
 
-            // Divider
-            Rectangle()
-                .fill(.white.opacity(0.25))
-                .frame(height: 1)
-                .padding(.bottom, 12)
+                    Spacer(minLength: 6)
 
-            // Países visitados
-            HStack(spacing: 8) {
-                Text("🌍")
-                    .font(.system(size: 22))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(entry.visitedCount) \(entry.countingMode == .un ? "países" : "territorios") visitados")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(.white.opacity(0.2))
-                                .frame(height: 6)
-                            Capsule()
-                                .fill(.white.opacity(0.85))
-                                .frame(width: geo.size.width * min(Double(entry.visitedCount) / Double(entry.countingMode.total), 1.0), height: 6)
-                        }
+                    VStack(alignment: .center, spacing: 0) {
+                        Text("\(entry.nextDays)")
+                            .font(.custom("Satoshi-Bold", size: 42))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                        Text(entry.nextDays == 1 ? "DÍA" : "DÍAS")
+                            .font(.custom("Satoshi-Bold", size: 10))
+                            .tracking(1.6)
+                            .foregroundStyle(.white.opacity(0.75))
                     }
-                    .frame(height: 6)
-                    Text("de \(entry.countingMode.total) \(entry.countingMode.label)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.45))
+                } else {
+                    Text("🗺️")
+                        .font(.system(size: 48))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("SIN VIAJES PLANEADOS")
+                            .font(.custom("Satoshi-Bold", size: 10))
+                            .tracking(1.6)
+                            .foregroundStyle(.white.opacity(0.75))
+                        Text("Planea el siguiente")
+                            .font(.custom("Satoshi-Bold", size: 20))
+                            .foregroundStyle(.white)
+                    }
+                    Spacer()
                 }
             }
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
             .padding(.bottom, 14)
 
-            // Próximos destinos
-            if !entry.upcomingFlags.isEmpty {
-                Rectangle()
-                    .fill(.white.opacity(0.25))
-                    .frame(height: 1)
-                    .padding(.bottom, 10)
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(height: 0.5)
+                .padding(.horizontal, 16)
 
-                Text("Próximos destinos")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.bottom, 4)
-
-                Text(entry.upcomingFlags)
-                    .font(.system(size: 26))
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 0) {
+                statCell(value: entry.visitedUN, label: "ONU")
+                divider
+                statCell(value: entry.visitedUNPlus, label: "ONU+OBS")
+                divider
+                statCell(value: entry.visitedAll, label: "TODOS")
             }
+            .padding(.vertical, 14)
 
-            Spacer(minLength: 0)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(height: 0.5)
+                .padding(.horizontal, 16)
 
-          if entry.daysRemaining >= 0, !entry.bookingRef.isEmpty {
-              Text("#\(entry.bookingRef)")
-                  .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                  .foregroundStyle(.white.opacity(0.75))
-                  .lineLimit(1)
-          }
+            // Dos flag-strips: PRÓXIMOS y ÚLTIMOS — máximo 9 banderas cada
+            // uno. ÚLTIMOS usa `topVisitedFlags` ya ordenado por fecha del
+            // último viaje finalizado (más reciente a la izquierda).
+            VStack(alignment: .leading, spacing: 12) {
+                let upcomingRest = String(entry.upcomingFlags.dropFirst())
+                flagStrip(title: "PRÓXIMOS", flags: upcomingRest, placeholder: "Sin viajes futuros", maxCount: 9)
+                flagStrip(title: "ÚLTIMOS", flags: entry.topVisitedFlags, placeholder: "Registra tu primer viaje", maxCount: 9)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 14)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(height: 0.5)
+                .padding(.horizontal, 16)
+
+            // Footer minimal — fija el contenido al fondo del widget en vez
+            // de dejar `Spacer` vacío. Muestra modo de conteo + booking ref
+            // si hay viaje próximo + branding suave.
+            HStack(spacing: 8) {
+                Text(entry.mode.shortLabel)
+                    .font(.custom("Satoshi-Bold", size: 9))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.55))
+                if !entry.nextBookingRef.isEmpty {
+                    Text("·")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("PNR \(entry.nextBookingRef)")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .tracking(0.8)
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("RASKMAP")
+                    .font(.custom("Satoshi-Bold", size: 9))
+                    .tracking(2.0)
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
         }
-        .padding(16)
         .containerBackground(entry.bgColor, for: .widget)
     }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.18))
+            .frame(width: 0.5, height: 36)
+    }
+
+    @ViewBuilder
+    private func statCell(value: Int, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)")
+                .font(.custom("Satoshi-Bold", size: 26))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            Text(label)
+                .font(.custom("Satoshi-Bold", size: 9))
+                .tracking(1.2)
+                .foregroundStyle(.white.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func flagStrip(title: String, flags: String, placeholder: String, maxCount: Int = 9) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(title)
+                .font(.custom("Satoshi-Bold", size: 9))
+                .tracking(1.4)
+                .foregroundStyle(.white.opacity(0.7))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 70, alignment: .leading)
+            if flags.isEmpty {
+                Text(placeholder)
+                    .font(.custom("Satoshi-Regular", size: 11))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+            } else {
+                FlagStrip(flags: String(flags.prefix(maxCount)), size: 18, spacing: 4)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
 }
 
-// MARK: - Main widget dispatcher
+// MARK: - Widget
 
-struct RaskmapWidgetView: View {
-    let entry: RaskmapEntry
-    @Environment(\.widgetFamily) private var family
+struct RaskmapWidget: Widget {
+    let kind = "RaskmapWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: RaskmapProvider()) { entry in
+            RaskmapWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Raskmap")
+        .description("Próximo viaje y resumen de visitados.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+    }
+}
+
+// MARK: - Widget de mapa de vuelo (large)
+//
+// Variante del widget grande que muestra una captura del mapa con la ruta
+// del próximo vuelo trazada. La imagen la genera la app principal con
+// `MKMapSnapshotter` y la deja en el App Group como `next_flight_map.png`.
+
+struct FlightMapEntry: TimelineEntry {
+    let date: Date
+    let imagePath: String?
+    let depIATA: String
+    let arrIATA: String
+    let nextFlag: String
+    let nextName: String
+    let nextTitle: String
+    let nextDays: Int
+    let nextDateFrom: Date?
+}
+
+struct FlightMapProvider: TimelineProvider {
+    func placeholder(in context: Context) -> FlightMapEntry {
+        FlightMapEntry(date: .now, imagePath: nil, depIATA: "MAD", arrIATA: "NRT",
+                       nextFlag: "🇯🇵", nextName: "Tokio", nextTitle: "", nextDays: 18,
+                       nextDateFrom: Calendar.current.date(byAdding: .day, value: 18, to: .now))
+    }
+    func getSnapshot(in context: Context, completion: @escaping (FlightMapEntry) -> Void) {
+        completion(makeEntry())
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<FlightMapEntry>) -> Void) {
+        let entry = makeEntry()
+        let next  = Calendar.current.date(byAdding: .minute, value: 15, to: .now)!
+        completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+    private func makeEntry() -> FlightMapEntry {
+        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.jaime.raskmap")
+        let imgURL = container?.appendingPathComponent("next_flight_map.png")
+        let imgPath: String? = (imgURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0.path : nil })
+        let dateFromTS = sharedDefaults?.double(forKey: "widget_next_date") ?? 0
+        return FlightMapEntry(
+            date: .now,
+            imagePath: imgPath,
+            depIATA:  stringFromShared("widget_next_flight_dep_iata"),
+            arrIATA:  stringFromShared("widget_next_flight_arr_iata"),
+            nextFlag: stringFromShared("widget_next_flag"),
+            nextName: stringFromShared("widget_next_name"),
+            nextTitle: stringFromShared("widget_next_title"),
+            nextDays: sharedDefaults?.object(forKey: "widget_next_days") as? Int ?? -1,
+            nextDateFrom: dateFromTS > 0 ? Date(timeIntervalSince1970: dateFromTS) : nil
+        )
+    }
+}
+
+struct FlightMapWidgetView: View {
+    let entry: FlightMapEntry
+
+    private var hasFlight: Bool {
+        entry.nextDays >= 0
+    }
 
     var body: some View {
-        switch family {
-        case .systemMedium: RaskmapMediumView(entry: entry)
-        case .systemLarge:  RaskmapLargeView(entry: entry)
-        default:            RaskmapSmallView(entry: entry)
+        ZStack(alignment: .bottomLeading) {
+            // Fondo: captura del mapa si existe; en su defecto, gradiente.
+            // El gradiente de fondo siempre está presente para evitar que
+            // un fallo de carga deje el widget en blanco.
+            LinearGradient(
+                colors: [
+                    Color(red: 0x12/255, green: 0x1B/255, blue: 0x3A/255),
+                    Color(red: 0x40/255, green: 0x6E/255, blue: 0xC9/255)
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            if let path = entry.imagePath, let img = UIImage(contentsOfFile: path) {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            } else if !hasFlight {
+                // Sólo mostramos placeholder de "sin vuelo" si no hay ningún
+                // próximo vuelo. Si hay vuelo pero la imagen aún no se ha
+                // generado (snapshotter async la primera vez), dejamos el
+                // gradiente y la info del vuelo encima.
+                VStack(spacing: 8) {
+                    Image(systemName: "airplane")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("Sin próximo vuelo")
+                        .font(.custom("Satoshi-Bold", size: 13))
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // Overlay con info del vuelo (solo si hay vuelo registrado).
+            // Layout fijo: la fila IATA arriba a la derecha, y la fila
+            // bandera + título + countdown abajo a la izquierda. Eliminado
+            // el bloque de "en N días" debajo — el countdown va ahora
+            // inline con el nombre del país/título del viaje.
+            if hasFlight {
+                LinearGradient(
+                    colors: [Color.black.opacity(0.0), Color.black.opacity(0.55)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        if !entry.depIATA.isEmpty && !entry.arrIATA.isEmpty {
+                            Text("\(entry.depIATA) → \(entry.arrIATA)")
+                                .font(.custom("Satoshi-Bold", size: 13))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(.ultraThinMaterial, in: Capsule())
+                        }
+                        Spacer()
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 28)
+                        let title = entry.nextTitle.isEmpty
+                            ? (entry.nextName.isEmpty ? "Próximo vuelo" : entry.nextName)
+                            : entry.nextTitle
+                        Text(title)
+                            .font(.custom("Satoshi-Bold", size: 22))
+                            .foregroundStyle(.white)
+                            .lineLimit(1).minimumScaleFactor(0.55)
+                        Text("• \(entry.nextDays == 1 ? "1 día" : "\(entry.nextDays) días")")
+                            .font(.custom("Satoshi-Bold", size: 13))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                // Mantenemos la posición original del bloque (cuando había
+                // un texto extra debajo del countdown). Sin este padding
+                // bottom el bloque cae al borde y se ve "más abajo" que en
+                // el diseño original.
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 38)
+            }
         }
+        .containerBackground(Color.black, for: .widget)
     }
 }
 
-// MARK: - Totales por modo
-
-extension WCountingMode {
-    var total: Int {
-        switch self {
-        case .un:     return 193
-        case .unPlus: return 195
-        case .all:    return 249
+struct RaskmapFlightWidget: Widget {
+    let kind = "RaskmapFlight"
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: FlightMapProvider()) { entry in
+            FlightMapWidgetView(entry: entry)
         }
+        .configurationDisplayName("Raskmap · Vuelo")
+        .description("Mapa con la ruta de tu próximo vuelo.")
+        .supportedFamilies([.systemLarge])
+        .contentMarginsDisabled()
     }
 }
 
-// MARK: - Lock screen: porcentaje
+// MARK: - Lock screen: porcentaje (accessoryCircular)
 
 struct LockPctEntry: TimelineEntry {
     let date: Date
@@ -465,23 +748,21 @@ struct LockPctEntry: TimelineEntry {
     var pct: Double { total > 0 ? Double(visited) / Double(total) * 100.0 : 0.0 }
 }
 
-struct LockPctProvider: AppIntentTimelineProvider {
-    typealias Intent = RaskmapIntent
-    typealias Entry  = LockPctEntry
-
+struct LockPctProvider: TimelineProvider {
     func placeholder(in context: Context) -> LockPctEntry {
         LockPctEntry(date: .now, visited: 42, total: 193, isPro: true)
     }
-    func snapshot(for configuration: RaskmapIntent, in context: Context) async -> LockPctEntry {
-        makeEntry(configuration)
+    func getSnapshot(in context: Context, completion: @escaping (LockPctEntry) -> Void) {
+        completion(makeEntry())
     }
-    func timeline(for configuration: RaskmapIntent, in context: Context) async -> Timeline<LockPctEntry> {
-        let entry = makeEntry(configuration)
+    func getTimeline(in context: Context, completion: @escaping (Timeline<LockPctEntry>) -> Void) {
+        let entry = makeEntry()
         let next  = Calendar.current.date(byAdding: .minute, value: 15, to: .now)!
-        return Timeline(entries: [entry], policy: .after(next))
+        completion(Timeline(entries: [entry], policy: .after(next)))
     }
-    private func makeEntry(_ configuration: RaskmapIntent) -> LockPctEntry {
-        let mode    = WCountingMode(rawValue: configuration.mode.rawValue) ?? .un
+    private func makeEntry() -> LockPctEntry {
+        let modeRaw = sharedDefaults?.string(forKey: "widget_counting_mode") ?? "un"
+        let mode    = WCountingMode(rawValue: modeRaw) ?? .un
         let visited = intFromShared("widget_visited_\(mode.rawValue)")
         let isPro   = sharedDefaults?.bool(forKey: "widget_is_pro") ?? false
         return LockPctEntry(date: .now, visited: visited, total: mode.total, isPro: isPro)
@@ -517,7 +798,7 @@ struct LockPctView: View {
 struct RaskmapLockPctWidget: Widget {
     let kind = "RaskmapLockPct"
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: kind, intent: RaskmapIntent.self, provider: LockPctProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: LockPctProvider()) { entry in
             LockPctView(entry: entry)
         }
         .configurationDisplayName("% del mundo")
@@ -526,19 +807,21 @@ struct RaskmapLockPctWidget: Widget {
     }
 }
 
-// MARK: - Lock screen: próximo viaje
+// MARK: - Lock screen: próximo viaje (rectangular + inline)
 
 struct LockNextEntry: TimelineEntry {
     let date: Date
     let flag: String
     let days: Int
     let name: String
+    /// Título custom del viaje (`Trip.title` / `country.plannedTitle`). Vacío = usar `name` como fallback.
+    let title: String
     let isPro: Bool
 }
 
 struct LockNextProvider: TimelineProvider {
     func placeholder(in context: Context) -> LockNextEntry {
-        LockNextEntry(date: .now, flag: "🇯🇵", days: 12, name: "Tokio", isPro: true)
+        LockNextEntry(date: .now, flag: "🇯🇵", days: 12, name: "Tokio", title: "Viaje Tokio", isPro: true)
     }
     func getSnapshot(in context: Context, completion: @escaping (LockNextEntry) -> Void) {
         completion(makeEntry())
@@ -552,8 +835,9 @@ struct LockNextProvider: TimelineProvider {
         let flag  = sharedDefaults?.string(forKey: "widget_next_flag") ?? ""
         let days  = sharedDefaults?.integer(forKey: "widget_next_days") ?? -1
         let name  = sharedDefaults?.string(forKey: "widget_next_name") ?? ""
+        let title = sharedDefaults?.string(forKey: "widget_next_title") ?? ""
         let isPro = sharedDefaults?.bool(forKey: "widget_is_pro") ?? false
-        return LockNextEntry(date: .now, flag: flag.isEmpty ? "✈️" : flag, days: days, name: name, isPro: isPro)
+        return LockNextEntry(date: .now, flag: flag.isEmpty ? "✈️" : flag, days: days, name: name, title: title, isPro: isPro)
     }
 }
 
@@ -578,9 +862,18 @@ struct LockNextView: View {
                         .font(.system(size: 16, weight: .bold))
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
-                    Text("Próximo viaje")
+                    // Título del viaje si lo hay; si no, nombre del país (sin bandera).
+                    // Fallback final "Próximo viaje" solo si no hay ningún dato.
+                    let label: String = {
+                        if !entry.title.isEmpty { return entry.title }
+                        if !entry.name.isEmpty  { return entry.name }
+                        return "Próximo viaje"
+                    }()
+                    Text(label)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             }
             .containerBackground(.clear, for: .widget)
@@ -595,12 +888,12 @@ struct RaskmapLockNextWidget: Widget {
             LockNextView(entry: entry)
         }
         .configurationDisplayName("Próximo viaje")
-        .description("Bandera y días hasta el próximo viaje.")
+        .description("Días hasta el próximo evento.")
         .supportedFamilies([.accessoryRectangular])
     }
 }
 
-// MARK: - Lock screen encima del reloj: inline cuenta atrás
+// MARK: - Lock screen encima del reloj (accessoryInline)
 
 struct LockInlineView: View {
     let entry: LockNextEntry
@@ -631,7 +924,7 @@ struct RaskmapLockInlineWidget: Widget {
     }
 }
 
-// MARK: - Watch/lock screen: todas las banderas próximas
+// MARK: - Lock screen: banderas próximos viajes (accessoryRectangular)
 
 struct WatchFlagsEntry: TimelineEntry {
     let date: Date
@@ -678,9 +971,7 @@ struct WatchFlagsView: View {
             }
             .containerBackground(.clear, for: .widget)
         } else {
-            Text(entry.flags)
-                .font(.system(size: 22))
-                .minimumScaleFactor(0.4)
+            FlagStrip(flags: entry.flags, size: 22, spacing: 5)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .containerBackground(.clear, for: .widget)
@@ -700,48 +991,50 @@ struct RaskmapWatchFlagsWidget: Widget {
     }
 }
 
-// MARK: - Widget pantalla principal
-
-struct RaskmapWidget: Widget {
-    let kind = "RaskmapWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: RaskmapProvider()) { entry in
-            RaskmapWidgetView(entry: entry)
-        }
-        .configurationDisplayName("Próximo viaje")
-        .description("Días hasta tu próximo viaje planificado.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-        .contentMarginsDisabled()
-    }
-}
-
 #Preview(as: .systemSmall) {
     RaskmapWidget()
 } timeline: {
-    RaskmapEntry(date: .now, transport: "✈️", tripFlag: "🇯🇵", tripName: "Japón", tripTitle: "Viaje Tokio",
-                 daysRemaining: 42, tripDateFrom: Calendar.current.date(byAdding: .day, value: 42, to: .now),
-                 bgColor: colorFromShared(), visitedCount: 42, countingMode: .un, upcomingFlags: "🇯🇵🇫🇷🇩🇪", bookingRef: "ABC123")
-    RaskmapEntry(date: .now, transport: "🚂", tripFlag: "🇫🇷", tripName: "Francia", tripTitle: "",
-                 daysRemaining: 1, tripDateFrom: Calendar.current.date(byAdding: .day, value: 1, to: .now),
-                 bgColor: colorFromShared(), visitedCount: 42, countingMode: .un, upcomingFlags: "🇫🇷🇩🇪", bookingRef: "")
-    RaskmapEntry(date: .now, transport: "✈️", tripFlag: "🌍", tripName: "", tripTitle: "",
-                 daysRemaining: -1, tripDateFrom: nil,
-                 bgColor: colorFromShared(), visitedCount: 42, countingMode: .un, upcomingFlags: "", bookingRef: "")
+    RaskmapEntry(
+        date: .now, mode: .un, visited: 14,
+        visitedUN: 14, visitedUNPlus: 15, visitedAll: 18,
+        bgColor: colorFromShared(),
+        nextFlag: "🇯🇵", nextDays: 12, nextName: "Tokio", nextTitle: "",
+        nextTransport: "✈️",
+        nextDateFrom: Calendar.current.date(byAdding: .day, value: 12, to: .now),
+        nextBookingRef: "ABC123",
+        upcomingFlags: "🇯🇵🇩🇪🇫🇷🇮🇹🇬🇧",
+        topVisitedFlags: "🇪🇸🇫🇷🇮🇹🇺🇸🇯🇵"
+    )
 }
 
 #Preview(as: .systemMedium) {
     RaskmapWidget()
 } timeline: {
-    RaskmapEntry(date: .now, transport: "✈️", tripFlag: "🇯🇵", tripName: "Japón", tripTitle: "Viaje Tokio",
-                 daysRemaining: 42, tripDateFrom: Calendar.current.date(byAdding: .day, value: 42, to: .now),
-                 bgColor: colorFromShared(), visitedCount: 42, countingMode: .un, upcomingFlags: "🇯🇵🇫🇷🇩🇪", bookingRef: "ABC123")
+    RaskmapEntry(
+        date: .now, mode: .un, visited: 42,
+        visitedUN: 42, visitedUNPlus: 45, visitedAll: 48,
+        bgColor: colorFromShared(),
+        nextFlag: "🇯🇵", nextDays: 18, nextName: "Tokio", nextTitle: "",
+        nextTransport: "✈️",
+        nextDateFrom: Calendar.current.date(byAdding: .day, value: 18, to: .now),
+        nextBookingRef: "ABC123",
+        upcomingFlags: "🇯🇵🇩🇪🇫🇷🇮🇹🇬🇧🇪🇸",
+        topVisitedFlags: "🇪🇸🇫🇷🇮🇹🇺🇸🇯🇵"
+    )
 }
 
 #Preview(as: .systemLarge) {
     RaskmapWidget()
 } timeline: {
-    RaskmapEntry(date: .now, transport: "✈️", tripFlag: "🇯🇵", tripName: "Japón", tripTitle: "Viaje Tokio",
-                 daysRemaining: 42, tripDateFrom: Calendar.current.date(byAdding: .day, value: 42, to: .now),
-                 bgColor: colorFromShared(), visitedCount: 42, countingMode: .un, upcomingFlags: "🇯🇵🇫🇷🇩🇪🇮🇹🇪🇸", bookingRef: "XY7890")
+    RaskmapEntry(
+        date: .now, mode: .un, visited: 42,
+        visitedUN: 42, visitedUNPlus: 45, visitedAll: 48,
+        bgColor: colorFromShared(),
+        nextFlag: "🇯🇵", nextDays: 18, nextName: "Tokio", nextTitle: "",
+        nextTransport: "✈️",
+        nextDateFrom: Calendar.current.date(byAdding: .day, value: 18, to: .now),
+        nextBookingRef: "ABC123",
+        upcomingFlags: "🇯🇵🇩🇪🇫🇷🇮🇹🇬🇧🇪🇸",
+        topVisitedFlags: "🇪🇸🇫🇷🇮🇹🇺🇸🇯🇵🇩🇪🇵🇹🇳🇱"
+    )
 }
