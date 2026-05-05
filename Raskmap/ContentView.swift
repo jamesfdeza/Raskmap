@@ -727,6 +727,12 @@ struct ContentView: View {
 
 
     fileprivate func handleTripsCountChange() {
+        // Re-evalúa Country.status: si tras borrar el último trip de un país
+        // visited queda sin pasados ni futuros ni visitCount manual, vuelve
+        // a .none (o .wantToVisit si tenía planned). Antes esto solo corría
+        // al arrancar la app y dejaba estados stale entre sesiones.
+        cleanupZeroXVisitedStates()
+        cleanupOrphanChildTrips()
         checkAndShowAchievementToasts()
         WidgetDataWriter.sync(countries: countries)
         WidgetDataWriter.syncCountingMode(countingMode.rawValue)
@@ -738,6 +744,22 @@ struct ContentView: View {
         let af = nextFlightAirportsAny()
         WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
         recalculateFlightRouteAvailability()
+    }
+
+    /// Borra child trips (`isSegmentChild`) cuyo primary ya no existe en
+    /// `trips` (mismo `segmentGroupID`). Sin esto, los huérfanos siguen
+    /// apareciendo en stats y en listas de país después de borrar el
+    /// primary. Sucede principalmente con borrados parciales (delete
+    /// manual desde country list sin cascada).
+    fileprivate func cleanupOrphanChildTrips() {
+        let primaryGIDs = Set(trips.compactMap { $0.isSegmentChild ? nil : $0.segmentGroupID })
+        var changed = false
+        for trip in trips where trip.isSegmentChild {
+            guard let gid = trip.segmentGroupID, !primaryGIDs.contains(gid) else { continue }
+            modelContext.delete(trip)
+            changed = true
+        }
+        if changed { try? modelContext.save() }
     }
 
     fileprivate func handleVisitedCountChange(_ newCount: Int) {
@@ -2513,10 +2535,27 @@ struct FinalizadosListSheet: View {
     let rows: [ProximoRow]
     let features: [CountryFeature]
     let onRemove: (ProximoRow) -> Void
+    var onDuplicate: ((ProximoRow) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var rowToRemove: ProximoRow? = nil
     @State private var rowToShow: ProximoRow? = nil
+    @State private var rowToDuplicate: ProximoRow? = nil
+    @State private var transportFilter: String? = nil   // emoji, nil = todos
+
+    /// Aplica el filtro de transporte sobre las filas. Compara con
+    /// `row.transport` y, si el row tiene `trip.tripSegments`, también con
+    /// los transports de los segments (un viaje multi-modal con un ✈️ filtra
+    /// para "✈️").
+    private func passesTransportFilter(_ row: ProximoRow) -> Bool {
+        guard let f = transportFilter else { return true }
+        if let t = row.transport, normalizeWalkEmoji(t) == normalizeWalkEmoji(f) { return true }
+        let segs = row.trip?.tripSegments ?? []
+        return segs.contains { normalizeWalkEmoji($0.transport) == normalizeWalkEmoji(f) }
+    }
+    private func normalizeWalkEmoji(_ e: String) -> String {
+        e == "🚶" ? "🚶🏻" : e
+    }
 
     private func displayName(for country: Country) -> String {
         features.first(where: { $0.isoCode == country.isoCode })?.localizedName ?? country.name
@@ -2537,6 +2576,20 @@ struct FinalizadosListSheet: View {
     private func isoA2(for iso: String) -> String {
         features.first(where: { $0.isoCode == iso })?.isoA2 ?? ""
     }
+    @ViewBuilder
+    private func filterChip(emoji: String?, label: String) -> some View {
+        let active = transportFilter == emoji
+        Button { transportFilter = emoji } label: {
+            Text(label)
+                .font(.custom("Satoshi-Bold", size: 13))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(active ? Color(red: 64/255, green: 114/255, blue: 212/255) : Color(.systemGray5),
+                            in: Capsule())
+                .foregroundStyle(active ? .white : .primary)
+        }
+        .buttonStyle(.plain)
+    }
+
     /// País del trip donde se han pasado más días. Empate → primero alfabético.
     private func mainCountryIso(for row: ProximoRow) -> String {
         guard let trip = row.trip else { return row.country.isoCode }
@@ -2551,7 +2604,7 @@ struct FinalizadosListSheet: View {
     }()
 
     private var sorted: [ProximoRow] {
-        rows.sorted {
+        rows.filter(passesTransportFilter).sorted {
             let a = $0.dateFrom ?? .distantPast
             let b = $1.dateFrom ?? .distantPast
             return a < b
@@ -2581,12 +2634,51 @@ struct FinalizadosListSheet: View {
 
     var body: some View {
         NavigationStack {
+            VStack(spacing: 0) {
+                // Filtros de transporte — chips horizontales scrollables.
+                // Se calculan los transports presentes en los rows del año
+                // (no la lista fija de 6) para no mostrar opciones vacías.
+                let availableTransports: [String] = {
+                    var seen = Set<String>()
+                    var result: [String] = []
+                    for r in rows {
+                        if let t = r.transport, seen.insert(normalizeWalkEmoji(t)).inserted {
+                            result.append(normalizeWalkEmoji(t))
+                        }
+                        for s in r.trip?.tripSegments ?? [] {
+                            if seen.insert(normalizeWalkEmoji(s.transport)).inserted {
+                                result.append(normalizeWalkEmoji(s.transport))
+                            }
+                        }
+                    }
+                    return result
+                }()
+                if availableTransports.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            filterChip(emoji: nil, label: "Todos")
+                            ForEach(availableTransports, id: \.self) { emoji in
+                                filterChip(emoji: emoji, label: emoji)
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                    }
+                    Divider()
+                }
             Group {
                 if rows.isEmpty {
                     VStack(spacing: 12) {
                         Spacer()
                         Text("Sin viajes finalizados").font(.palatino(.subheadline)).foregroundStyle(.secondary)
                         Text(String(year)).font(.palatino(.title3, weight: .bold))
+                        Spacer()
+                    }
+                } else if sorted.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer()
+                        Text("Sin resultados con este filtro").font(.palatino(.subheadline)).foregroundStyle(.secondary)
+                        Button("Quitar filtro") { transportFilter = nil }
+                            .font(.palatino(.body, weight: .bold))
                         Spacer()
                     }
                 } else {
@@ -2640,6 +2732,16 @@ struct FinalizadosListSheet: View {
                                     .padding(.vertical, 2)
                                     .contentShape(Rectangle())
                                     .onTapGesture { rowToShow = row }
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        if onDuplicate != nil {
+                                            Button {
+                                                rowToDuplicate = row
+                                            } label: {
+                                                Label("Duplicar", systemImage: "plus.square.on.square")
+                                            }
+                                            .tint(.blue)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2647,6 +2749,7 @@ struct FinalizadosListSheet: View {
                     .listStyle(.plain)
                 }
             }
+            } // end VStack
             .navigationTitle("Finalizados \(String(year))")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2675,6 +2778,24 @@ struct FinalizadosListSheet: View {
         // todos los tramos (países + transportes) del trip seleccionado.
         .sheet(item: $rowToShow) { row in
             FinalizadoTripDetailSheet(row: row, features: features)
+        }
+        .confirmationDialog(
+            "¿Duplicar este viaje a futuro?",
+            isPresented: Binding(
+                get: { rowToDuplicate != nil },
+                set: { if !$0 { rowToDuplicate = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Duplicar a +1 año") {
+                if let row = rowToDuplicate { onDuplicate?(row) }
+                rowToDuplicate = nil
+            }
+            Button("Cancelar", role: .cancel) { rowToDuplicate = nil }
+        } message: {
+            if let row = rowToDuplicate {
+                Text("Se creará una copia de \(displayName(for: mainCountryIso(for: row))) con las mismas fechas pero +365 días en el futuro. Podrás editarla luego.")
+            }
         }
         .appColorScheme()
     }
@@ -4319,6 +4440,71 @@ struct ProfileSheet: View {
                     } else {
                         finalizadosPayload = FinalizadosSheetPayload(year: payload.year)
                     }
+                },
+                onDuplicate: { row in
+                    // Duplicar viaje a +365 días: copia primary + children del
+                    // mismo segmentGroupID, manteniendo segments/airports/airlines.
+                    // Country se promociona a wantToVisit.
+                    guard let original = row.trip else { return }
+                    let cal = Calendar.current
+                    let shift: TimeInterval = 365 * 24 * 60 * 60
+                    let newGroupID = UUID().uuidString
+
+                    // Buscar todos los miembros del grupo (primary + children).
+                    let groupTrips: [Trip]
+                    if let gid = original.segmentGroupID {
+                        let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.segmentGroupID == gid })
+                        groupTrips = modelContext.fetchOrWarn(desc, fallback: [original])
+                    } else {
+                        groupTrips = [original]
+                    }
+
+                    for src in groupTrips {
+                        let newFrom = src.dateFrom.addingTimeInterval(shift)
+                        let newTo = src.dateTo.map { $0.addingTimeInterval(shift) }
+                        let copy = Trip(
+                            isoCode: src.isoCode,
+                            title: src.title,
+                            dateFrom: newFrom,
+                            dateTo: newTo,
+                            transport: src.transport,
+                            tripAirports: src.tripAirports,
+                            tripAirlines: src.tripAirlines
+                        )
+                        copy.hasLayover = src.hasLayover
+                        copy.segmentGroupID = newGroupID
+                        copy.isSegmentChild = src.isSegmentChild
+                        copy.flightDetails = src.flightDetails
+                        copy.visitedLayoverISOs = src.visitedLayoverISOs
+                        // Shift dates en los segments embebidos también.
+                        if !src.tripSegments.isEmpty {
+                            copy.tripSegments = src.tripSegments.map { seg in
+                                var s = seg
+                                s.dateFrom = seg.dateFrom.addingTimeInterval(shift)
+                                s.dateTo = seg.dateTo.map { $0.addingTimeInterval(shift) }
+                                return s
+                            }
+                        }
+                        modelContext.insert(copy)
+
+                        // Promocionar el país a wantToVisit (si no es ya visited/lived).
+                        let iso = src.isoCode
+                        let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
+                        if let country = modelContext.fetchFirstOrWarn(cd),
+                           country.status != .visited && country.status != .lived {
+                            country.status = .wantToVisit
+                            if country.plannedDate == nil || newFrom < country.plannedDate! {
+                                country.plannedDate = newFrom
+                                country.plannedDateTo = newTo
+                                country.transport = src.transport
+                                country.plannedTitle = src.title
+                            }
+                        }
+                        _ = cal // suppress unused warning if calendar isn't used elsewhere
+                    }
+                    try? modelContext.save()
+                    // Refrescar el sheet
+                    finalizadosPayload = FinalizadosSheetPayload(year: payload.year)
                 }
             )
         }
@@ -5566,6 +5752,7 @@ struct SettingsSheet: View {
                 }
             }
             isWiping = false
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             withAnimation { showWipeDoneToast = true }
         }
         try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -6026,6 +6213,26 @@ struct FlightInfoSection: View {
                     cabin: $info.cabinClass
                 )
             } else {
+                // Cuando hay >1 tramos, ofrecemos un botón rápido "Aplicar a
+                // todos" que copia la clase + posición + asiento del primer
+                // tramo a TODOS los demás. Asiento exacto rara vez se repite,
+                // pero clase/posición sí. El usuario puede luego ajustar
+                // tramos individuales que difieran.
+                if totalLegCount > 1, info.outboundLegs.first?.hasAnyData == true {
+                    Button { applyFirstLegToAll() } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.down.doc")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("Aplicar clase y posición a todos los tramos")
+                                .font(.palatino(.caption, weight: .bold))
+                        }
+                        .foregroundStyle(accent)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(accent.opacity(0.10), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                }
                 // Ida
                 if outboundLegCount > 0 {
                     if outboundRoute.count > 2 || returnLegCount > 0 {
@@ -6135,6 +6342,24 @@ struct FlightInfoSection: View {
         }
 
         if current != info { info = current }
+    }
+
+    /// Replica la clase y posición del primer tramo de IDA al resto (ida + vuelta).
+    /// El asiento concreto NO se replica (siempre es distinto por tramo).
+    private func applyFirstLegToAll() {
+        guard let first = info.outboundLegs.first else { return }
+        var current = info
+        for i in current.outboundLegs.indices {
+            if i == 0 { continue }
+            current.outboundLegs[i].seatPosition = first.seatPosition
+            current.outboundLegs[i].cabinClass = first.cabinClass
+        }
+        for i in current.returnLegs.indices {
+            current.returnLegs[i].seatPosition = first.seatPosition
+            current.returnLegs[i].cabinClass = first.cabinClass
+        }
+        info = current
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func outboundBinding(_ kp: WritableKeyPath<FlightLegInfo, String>, idx: Int) -> Binding<String> {
@@ -7315,6 +7540,7 @@ struct AddTripSheet: View {
             }
         }
         didSave = true
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         onSave(trip, newlyVisitedNames)
         dismiss()
     }
@@ -8515,6 +8741,53 @@ struct TransportStatsSheet: View {
         return counts.map { ($0.key, $0.value) }.sorted { $0.1 > $1.1 }
     }
 
+    /// Suma de km gran-circular volados en TODOS los segmentos ✈️ (ida + vuelta)
+    /// + trips legacy con `tripAirports` consecutivos. Usa `AirportCoordinates`
+    /// para resolver IATAs a coordenadas; pares con coords desconocidas se
+    /// saltan (no rompen el total).
+    private var totalKilometersFlown: Int {
+        var total: Double = 0
+        func addPair(_ a: String, _ b: String) {
+            guard a != b,
+                  let ca = AirportCoordinates.coordinate(for: a),
+                  let cb = AirportCoordinates.coordinate(for: b) else { return }
+            // Haversine en km (R = 6371).
+            let lat1 = ca.latitude * .pi / 180, lon1 = ca.longitude * .pi / 180
+            let lat2 = cb.latitude * .pi / 180, lon2 = cb.longitude * .pi / 180
+            let dLat = lat2 - lat1, dLon = lon2 - lon1
+            let h = sin(dLat / 2) * sin(dLat / 2)
+                  + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+            let c = 2 * atan2(sqrt(h), sqrt(1 - h))
+            total += 6371 * c
+        }
+        for trip in pastTrips where !trip.isSegmentChild {
+            for seg in trip.tripSegments where seg.transport == "✈️" {
+                let outs = seg.airports?.map(\.iata) ?? []
+                for i in 0..<max(0, outs.count - 1) { addPair(outs[i], outs[i + 1]) }
+                let rets = seg.returnAirports?.map(\.iata) ?? []
+                for i in 0..<max(0, rets.count - 1) { addPair(rets[i], rets[i + 1]) }
+            }
+            // Legacy: solo si exactamente 2 aeropuertos (round-trip directo).
+            if trip.tripSegments.isEmpty, trip.transport == "✈️", trip.tripAirports.count == 2 {
+                addPair(trip.tripAirports[0].iata, trip.tripAirports[1].iata)
+                let touches = trip.tripAirports.reduce(0) { $0 + $1.count }
+                if touches >= 4 {
+                    // Round-trip: cuenta también la vuelta (mismo par).
+                    addPair(trip.tripAirports[1].iata, trip.tripAirports[0].iata)
+                }
+            }
+        }
+        return Int(total.rounded())
+    }
+
+    private static let kmFormatter: NumberFormatter = {
+        let nf = NumberFormatter()
+        nf.numberStyle = .decimal
+        nf.groupingSeparator = "."
+        nf.maximumFractionDigits = 0
+        return nf
+    }()
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -8529,6 +8802,27 @@ struct TransportStatsSheet: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
+
+                    // Card de km volados — visible solo si hay vuelos con coordenadas.
+                    let km = totalKilometersFlown
+                    if km > 0 {
+                        HStack(spacing: 12) {
+                            Image(systemName: "airplane")
+                                .font(.system(size: 22))
+                                .foregroundStyle(Color(red: 64/255, green: 114/255, blue: 212/255))
+                                .frame(width: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("KM VOLADOS").font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary).tracking(0.8)
+                                Text("\(Self.kmFormatter.string(from: NSNumber(value: km)) ?? "\(km)") km")
+                                    .font(.custom("Satoshi-Bold", size: 22))
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 18).padding(.vertical, 14)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 24)
+                    }
 
                     if counts.isEmpty {
                         Text("Añade el medio de transporte en tus viajes para ver estadísticas.")
@@ -9824,6 +10118,7 @@ struct EditTripSheet: View {
             }
         }
         try? modelContext.save()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }
 
@@ -12903,8 +13198,12 @@ struct RouteWizardSheet: View {
                         .foregroundStyle(.primary)
                 }
                 Button {
-                    returnDepartureIata = ""
-                    returnFinalIata = ""
+                    // Pre-fill: la salida de la vuelta es típicamente el último
+                    // aeropuerto del outbound (auto-detect). El destino de la
+                    // vuelta es típicamente el origen (favorito/casa). El usuario
+                    // puede sobrescribir si la ruta es asimétrica de verdad.
+                    returnDepartureIata = finalIata
+                    returnFinalIata = departureIata
                     query = ""; step = .returnDeparture
                 } label: {
                     Text("🔀  Ruta de vuelta diferente")
