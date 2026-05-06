@@ -13,6 +13,7 @@ import CoreLocation
 import MessageUI
 import StoreKit
 import ActivityKit
+import UserNotifications
 
 class MapStore: ObservableObject {
     var centerOnCountry: ((String) -> Void)?
@@ -75,6 +76,7 @@ struct ContentView: View {
     @AppStorage("earnedPassportAchievementsRaw") private var earnedPassportRaw: String = "[]"
     @AppStorage("liveActivityEnabled") private var liveActivityEnabled: Bool = false
     @AppStorage("neverShowReview") private var neverShowReview: Bool = false
+    @AppStorage("tripRemindersEnabled") private var tripRemindersEnabled: Bool = false
     @State private var showSubscription: Bool = false
     @State private var showReviewAlert: Bool = false
     @State private var prevAchieved: Set<AchievementKind>? = nil
@@ -744,6 +746,10 @@ struct ContentView: View {
         let af = nextFlightAirportsAny()
         WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
         recalculateFlightRouteAvailability()
+        // Reprograma recordatorios de viaje si el usuario los tiene activos.
+        if tripRemindersEnabled {
+            TripNotifications.reschedule(trips: trips, featuresByIso: featuresByIso)
+        }
     }
 
     /// Borra child trips (`isSegmentChild`) cuyo primary ya no existe en
@@ -1332,17 +1338,31 @@ struct ContentView: View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
             VStack(spacing: 0) {
-                if onboardingStep == 0 {
-                    onboardingUsernameStep()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                                removal: .move(edge: .leading).combined(with: .opacity)))
-                } else {
-                    onboardingPassportStep()
-                        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                                removal: .move(edge: .leading).combined(with: .opacity)))
+                Group {
+                    switch onboardingStep {
+                    case 0: onboardingUsernameStep()
+                    case 1: onboardingPassportStep()
+                    case 2: onboardingTourCategoriesStep()
+                    default: onboardingTourFinalStep()
+                    }
                 }
+                .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                        removal: .move(edge: .leading).combined(with: .opacity)))
             }
             .animation(.spring(response: 0.45, dampingFraction: 0.82), value: onboardingStep)
+            // Indicador de pasos en la parte inferior.
+            VStack {
+                Spacer()
+                HStack(spacing: 8) {
+                    ForEach(0..<4, id: \.self) { i in
+                        Circle()
+                            .fill(onboardingStep == i ? Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255) : Color(.systemGray4))
+                            .frame(width: 7, height: 7)
+                    }
+                }
+                .padding(.bottom, 22)
+            }
+            .allowsHitTesting(false)
         }
         .interactiveDismissDisabled(true)
     }
@@ -1441,11 +1461,9 @@ struct ContentView: View {
             }
 
             Button(action: {
-                showOnboarding = false
-                onboardingStep = 0
-                didShowOnboarding = true
+                onboardingStep = 2  // sigue con el tour de categorías
             }) {
-                Text("Empezar a explorar")
+                Text("Continuar")
                     .font(.palatino(.body, weight: .bold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -1455,6 +1473,120 @@ struct ContentView: View {
             }
             .padding(.horizontal, 32)
             .padding(.bottom, 24)
+        }
+    }
+
+    /// Step 3 — tour de categorías y mapa. Explica visited / próximos / quiero.
+    @ViewBuilder
+    private func onboardingTourCategoriesStep() -> some View {
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 28) {
+                VStack(spacing: 12) {
+                    Image(systemName: "map.fill")
+                        .font(.system(size: 56, weight: .light))
+                        .foregroundStyle(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255))
+                    Text("Tres listas para tu mundo")
+                        .font(.custom("Satoshi-Bold", size: 24))
+                        .multilineTextAlignment(.center)
+                }
+                VStack(alignment: .leading, spacing: 18) {
+                    onboardingTourRow(
+                        emoji: "✅",
+                        title: "Visitados",
+                        body: "Países o territorios donde ya has estado. Los pintamos de rojo."
+                    )
+                    onboardingTourRow(
+                        emoji: "🔜",
+                        title: "Próximos",
+                        body: "Viajes ya planeados con fecha. Los pintamos de verde."
+                    )
+                    onboardingTourRow(
+                        emoji: "📝",
+                        title: "Quiero",
+                        body: "Tu wishlist de destinos sin fecha aún. Naranja en el mapa."
+                    )
+                }
+                .padding(.horizontal, 32)
+            }
+            Spacer()
+            Button {
+                onboardingStep = 3
+            } label: {
+                Text("Continuar")
+                    .font(.palatino(.body, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 56)
+        }
+    }
+
+    /// Step 4 — tour final: perfil, widgets, modo vuelos.
+    @ViewBuilder
+    private func onboardingTourFinalStep() -> some View {
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 28) {
+                VStack(spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 56, weight: .light))
+                        .foregroundStyle(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255))
+                    Text("Y mucho más")
+                        .font(.custom("Satoshi-Bold", size: 24))
+                        .multilineTextAlignment(.center)
+                }
+                VStack(alignment: .leading, spacing: 18) {
+                    onboardingTourRow(
+                        emoji: "📊",
+                        title: "Perfil con stats",
+                        body: "Logros, premios personales, transporte usado y resumen anual."
+                    )
+                    onboardingTourRow(
+                        emoji: "✈️",
+                        title: "Modo vuelos",
+                        body: "Botón derecha del mapa: visualiza todas tus rutas en gran círculo."
+                    )
+                    onboardingTourRow(
+                        emoji: "📱",
+                        title: "Widgets",
+                        body: "Pon Raskmap en tu pantalla principal o de bloqueo."
+                    )
+                }
+                .padding(.horizontal, 32)
+            }
+            Spacer()
+            Button {
+                showOnboarding = false
+                onboardingStep = 0
+                didShowOnboarding = true
+            } label: {
+                Text("Empezar a explorar")
+                    .font(.palatino(.body, weight: .bold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 56)
+        }
+    }
+
+    @ViewBuilder
+    private func onboardingTourRow(emoji: String, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(emoji).font(.system(size: 28)).frame(width: 36)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.custom("Satoshi-Bold", size: 16))
+                Text(body).font(.palatino(.subheadline)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -3042,12 +3174,54 @@ struct FinalizadoTripDetailSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { dismiss() }.font(.palatino(.body))
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        shareTrip()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.body)
+                    }
+                    .accessibilityLabel("Compartir viaje")
+                }
             }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear { recomputeDays() }
         .appColorScheme()
+    }
+
+    /// Compone un texto compartible con título + rango de fechas + países +
+    /// días por país. Lo lanza por UIActivityViewController para que el
+    /// usuario lo mande por Mensajes, WhatsApp, Mail, etc.
+    private func shareTrip() {
+        let lines: [String] = {
+            var parts: [String] = []
+            parts.append("✈️ \(headerTitle)")
+            if let r = dateRangeText { parts.append(r) }
+            if !daysByCountry.isEmpty {
+                parts.append("")
+                parts.append("Días por país:")
+                for entry in daysByCountry {
+                    let flag = flagEmoji(for: entry.iso)
+                    let name = displayName(for: entry.iso)
+                    parts.append("\(flag) \(name) — \(entry.days) \(entry.days == 1 ? "día" : "días")")
+                }
+            }
+            parts.append("")
+            parts.append("Compartido desde Raskmap 🗺️")
+            return parts
+        }()
+        let text = lines.joined(separator: "\n")
+        let av = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let key = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
+        else { return }
+        var top = key.rootViewController
+        while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+            top = presented
+        }
+        top?.present(av, animated: true)
     }
 }
 
@@ -4916,6 +5090,8 @@ struct SettingsSheet: View {
     @State private var showWipeFinalConfirm: Bool = false
     @State private var isWiping: Bool = false
     @State private var showWipeDoneToast: Bool = false
+    @State private var showExportSheet: Bool = false
+    @State private var exportFileURL: URL? = nil
     @State private var showImagePicker: Bool = false
     @State private var usernameDraft: String = ""
     @FocusState private var usernameFocused: Bool
@@ -4949,6 +5125,7 @@ struct SettingsSheet: View {
     @State private var proCodeError: Bool = false
     @AppStorage("widgetBgColorHex") private var widgetBgColorHex: String = "#EE6E7D"
     @AppStorage("liveActivityEnabled") private var liveActivityEnabled: Bool = false
+    @AppStorage("tripRemindersEnabled") private var tripRemindersEnabled: Bool = false
     @AppStorage("multiHemisphereRaw") private var multiHemisphereRaw: String = "{}"
 
     @AppStorage("favoriteAirport") private var favoriteAirport: String = ""
@@ -5377,8 +5554,38 @@ struct SettingsSheet: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .contentShape(Rectangle())
+                            Rectangle().fill(Color(.separator)).frame(height: 0.5).padding(.leading, 16)
+                            // Recordatorios de viaje (notificaciones locales) — gratis.
+                            HStack {
+                                Label("Recordatorios de viaje", systemImage: "bell")
+                                    .font(.palatino(.body))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Toggle("", isOn: $tripRemindersEnabled)
+                                    .labelsHidden()
+                                    .tint(.blue)
+                                    .onChange(of: tripRemindersEnabled) { _, enabled in
+                                        Task {
+                                            if enabled {
+                                                let granted = await TripNotifications.requestAuthorization()
+                                                if !granted {
+                                                    await MainActor.run { tripRemindersEnabled = false }
+                                                }
+                                            } else {
+                                                TripNotifications.cancelAll()
+                                            }
+                                        }
+                                    }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
                         }
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        Text("Si activas los recordatorios, recibirás avisos 7 días antes, el día anterior y el día del viaje.")
+                            .font(.palatino(.caption))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
                     }
                     .padding(.horizontal, 24)
 
@@ -5467,34 +5674,59 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
 
-                    // ── Borrar todos mis datos (App Store / GDPR) ──
+                    // ── Datos: export + wipe (App Store / GDPR Art. 17/20) ──
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Datos")
                             .font(.palatino(.subheadline, weight: .bold))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 4)
-                        Button {
-                            showWipeConfirm = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 16))
-                                    .foregroundStyle(.red)
-                                    .frame(width: 24)
-                                Text("Borrar todos mis datos")
-                                    .font(.palatino(.body))
-                                    .foregroundStyle(.red)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                        VStack(spacing: 0) {
+                            // Exportar (GDPR Art. 20 — portabilidad)
+                            Button {
+                                showExportSheet = true
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(.blue)
+                                        .frame(width: 24)
+                                    Text("Exportar mis datos")
+                                        .font(.palatino(.body))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.horizontal, 16).padding(.vertical, 14)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            Divider().padding(.leading, 52)
+                            // Borrar (GDPR Art. 17 — derecho al olvido)
+                            Button {
+                                showWipeConfirm = true
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(.red)
+                                        .frame(width: 24)
+                                    Text("Borrar todos mis datos")
+                                        .font(.palatino(.body))
+                                        .foregroundStyle(.red)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-                        Text("Elimina todos los países, viajes, premios y preferencias guardados en este dispositivo. Si tienes iCloud activo, también se eliminarán los datos de tu nube tras la siguiente sincronización.")
+                        Text("Exportar genera un JSON con tus países, viajes y preferencias para que puedas guardarlo o moverlo a otro dispositivo. Borrar elimina todo localmente; con iCloud activo, también se sincroniza el borrado.")
                             .font(.palatino(.caption))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 4)
@@ -5565,6 +5797,12 @@ struct SettingsSheet: View {
                 }
             } message: {
                 Text("Se eliminarán todos los países de Bucket list. Esta acción no se puede deshacer.")
+            }
+            .sheet(isPresented: $showExportSheet) {
+                ExportDataSheet(
+                    countriesProvider: { fetchAllCountries() },
+                    tripsProvider: { fetchAllTrips() }
+                )
             }
             // Wipe completo (App Store / GDPR): paso 1 — aviso, paso 2 — confirmación final.
             .alert("¿Borrar todos tus datos?", isPresented: $showWipeConfirm) {
@@ -5697,6 +5935,13 @@ struct SettingsSheet: View {
         .appColorScheme()
     }
 
+    private func fetchAllCountries() -> [Country] {
+        modelContext.fetchOrWarn(FetchDescriptor<Country>())
+    }
+    private func fetchAllTrips() -> [Trip] {
+        modelContext.fetchOrWarn(FetchDescriptor<Trip>())
+    }
+
     /// Borra todos los datos persistidos del usuario (cumplimiento App Store
     /// y GDPR Art. 17 — derecho al olvido). Limpia SwiftData, AppStorage,
     /// cualquier preferencia local y el estado del widget en App Group.
@@ -5728,7 +5973,8 @@ struct SettingsSheet: View {
                 "personalList2Title", "personalList2Content",
                 "subjectiveCategoriesTable", "subjectiveCategoriesOrder",
                 "color_visited", "color_wantToVisit", "color_bucketList", "color_lived",
-                "widgetBgColorHex", "menuPosition", "countingMode"
+                "widgetBgColorHex", "menuPosition", "countingMode",
+                "tripRemindersEnabled"
             ]
             for k in keysToWipe { defaults.removeObject(forKey: k) }
             // 3) App Group del widget
@@ -5751,6 +5997,8 @@ struct SettingsSheet: View {
                     }
                 }
             }
+            // 6) Notificaciones locales
+            TripNotifications.cancelAll()
             isWiping = false
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             withAnimation { showWipeDoneToast = true }
@@ -5760,6 +6008,331 @@ struct SettingsSheet: View {
             withAnimation { showWipeDoneToast = false }
             dismiss()
         }
+    }
+}
+
+// MARK: - Notificaciones locales de viajes próximos
+//
+// Recordatorios automáticos: 7 días antes, 1 día antes y el día del viaje.
+// El usuario debe haber concedido permiso (lo pedimos al activar el toggle
+// en Ajustes). Las notificaciones se reprograman cuando cambian los trips.
+
+enum TripNotifications {
+
+    /// Pide permiso si aún no está concedido. Devuelve true si quedó concedido.
+    static func requestAuthorization() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied:
+            return false
+        case .notDetermined:
+            return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        @unknown default:
+            return false
+        }
+    }
+
+    /// Borra todos los recordatorios y los re-genera para los trips futuros del
+    /// próximo año. Idempotente; llamar siempre que cambien los datos.
+    static func reschedule(trips: [Trip], featuresByIso: [String: CountryFeature]) {
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        let now = Date()
+        let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: now) ?? now
+        for trip in trips where !trip.isSegmentChild {
+            let day = Calendar.current.startOfDay(for: trip.dateFrom)
+            guard day > now, day < oneYearFromNow else { continue }
+            schedule(trip: trip, featuresByIso: featuresByIso, daysBefore: 7)
+            schedule(trip: trip, featuresByIso: featuresByIso, daysBefore: 1)
+            schedule(trip: trip, featuresByIso: featuresByIso, daysBefore: 0)
+        }
+    }
+
+    private static func schedule(trip: Trip, featuresByIso: [String: CountryFeature], daysBefore: Int) {
+        let cal = Calendar.current
+        guard let triggerDay = cal.date(byAdding: .day, value: -daysBefore, to: trip.dateFrom) else { return }
+        // 9:00 AM hora local del día anterior al evento.
+        var comps = cal.dateComponents([.year, .month, .day], from: triggerDay)
+        comps.hour = 9; comps.minute = 0
+        guard let when = cal.date(from: comps), when > Date() else { return }
+
+        let countryName = featuresByIso[trip.isoCode]?.localizedName ?? trip.isoCode
+        let flag = featuresByIso[trip.isoCode]?.flagEmoji ?? "✈️"
+        let title: String
+        let body: String
+        switch daysBefore {
+        case 0:
+            title = "¡Hoy empieza tu viaje!"
+            body = "\(flag) Buen viaje a \(countryName)"
+        case 1:
+            title = "Mañana viajas"
+            body = "\(flag) Tu viaje a \(countryName) empieza mañana"
+        case 7:
+            title = "En una semana"
+            body = "\(flag) Tu viaje a \(countryName) empieza en 7 días"
+        default:
+            title = "Próximo viaje"
+            body = "\(flag) \(countryName)"
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let trigger = UNCalendarNotificationTrigger(dateMatching: cal.dateComponents([.year, .month, .day, .hour, .minute], from: when), repeats: false)
+        let id = "trip_\(trip.isoCode)_\(Int(trip.dateFrom.timeIntervalSince1970))_d\(daysBefore)"
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    static func cancelAll() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+}
+
+// MARK: - Export de datos (GDPR Art. 20 portabilidad)
+struct ExportDataSheet: View {
+    let countriesProvider: () -> [Country]
+    let tripsProvider: () -> [Trip]
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var generatedURL: URL? = nil
+    @State private var format: ExportFormat = .json
+    @State private var isGenerating: Bool = false
+    @State private var errorMessage: String? = nil
+
+    enum ExportFormat: String, CaseIterable, Identifiable {
+        case json = "JSON"
+        case csv  = "CSV"
+        var id: String { rawValue }
+        var ext: String { rawValue.lowercased() }
+        var description: String {
+            switch self {
+            case .json: return "Estructurado, completo (incluye segmentos y aerolíneas)"
+            case .csv:  return "Tabular, una fila por viaje (compatible con Excel/Numbers)"
+            }
+        }
+    }
+
+    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(alignment: .top, spacing: 14) {
+                    ZStack {
+                        Circle().fill(accent.opacity(0.12)).frame(width: 44, height: 44)
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(accent)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Exportar tus datos")
+                            .font(.custom("Satoshi-Bold", size: 18))
+                        Text("Genera un archivo con tus países, viajes y preferencias para guardarlo o moverlo.")
+                            .font(.palatino(.subheadline))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+
+                Text("FORMATO")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(1.0)
+                    .padding(.horizontal, 24)
+
+                VStack(spacing: 0) {
+                    ForEach(ExportFormat.allCases) { f in
+                        Button { format = f } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: format == f ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(format == f ? accent : Color(.systemGray3))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(f.rawValue).font(.custom("Satoshi-Bold", size: 15))
+                                    Text(f.description).font(.palatino(.caption)).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if f != ExportFormat.allCases.last { Divider().padding(.leading, 50) }
+                    }
+                }
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 20)
+
+                Button {
+                    generateAndShare()
+                } label: {
+                    HStack(spacing: 8) {
+                        if isGenerating { ProgressView().tint(.white) }
+                        else { Image(systemName: "square.and.arrow.up").font(.system(size: 14, weight: .semibold)) }
+                        Text(isGenerating ? "Generando…" : "Generar y compartir")
+                            .font(.custom("Satoshi-Bold", size: 15))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 15)
+                    .background(accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(isGenerating)
+                .padding(.horizontal, 20)
+
+                if let err = errorMessage {
+                    Text(err).font(.palatino(.caption)).foregroundStyle(.red)
+                        .padding(.horizontal, 20)
+                }
+                Spacer()
+            }
+            .padding(.top, 12)
+            .navigationTitle("Exportar datos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") { dismiss() }.font(.palatino(.body))
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .appColorScheme()
+    }
+
+    private func generateAndShare() {
+        isGenerating = true
+        errorMessage = nil
+        let countries = countriesProvider()
+        let trips = tripsProvider()
+        Task.detached(priority: .userInitiated) {
+            do {
+                let url = try Self.writeExport(format: format, countries: countries, trips: trips)
+                await MainActor.run {
+                    isGenerating = false
+                    generatedURL = url
+                    presentShare(url: url)
+                }
+            } catch {
+                await MainActor.run {
+                    isGenerating = false
+                    errorMessage = "No se pudo generar el archivo: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func presentShare(url: URL) {
+        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        // Buscar el presenting view controller activo (sheet anidado).
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let key = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
+        else { return }
+        var top = key.rootViewController
+        while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+            top = presented
+        }
+        top?.present(av, animated: true)
+    }
+
+    private static func writeExport(format: ExportFormat, countries: [Country], trips: [Trip]) throws -> URL {
+        let tmp = FileManager.default.temporaryDirectory
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let url = tmp.appendingPathComponent("raskmap-export-\(stamp).\(format.ext)")
+        let data: Data
+        switch format {
+        case .json: data = try buildJSON(countries: countries, trips: trips)
+        case .csv:  data = buildCSV(trips: trips).data(using: .utf8) ?? Data()
+        }
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    private static func buildJSON(countries: [Country], trips: [Trip]) throws -> Data {
+        let dfISO = ISO8601DateFormatter()
+        let countryDicts: [[String: Any]] = countries.map { c in
+            [
+                "isoCode": c.isoCode,
+                "name": c.name,
+                "status": c.statusRaw,
+                "visitCount": c.visitCount,
+                "hasLived": c.hasLived,
+                "plannedDate": c.plannedDate.map { dfISO.string(from: $0) } ?? NSNull(),
+                "plannedDateTo": c.plannedDateTo.map { dfISO.string(from: $0) } ?? NSNull(),
+                "transport": c.transport ?? NSNull(),
+                "plannedTitle": c.plannedTitle ?? NSNull()
+            ]
+        }
+        let tripDicts: [[String: Any]] = trips.map { t in
+            var dict: [String: Any] = [
+                "isoCode": t.isoCode,
+                "title": t.title ?? NSNull(),
+                "dateFrom": dfISO.string(from: t.dateFrom),
+                "dateTo": t.dateTo.map { dfISO.string(from: $0) } ?? NSNull(),
+                "transport": t.transport ?? NSNull(),
+                "hasLayover": t.hasLayover,
+                "isSegmentChild": t.isSegmentChild,
+                "segmentGroupID": t.segmentGroupID ?? NSNull(),
+                "tripAirports": t.tripAirports.map { ["iata": $0.iata, "count": $0.count] },
+                "tripAirlines": t.tripAirlines.map { ["name": $0.name, "count": $0.count] }
+            ]
+            // Segments embebidos (si hay).
+            if !t.tripSegments.isEmpty {
+                dict["segments"] = t.tripSegments.map { seg -> [String: Any] in
+                    [
+                        "transport": seg.transport,
+                        "isoCodes": seg.isoCodes,
+                        "dateFrom": dfISO.string(from: seg.dateFrom),
+                        "dateTo": seg.dateTo.map { dfISO.string(from: $0) } ?? NSNull(),
+                        "airports": (seg.airports ?? []).map { ["iata": $0.iata, "count": $0.count] },
+                        "returnAirports": (seg.returnAirports ?? []).map { ["iata": $0.iata, "count": $0.count] },
+                        "airlines": (seg.airlines ?? []).map { ["name": $0.name, "count": $0.count] },
+                        "visitedLayoverISOs": seg.visitedLayoverISOs ?? []
+                    ]
+                }
+            }
+            return dict
+        }
+        let root: [String: Any] = [
+            "app": "Raskmap",
+            "exportedAt": dfISO.string(from: Date()),
+            "version": 1,
+            "countries": countryDicts,
+            "trips": tripDicts
+        ]
+        return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    private static func buildCSV(trips: [Trip]) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        df.locale = Locale(identifier: "en_US_POSIX")
+        var lines: [String] = []
+        lines.append("isoCode,title,dateFrom,dateTo,transport,airports,airlines,isSegmentChild")
+        for t in trips {
+            let title = t.title?.replacingOccurrences(of: ",", with: " ") ?? ""
+            let airports = t.tripAirports.map { "\($0.iata)x\($0.count)" }.joined(separator: ";")
+            let airlines = t.tripAirlines.map { "\($0.name.replacingOccurrences(of: ",", with: " "))x\($0.count)" }.joined(separator: ";")
+            lines.append([
+                t.isoCode,
+                "\"\(title)\"",
+                df.string(from: t.dateFrom),
+                t.dateTo.map(df.string(from:)) ?? "",
+                t.transport ?? "",
+                "\"\(airports)\"",
+                "\"\(airlines)\"",
+                t.isSegmentChild ? "1" : "0"
+            ].joined(separator: ","))
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
