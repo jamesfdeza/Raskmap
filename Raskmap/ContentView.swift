@@ -6286,7 +6286,10 @@ struct ExportDataSheet: View {
     @State private var isGenerating: Bool = false
     @State private var errorMessage: String? = nil
 
-    enum ExportFormat: String, CaseIterable, Identifiable {
+    /// Enum nonisolated para poder leer `format` y `format.ext` desde
+    /// Task.detached sin hop a MainActor (proyecto tiene
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor).
+    nonisolated enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
         case json = "JSON"
         case csv  = "CSV"
         var id: String { rawValue }
