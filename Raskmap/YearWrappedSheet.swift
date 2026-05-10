@@ -617,13 +617,19 @@ struct YearWrappedSheet: View {
         ZStack {
             WrappedGradient.forSlide(current)
                 .ignoresSafeArea()
-                .animation(.easeInOut(duration: 0.45), value: index)
+                .animation(.smooth(duration: 0.55, extraBounce: 0.0), value: index)
 
             slideBody(current)
                 .id(index)
                 .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                    removal: .opacity
+                    // Insertion: subir suavemente + fade — más cinematográfico
+                    // que el scale anterior, similar a Apple Music wrapped.
+                    insertion: .move(edge: .bottom)
+                        .combined(with: .opacity)
+                        .combined(with: .scale(scale: 0.97)),
+                    // Removal: fade rápido y leve scale-out hacia arriba.
+                    removal: .move(edge: .top)
+                        .combined(with: .opacity)
                 ))
 
             VStack(spacing: 0) {
@@ -719,10 +725,13 @@ struct YearWrappedSheet: View {
     private func advance() {
         let slides = activeSlides
         if index < slides.count - 1 {
-            withAnimation(.easeInOut(duration: 0.3)) {
+            // Spring suave en lugar de easeInOut lineal — sensación premium,
+            // alineada con la transición de slide insertion (move + scale).
+            withAnimation(.smooth(duration: 0.45, extraBounce: 0.05)) {
                 index += 1
                 progress = 0
             }
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         } else {
             dismiss()
         }
@@ -730,10 +739,11 @@ struct YearWrappedSheet: View {
 
     private func goBack() {
         if index > 0 {
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimation(.smooth(duration: 0.45, extraBounce: 0.05)) {
                 index -= 1
                 progress = 0
             }
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         } else {
             progress = 0
         }
@@ -1296,7 +1306,16 @@ struct YearWrappedSheet: View {
     @MainActor
     private func share() {
         isPaused = true
-        let msg = "Mi año \(targetYear) en Raskmap 🗺️"
+        // Texto optimizado para redes sociales: mención + emojis + hashtags
+        // específicos de viaje. Funciona bien en Twitter/X, Instagram (en
+        // Mensaje), WhatsApp, Mail, etc. Las redes que detectan hashtags los
+        // hacen tappable; las que no, son texto plano normal.
+        let msg = """
+        Mi año \(targetYear) en Raskmap 🗺️
+        \(stats.totalTrips) viajes · \(stats.totalCountries) países
+
+        #Raskmap #Travel\(targetYear) #Viajeros
+        """
 
         // Intentamos renderizar en un Task para que el layout se resuelva
         // antes de pedir la imagen (ImageRenderer a veces devuelve nil si la

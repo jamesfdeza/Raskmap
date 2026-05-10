@@ -1,5 +1,196 @@
 # CONTEXT.md — Raskmap
 
+## Cambios recientes (2026-05-10) — rama `remodelacion_integral_v2`
+
+Iteración integral sobre App Store readiness, performance, UX y nice-to-have.
+La rama contiene 6 commits incrementales con todos los items del análisis A·B·C·D
+de la sesión anterior (ver [Roadmap exhaustivo](#roadmap-pendiente--an%C3%A1lisis-exhaustivo)
+en versiones anteriores de este doc).
+
+### Commit 1 (`7f53cef`) — App Store readiness + perf base
+
+**App Store hard/soft blockers**:
+- `SubscriptionSheet`: botón "Restaurar compras" prominente con icono y
+  estilo capsule (Apple lo exige para Non-Consumable IAP).
+- Ajustes: sección "Datos" con botón "Borrar todos mis datos" + alert con
+  doble confirmación. Limpia SwiftData (Trip/Country/PersonalAward),
+  AppStorage (35 keys), App Group del widget, snapshot del mapa de vuelo
+  en disco y termina Live Activities. Cumple GDPR Art. 17.
+
+**Bugs**:
+- #6 `@AppStorage didShowOnboarding` evita re-onboarding tras reset iCloud.
+- #20 mailto `ContactSheet` con `CharacterSet` tight (quita `&=?#+` del
+  `urlQueryAllowed`) — subject/body con esos chars no rompen el parser.
+- #21 `MKMapSnapshotter` cancela snapshotter previo antes de iniciar nuevo
+  + descarta callback si ya no es el activo. Antes los callbacks async se
+  solapaban y escribían imágenes obsoletas.
+
+**Performance**:
+- `featuresByIso` pre-indexado (Dictionary). `topVisitedFlagsString` y
+  `allProximosFlagsString` ya no hacen O(n²) `features.first(where:)`.
+- `tripsFingerprint` reemplaza `onChange(of: trips.count)`. Detecta cambios
+  de fechas/transport/iso de trips existentes — banner countdown y snapshot
+  del widget se actualizan al editar.
+- `FinalizadoTripDetailSheet.daysByCountry` cacheado por `tripFingerprint`
+  en `@State`. Antes recomputaba en cada render del scroll.
+
+**UX**:
+- `AddSegmentSheet` smart default: nuevo tramo arranca el día siguiente al
+  último tramo existente (no el primero).
+- Quick chips de fecha en step 3 (Mañana / Próx. semana / En 2 sem. para
+  futuro; Hoy / Ayer / Hace 1 sem. para pasado).
+- TextField username: `textInputAutocapitalization(.never) +
+  autocorrectionDisabled + submitLabel(.done)`.
+
+### Commit 2 (`05181b7`) — bugs + UX viajes + km volados
+
+**Bugs**:
+- #3 `Country.status` se resetea automáticamente al borrar el último trip
+  (`cleanupZeroXVisitedStates` ahora se llama en cada `handleTripsCountChange`).
+- #18 `cleanupOrphanChildTrips` elimina children con `segmentGroupID` cuyo
+  primary ya no está en `trips`. Se llama después de cada cambio.
+
+**UX**:
+- `RouteWizardSheet` "Ruta de vuelta diferente" pre-rellena
+  `returnDeparture` con el último IATA del outbound y `returnFinalDest` con
+  el origen — patrón típico de round-trip asimétrico, evita re-tipear.
+- `FinalizadosListSheet`: swipe-action "Duplicar" + `confirmationDialog`
+  → copia el trip + sus children con +365 días, promociona el país a
+  wantToVisit. Mantiene segments/airports/airlines/flightDetails.
+- `FinalizadosListSheet`: chips de filtro de transporte (solo muestra los
+  transports presentes en los rows). Vacío con filtro → "Quitar filtro".
+- `FlightInfoSection`: botón "Aplicar clase y posición a todos los tramos"
+  cuando hay >1 leg y el primero ya tiene datos. No replica seat number
+  (siempre es distinto). Haptic light al aplicar.
+
+**Stats**:
+- `TransportStatsSheet`: card "KM VOLADOS" con suma haversine de todos los
+  segmentos ✈️ (ida + vuelta) + trips legacy con coords resueltas. Pares
+  con IATA desconocido se saltan sin romper el total.
+
+**Haptics**:
+- `UINotificationFeedbackGenerator().notificationOccurred(.success)` al
+  guardar trip (`saveTrip` + `performEditSave`) y al completar `wipeAllData`.
+- Light haptic al aplicar clase/posición a todos los tramos.
+
+### Commit 3 (`f67955b`) — export + share + notifs + tour
+
+**Export CSV/JSON (GDPR Art. 20)**:
+- `ExportDataSheet` con selector de formato y botón "Generar y compartir".
+- JSON: estructurado completo con todos los campos del modelo (countries +
+  trips + segments + airports + airlines + visitedLayoverISOs).
+- CSV: tabular una fila por trip.
+- Escribe a temporary directory + lanza `UIActivityViewController`.
+- Acceso desde Ajustes → "Exportar mis datos" en sección Datos.
+
+**Share trip individual**:
+- Toolbar trailing button en `FinalizadoTripDetailSheet`.
+- Genera texto con título + fechas + días por país + footer Raskmap.
+- `UIActivityViewController` para Mensajes/WhatsApp/Mail/etc.
+
+**Notificaciones locales**:
+- `TripNotifications` enum con `requestAuthorization`, `reschedule`, `cancelAll`.
+- 3 recordatorios por trip futuro: 7d, 1d, 0d. Todos a las 9:00 AM hora local.
+- Dispara `reschedule` en `handleTripsCountChange` si toggle activo.
+- Toggle "Recordatorios de viaje" en Ajustes → Widgets (gratis, no Pro).
+- Pide permiso al activar; si denegado, vuelve a apagar el toggle.
+- Wipe cancela todas + reset del toggle.
+
+**Tour guiado en onboarding (4 pasos)**:
+- 0: username (existente)
+- 1: passport (existente, "Continuar" → step 2)
+- 2: tour categorías Visitados/Próximos/Quiero
+- 3: tour final perfil/modo vuelos/widgets → "Empezar a explorar"
+- Indicador de progreso con 4 puntos en parte inferior.
+
+### Commit 4 (`cf55226`) — tests + LA real-time + heatmap + búsqueda global
+
+**Tests** (`RaskmapTests/DaysPerCountryTests.swift`):
+- 9 casos para `daysPerCountry`: round-trip simple, trip de 1 día,
+  Hong Kong/Macao/China multi-tránsito, Macedonia/Kosovo con escala SRB
+  ida+vuelta, children skipped con primary, children huérfanos, excursión
+  single-day, layover legacy, segments frontera. Cada test con expected
+  counts comentados.
+
+**Live Activity countdown real-time**:
+- `ContentState` gana `tripStartDate: Date?` (opcional para retrocompat).
+- `Foundation` import añadido en ambos targets de `RaskmapActivityAttributes`.
+- Lock screen banner + Dynamic Island expanded usan
+  `Text(timerInterval: Date()...start, countsDown: true)` cuando
+  `tripStartDate` está presente. SwiftUI repinta el contador sin requerir
+  push updates de la app — ahorra batería + actualización exacta al segundo.
+  Fallback al `daysRemaining` estático si nil.
+- `ContentView.startOrUpdateLiveActivity` inyecta `banner.dateFrom` en
+  `tripStartDate`.
+
+**Heatmap anual**:
+- `YearTravelView.yearlyHeatmap` añadido bajo el contador "Total de vuelos".
+- 12 cuadritos (E F M A M J J A S O N D) coloreados según número de trips
+  primarios cuyo `dateFrom` cae en ese mes. Intensidad 0.20-1.00
+  proporcional al máximo del año. Mes vacío con borde 0.5pt sin fill.
+- Solo visible si hay al menos 1 trip ese año.
+- Accesibilidad: cada cuadrito con label "<inicial>: <count> viajes".
+
+**Bug #5 — tap-spam entre sheets**:
+- `scheduleSheetTransition()` reemplaza `DispatchQueue.asyncAfter` en
+  `CountryBottomSheet` handlers. Usa `Task.sleep` cancelable: si el usuario
+  tappea otro país antes de los 350ms, cancela la transición previa.
+- `@State sheetTransitionTask` mantiene la referencia.
+- Aplica a `onAddPastTrip`, `onAddNextTrip`, `onEditTrips`.
+
+**Búsqueda global**:
+- `searchSheet` ahora muestra dos secciones: "Viajes" y "Países".
+- Sección Viajes solo aparece con query no vacía. Busca en `trip.title` y
+  nombre localizado del país. Top 10 ordenados por `dateFrom` desc.
+- Tap en trip futuro → `editingFutureTrip`; trip pasado → `bannerTappedCountry`.
+- Países: query vacía → agrupa por letra; con query → lista plana.
+- Title: "Buscar país" → "Buscar". Prompt: "Buscar país o viaje…".
+
+### Commit 5 (`c7ae663`) — templates + descubrir + comparativa + dark toast
+
+- `AddTripSheet`: 4 quick-templates (Vuelo / Coche / Tren / Bus) en grid
+  2×2 visibles solo cuando no hay tramos. Pre-cargan transporte y abren el
+  `AddSegmentSheet` directamente, saltando step 1 del wizard.
+- Profile: nueva sección "Lugares por descubrir" — scroll horizontal con
+  hasta 6 países sin visitar pero geográficamente cercanos. Heurística:
+  por cada región (Europa/Asia/etc.) con ≥1 visitado, propone los primeros
+  ISOs sin visitar. Filtrado por countingMode.
+- Profile `YearTravelView`: card de comparativa "vs <año anterior>" con
+  delta de viajes y países. Flecha verde/roja según diferencia. Visible
+  solo si `availableYears` contiene el año previo.
+- Location toast y Help toast: `.regularMaterial` → `.thickMaterial`
+  + border 0.5pt strokeBorder `Color.primary.opacity(0.08)`. Mejora
+  contraste sobre fondos oscuros.
+
+### Commit 6 (`HEAD`) — nice-to-have: share polish + animaciones + render tests
+
+**Share wrapped enriquecido**:
+- Texto del share incluye stats (`totalTrips` / `totalCountries`) +
+  hashtags `#Raskmap #Travel<year> #Viajeros`. Optimizado para Twitter/X,
+  Instagram (en mensaje), WhatsApp, Mail, etc.
+
+**Animaciones más cinematográficas en wrapped**:
+- Slide insertion: `.move(edge: .bottom) + .opacity + .scale(0.97)` en
+  lugar del scale 0.95 plano. Sensación tipo Apple Music wrapped.
+- Slide removal: `.move(edge: .top) + .opacity` para que la salida sea
+  vertical también.
+- `advance()` y `goBack()` cambian de `.easeInOut(0.3)` a
+  `.smooth(0.45, extraBounce: 0.05)` + haptic `.soft`.
+- Background color animation también pasa a `.smooth(0.55)`.
+
+**Render smoke tests** (`RaskmapTests/RenderSmokeTests.swift`):
+- 7 tests "render-no-crash" usando `ImageRenderer`:
+  - `FlagLabel` con bandera estándar y con fallback (🌐).
+  - `TwemojiFlag` con ISO inválido cae a fallback sin crash.
+  - `FlightInfo` Codable round-trip preserva estructura completa.
+  - `FlightInfo` legacy decode (sin outboundLegs/returnLegs) sintetiza leg.
+  - `FlightInfo.hasAnyData` detecta los 3 paths (bookingRef / outbound / return).
+  - `FlightLegInfo` empty.
+- No requieren `swift-snapshot-testing` — solo verifican que vistas críticas
+  rendericen sin nil y que el modelo Codable no se rompa con cambios futuros.
+
+---
+
 ## Cambios recientes (2026-05-03)
 
 Iteración con foco en (a) consistencia entre perfil/widgets para órdenes y
