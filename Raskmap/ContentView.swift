@@ -58,6 +58,26 @@ struct ContentView: View {
     @State private var showLocationToast: Bool = false
     @State private var showOnboarding: Bool = false
     @AppStorage("didShowOnboarding") private var didShowOnboarding: Bool = false
+
+    /// Tarea cancelable para coordinar transiciones entre sheets (cierra
+    /// CountryBottomSheet → abre next sheet) sin condiciones de carrera por
+    /// tap-spam. Antes usábamos DispatchQueue.asyncAfter sin cancelación, así
+    /// que un tap rápido en otro país antes de los 350ms ejecutaba ambas
+    /// transiciones y dejaba sheets en cola.
+    @State private var sheetTransitionTask: Task<Void, Never>? = nil
+
+    /// Cierra el CountryBottomSheet y, tras 350ms (margen para que SwiftUI
+    /// complete la animación de dismiss), ejecuta el bloque de apertura.
+    /// Cancela cualquier transición previa pendiente.
+    private func scheduleSheetTransition(_ block: @escaping () -> Void) {
+        sheetTransitionTask?.cancel()
+        selectedCountry = nil
+        sheetTransitionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            block()
+        }
+    }
     @State private var usernameInput: String = ""
     @State private var onboardingStep: Int = 0
     @State private var isLoadingFeatures: Bool = true
@@ -840,24 +860,17 @@ struct ContentView: View {
                     },
                     showBucketList: showBucketList,
                     onAddPastTrip: {
-                        selectedCountry = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            pendingAddTripCountry = country
-                        }
+                        scheduleSheetTransition { pendingAddTripCountry = country }
                     },
                     onAddNextTrip: {
-                        selectedCountry = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        scheduleSheetTransition {
                             pendingDateIsNew = true
                             pendingDateCountry = country
                             pendingDateStatus = .wantToVisit
                         }
                     },
                     onEditTrips: {
-                        selectedCountry = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            bannerTappedCountry = country
-                        }
+                        scheduleSheetTransition { bannerTappedCountry = country }
                     }
                 )
                 .presentationDetents(country.status == .visited ? [.fraction(0.60)] : (country.status == .lived ? [.fraction(0.38)] : [.fraction(0.50)]))
@@ -1286,49 +1299,137 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    /// Trips que matchean el `searchText` actual — busca en título y nombre
+    /// localizado del país. Ordenados por dateFrom desc (más reciente primero).
+    private var matchingTrips: [Trip] {
+        guard !searchText.isEmpty else { return [] }
+        let q = searchText.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let byIso = featuresByIso
+        return trips.filter { trip in
+            if let title = trip.title, !title.isEmpty,
+               title.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).contains(q) {
+                return true
+            }
+            let countryName = byIso[trip.isoCode]?.localizedName ?? trip.isoCode
+            return countryName.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).contains(q)
+        }
+        .sorted { $0.dateFrom > $1.dateFrom }
+    }
+
     private func searchSheet() -> some View {
         NavigationStack {
             List {
-                ForEach(groupedSearchResults, id: \.letter) { section in
-                    Section(header: searchText.isEmpty ? Text(section.letter) : nil) {
-                        ForEach(section.features, id: \.isoCode) { feature in
-                            HStack {
-                                FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 17)
-                                Text(feature.localizedName).foregroundStyle(.primary)
-                                Spacer()
-                                if let status = countryStatusMap[feature.isoCode], status != .none {
-                                    Text(status.label).font(.palatino(.caption)).foregroundStyle(.secondary)
+                // Sección de viajes (solo cuando hay query y hay matches).
+                if !searchText.isEmpty && !matchingTrips.isEmpty {
+                    Section("Viajes") {
+                        ForEach(matchingTrips.prefix(10), id: \.persistentModelID) { trip in
+                            Button {
+                                openTripFromSearch(trip)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    let feat = featuresByIso[trip.isoCode]
+                                    FlagLabel(emoji: feat?.flagEmoji ?? "🌐", size: 17)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(trip.title?.isEmpty == false ? trip.title! : (feat?.localizedName ?? trip.isoCode))
+                                            .font(.palatino(.body, weight: .bold))
+                                            .foregroundStyle(.primary)
+                                        Text(searchTripSubtitle(trip))
+                                            .font(.palatino(.caption))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
                                 }
                             }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                let isoCode = feature.isoCode
-                                if let existing = countries.first(where: { $0.isoCode == isoCode }) {
-                                    selectedCountry = existing
-                                } else {
-                                    let newCountry = Country(name: feature.name, isoCode: isoCode)
-                                    modelContext.insert(newCountry)
-                                    selectedCountry = newCountry
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                // Sección de países (existente).
+                Section(searchText.isEmpty ? "" : "Países") {
+                    if searchText.isEmpty {
+                        ForEach(groupedSearchResults, id: \.letter) { section in
+                            Section(header: Text(section.letter)) {
+                                ForEach(section.features, id: \.isoCode) { feature in
+                                    countryRow(feature)
                                 }
-                                highlightedIsoCode = isoCode
-                                centerMap(on: isoCode)
-                                pendingShowSheet = true
-                                showSearch = false
                             }
+                        }
+                    } else {
+                        ForEach(groupedSearchResults.flatMap { $0.features }, id: \.isoCode) { feature in
+                            countryRow(feature)
                         }
                     }
                 }
             }
             .listStyle(.plain)
             .scrollIndicators(.visible)
-            .searchable(text: $searchText, prompt: "Buscar país...")
-            .navigationTitle("Buscar país")
+            .searchable(text: $searchText, prompt: "Buscar país o viaje…")
+            .navigationTitle("Buscar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cerrar") { showSearch = false; searchText = "" }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func countryRow(_ feature: CountryFeature) -> some View {
+        HStack {
+            FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 17)
+            Text(feature.localizedName).foregroundStyle(.primary)
+            Spacer()
+            if let status = countryStatusMap[feature.isoCode], status != .none {
+                Text(status.label).font(.palatino(.caption)).foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            let isoCode = feature.isoCode
+            if let existing = countries.first(where: { $0.isoCode == isoCode }) {
+                selectedCountry = existing
+            } else {
+                let newCountry = Country(name: feature.name, isoCode: isoCode)
+                modelContext.insert(newCountry)
+                selectedCountry = newCountry
+            }
+            highlightedIsoCode = isoCode
+            centerMap(on: isoCode)
+            pendingShowSheet = true
+            showSearch = false
+        }
+    }
+
+    private func searchTripSubtitle(_ trip: Trip) -> String {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.locale = Locale(identifier: "es_ES")
+        let from = df.string(from: trip.dateFrom)
+        if let to = trip.dateTo, to != trip.dateFrom {
+            return "\(from) → \(df.string(from: to))"
+        }
+        return from
+    }
+
+    /// Tras buscar y tocar un trip: si es futuro, abre EditTripSheet en modo
+    /// editar próximo; si es pasado, abre el detalle. Cierra el search sheet
+    /// con el patrón scheduleSheetTransition para evitar conflictos.
+    private func openTripFromSearch(_ trip: Trip) {
+        showSearch = false
+        searchText = ""
+        let today = Calendar.current.startOfDay(for: Date())
+        let isFuture = Calendar.current.startOfDay(for: trip.dateFrom) > today
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            if isFuture {
+                editingFutureTrip = trip
+            } else {
+                bannerTappedCountry = countries.first(where: { $0.isoCode == trip.isoCode })
             }
         }
     }
@@ -1911,7 +2012,8 @@ struct ContentView: View {
             flagEmoji: banner.flag,
             tripName: displayName,
             daysRemaining: banner.days,
-            transportEmoji: banner.transport ?? "✈️"
+            transportEmoji: banner.transport ?? "✈️",
+            tripStartDate: banner.dateFrom
         )
         let stale = Calendar.current.date(byAdding: .hour, value: 12, to: .now)
         let running = Activity<RaskmapTripAttributes>.activities
@@ -8407,6 +8509,55 @@ struct YearTravelView: View {
         return count
     }
 
+    /// Para cada mes (1-12) del `selectedYear`, cuenta el número de viajes
+    /// primarios cuya fecha de inicio cae en ese mes. Usado por el heatmap.
+    private var tripsByMonth: [Int: Int] {
+        let cal = Calendar.current
+        var byMonth: [Int: Int] = [:]
+        for trip in trips where !trip.isSegmentChild {
+            let comps = cal.dateComponents([.year, .month], from: trip.dateFrom)
+            guard comps.year == selectedYear, let m = comps.month else { continue }
+            byMonth[m, default: 0] += 1
+        }
+        return byMonth
+    }
+
+    /// Mini heatmap: 12 cuadritos (uno por mes) coloreados según el número
+    /// de viajes ese mes. Estilo GitHub contributions, escala 4 niveles.
+    @ViewBuilder
+    private var yearlyHeatmap: some View {
+        let byMonth = tripsByMonth
+        let maxCount = max(1, byMonth.values.max() ?? 0)
+        let monthLabels = ["E", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"]
+        if !byMonth.isEmpty {
+            VStack(spacing: 5) {
+                HStack(spacing: 4) {
+                    ForEach(0..<12, id: \.self) { i in
+                        let m = i + 1
+                        let count = byMonth[m] ?? 0
+                        let intensity: Double = count == 0 ? 0 : (0.20 + 0.80 * Double(count) / Double(maxCount))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255).opacity(intensity))
+                            .frame(height: 18)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .stroke(Color(.systemGray5), lineWidth: count == 0 ? 0.5 : 0)
+                            )
+                            .accessibilityLabel("\(monthLabels[i]): \(count) viajes")
+                    }
+                }
+                HStack(spacing: 4) {
+                    ForEach(0..<12, id: \.self) { i in
+                        Text(monthLabels[i])
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
     /// Devuelve la bandera emoji del país. Si el territorio no tiene bandera
     /// (Twemoji asset falta o ISO no estándar), devuelve "🌐" como fallback
     /// para que aparezca en los grids de Próximos/Finalizados con la posición
@@ -8463,6 +8614,11 @@ struct YearTravelView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
+
+            // Heatmap anual estilo GitHub: 12 columnas (meses) × 1 fila visual
+            // mostrando intensidad de viaje por mes en el año seleccionado.
+            yearlyHeatmap
+                .padding(.horizontal, 24)
 
             if selectedYear == currentYear {
                 HStack(alignment: .top, spacing: 16) {

@@ -54,21 +54,33 @@ struct RaskmapLiveActivity: Widget {
 
                 Spacer(minLength: 10)
 
-                // Vertical separator + countdown
+                // Vertical separator + countdown (real-time si tenemos
+                // `tripStartDate`, fallback al `daysRemaining` estático).
                 HStack(spacing: 14) {
                     Rectangle()
                         .fill(Color.white.opacity(0.10))
                         .frame(width: 0.5, height: 40)
 
                     VStack(alignment: .center, spacing: 0) {
-                        Text("\(context.state.daysRemaining)")
-                            .font(.custom("Satoshi-Bold", size: 34))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                        Text(context.state.daysRemaining == 1 ? "DÍA" : "DÍAS")
-                            .font(.custom("Satoshi-Bold", size: 9))
-                            .tracking(1.6)
-                            .foregroundStyle(accent)
+                        if let start = context.state.tripStartDate, start > Date() {
+                            // SwiftUI repinta automáticamente este timer dentro de la
+                            // Live Activity sin que la app tenga que hacer push update.
+                            Text(timerInterval: Date()...start, countsDown: true)
+                                .font(.custom("Satoshi-Bold", size: 24))
+                                .monospacedDigit()
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: 110)
+                        } else {
+                            Text("\(context.state.daysRemaining)")
+                                .font(.custom("Satoshi-Bold", size: 34))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                            Text(context.state.daysRemaining == 1 ? "DÍA" : "DÍAS")
+                                .font(.custom("Satoshi-Bold", size: 9))
+                                .tracking(1.6)
+                                .foregroundStyle(accent)
+                        }
                     }
                 }
                 .padding(.trailing, 20)
@@ -96,14 +108,22 @@ struct RaskmapLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 0) {
-                        Text("\(context.state.daysRemaining)")
-                            .font(.custom("Satoshi-Bold", size: 30))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                        Text(context.state.daysRemaining == 1 ? "DÍA" : "DÍAS")
-                            .font(.custom("Satoshi-Bold", size: 9))
-                            .tracking(1.5)
-                            .foregroundStyle(accent)
+                        if let start = context.state.tripStartDate, start > Date() {
+                            Text(timerInterval: Date()...start, countsDown: true)
+                                .font(.custom("Satoshi-Bold", size: 20))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: 90, alignment: .trailing)
+                        } else {
+                            Text("\(context.state.daysRemaining)")
+                                .font(.custom("Satoshi-Bold", size: 30))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                            Text(context.state.daysRemaining == 1 ? "DÍA" : "DÍAS")
+                                .font(.custom("Satoshi-Bold", size: 9))
+                                .tracking(1.5)
+                                .foregroundStyle(accent)
+                        }
                     }
                     .padding(.trailing, 6)
                 }

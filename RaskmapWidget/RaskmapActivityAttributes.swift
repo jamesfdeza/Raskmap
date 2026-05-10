@@ -4,6 +4,7 @@
 //
 
 import ActivityKit
+import Foundation
 
 struct RaskmapTripAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
@@ -11,5 +12,6 @@ struct RaskmapTripAttributes: ActivityAttributes {
         var tripName: String
         var daysRemaining: Int
         var transportEmoji: String
+        var tripStartDate: Date?
     }
 }
