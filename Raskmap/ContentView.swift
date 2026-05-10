@@ -687,7 +687,11 @@ struct ContentView: View {
                 }
                 .padding(28)
                 .frame(maxWidth: 340)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
                 .padding(.horizontal, 28)
                 .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
@@ -1272,7 +1276,13 @@ struct ContentView: View {
                         }.buttonStyle(.plain)
                     }
                     .padding(28)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    // .thickMaterial tiene mejor contraste sobre fondos oscuros
+                    // que .regularMaterial. Border sutil refuerza separación.
+                    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    )
                     .padding(.horizontal, 28)
                     .transition(.scale(scale: 0.92).combined(with: .opacity))
                 }
@@ -4463,6 +4473,11 @@ struct ProfileSheet: View {
 
                     Divider().padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 20)
 
+                    // ── Lugares por descubrir ──
+                    discoverSection
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 20)
+
                     // ── Menú accesos rápidos ──
                     VStack(spacing: 0) {
                         profileMenuRow(icon: "trophy.fill", iconColor: .orange, label: "Premios personales") {
@@ -4864,6 +4879,73 @@ struct ProfileSheet: View {
         allPassportQuadrants = (try? JSONDecoder().decode([String: [MapQuadrant]].self, from: Data(mapQuadrantsData.utf8))) ?? [:]
         earnedPassportZones = (try? JSONDecoder().decode(Set<String>.self, from: Data(earnedPassportRaw.utf8))) ?? []
         refreshPastTripsCache()
+    }
+
+    /// Sugerencias de países sin visitar más cercanos a los visitados.
+    /// Heurística: por cada región (Europa/Asia/etc.) en la que ya tenga ≥1
+    /// visitado, propone hasta 6 candidatos ISO sin visitar de esa región.
+    /// Estable por ronda (ordenados por ISO) y dedup global.
+    private var discoveryCandidates: [CountryFeature] {
+        let visited = Set(visitedIsoCodes)
+        let regions: [Set<String>] = [
+            AchievementKind.visitedEuropa.regionIsoCodes,
+            AchievementKind.visitedAsia.regionIsoCodes,
+            AchievementKind.visitedAfrica.regionIsoCodes,
+            AchievementKind.visitedMedioOriente.regionIsoCodes,
+            AchievementKind.visitedOceania.regionIsoCodes,
+            AchievementKind.visitedNortamerica.regionIsoCodes,
+            AchievementKind.visitedCaribe.regionIsoCodes,
+            AchievementKind.visitedSudamerica.regionIsoCodes,
+            AchievementKind.visitedCentroamerica.regionIsoCodes
+        ]
+        var picked: [String] = []
+        let pickedSet = NSMutableSet()
+        for region in regions {
+            let hasVisited = !region.isDisjoint(with: visited)
+            guard hasVisited else { continue }
+            let unvisited = region.subtracting(visited).filter { countingMode.counts($0) }
+            for iso in unvisited.sorted().prefix(2) {
+                if !pickedSet.contains(iso) {
+                    picked.append(iso)
+                    pickedSet.add(iso)
+                }
+            }
+            if picked.count >= 6 { break }
+        }
+        return picked.compactMap { iso in allFeatures.first(where: { $0.isoCode == iso }) }
+    }
+
+    @ViewBuilder
+    private var discoverSection: some View {
+        let candidates = discoveryCandidates
+        if !candidates.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").font(.caption).foregroundStyle(.purple)
+                    Text("Lugares por descubrir")
+                        .font(.custom("Satoshi-Bold", size: 13))
+                        .tracking(0.6)
+                        .foregroundStyle(.primary)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(candidates, id: \.isoCode) { feature in
+                            VStack(spacing: 6) {
+                                FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 32)
+                                Text(feature.localizedName)
+                                    .font(.palatino(.caption, weight: .bold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                    .frame(maxWidth: 90)
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 12)
+                            .frame(width: 110)
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func refreshPastTripsCache() {
@@ -7997,6 +8079,32 @@ struct AddTripSheet: View {
         return latest
     }
 
+    /// Quick-template: pre-carga el transporte y abre AddSegmentSheet
+    /// directamente, evitando que el usuario navegue por step 1 (transport)
+    /// del wizard.
+    @ViewBuilder
+    private func quickTemplate(emoji: String, label: String) -> some View {
+        Button {
+            selectedTransport = emoji
+            showAddSegment = true
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            HStack(spacing: 8) {
+                Text(emoji).font(.system(size: 20))
+                Text(label)
+                    .font(.custom("Satoshi-Bold", size: 14))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.blue)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 12)
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
     private func segmentCountryNames(_ seg: TripSegment) -> String {
         if seg.transport == "✈️", let aps = seg.airports, !aps.isEmpty {
             var route = aps.map { $0.iata }.joined(separator: " → ")
@@ -8239,6 +8347,28 @@ struct AddTripSheet: View {
                     .padding(.horizontal, 16).padding(.bottom, 8)
 
                 Divider().padding(.horizontal, 16).padding(.vertical, 4)
+
+                // Templates rápidos: solo si aún no hay tramos. Pre-cargan
+                // un transporte y abren el wizard en el step 2 (países) o 3
+                // (fechas) según el caso. UX: 80% de viajes son uno de estos
+                // 4 patrones, el usuario evita 2-3 taps por viaje típico.
+                if tripSegments.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("PLANTILLAS RÁPIDAS")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .tracking(0.8)
+                            .padding(.horizontal, 16)
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            quickTemplate(emoji: "✈️", label: "Vuelo")
+                            quickTemplate(emoji: "🚗", label: "Coche")
+                            quickTemplate(emoji: "🚂", label: "Tren")
+                            quickTemplate(emoji: "🚌", label: "Bus")
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.bottom, 4)
+                }
 
                 // MARK: Tramos adicionales
                 VStack(alignment: .leading, spacing: 6) {
@@ -8522,6 +8652,71 @@ struct YearTravelView: View {
         return byMonth
     }
 
+    /// Cuenta trips primarios y países únicos visitados en un año concreto.
+    private func yearStats(_ year: Int) -> (trips: Int, countries: Int) {
+        let cal = Calendar.current
+        let yearTrips = trips.filter { trip in
+            !trip.isSegmentChild && cal.component(.year, from: trip.dateFrom) == year
+        }
+        let countries = Set(yearTrips.map(\.isoCode)).count
+        return (yearTrips.count, countries)
+    }
+
+    @ViewBuilder
+    private var yearComparison: some View {
+        let prevYear = selectedYear - 1
+        if availableYears.contains(prevYear) {
+            let cur = yearStats(selectedYear)
+            let prev = yearStats(prevYear)
+            if cur.trips > 0 || prev.trips > 0 {
+                HStack(spacing: 12) {
+                    comparisonStat(
+                        label: "Viajes",
+                        current: cur.trips,
+                        previous: prev.trips
+                    )
+                    Divider().frame(height: 36)
+                    comparisonStat(
+                        label: "Países",
+                        current: cur.countries,
+                        previous: prev.countries
+                    )
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func comparisonStat(label: String, current: Int, previous: Int) -> some View {
+        let delta = current - previous
+        let arrow = delta > 0 ? "arrow.up" : (delta < 0 ? "arrow.down" : "minus")
+        let arrowColor: Color = delta > 0 ? .green : (delta < 0 ? .red : .secondary)
+        VStack(alignment: .center, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(current)")
+                    .font(.custom("Satoshi-Bold", size: 16))
+                Image(systemName: arrow)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(arrowColor)
+                if delta != 0 {
+                    Text("\(abs(delta))")
+                        .font(.custom("Satoshi-Bold", size: 11))
+                        .foregroundStyle(arrowColor)
+                }
+            }
+            Text("vs \(String(selectedYear - 1))")
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     /// Mini heatmap: 12 cuadritos (uno por mes) coloreados según el número
     /// de viajes ese mes. Estilo GitHub contributions, escala 4 niveles.
     @ViewBuilder
@@ -8618,6 +8813,10 @@ struct YearTravelView: View {
             // Heatmap anual estilo GitHub: 12 columnas (meses) × 1 fila visual
             // mostrando intensidad de viaje por mes en el año seleccionado.
             yearlyHeatmap
+                .padding(.horizontal, 24)
+
+            // Comparativa con el año anterior si está disponible.
+            yearComparison
                 .padding(.horizontal, 24)
 
             if selectedYear == currentYear {
