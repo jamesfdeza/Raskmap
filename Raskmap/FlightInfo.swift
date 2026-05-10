@@ -9,9 +9,15 @@
 
 import Foundation
 
+// El proyecto tiene SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor en Build Settings,
+// por lo que TODO tipo declarado sin marca explícita queda @MainActor por defecto.
+// Para que JSONDecoder/JSONEncoder funcionen desde callsites nonisolated (las
+// computed properties de @Model class Trip), tanto los tipos como sus
+// conformancias Codable deben marcarse `nonisolated` explícitamente.
+
 /// Datos asiento/clase de un único tramo de vuelo.
 /// Un vuelo MAD→DXB→NRT ida+vuelta tiene 4 tramos: MAD-DXB, DXB-NRT, NRT-DXB, DXB-MAD.
-struct FlightLegInfo: Equatable, Sendable {
+nonisolated struct FlightLegInfo: Equatable, Sendable {
     var seatNumber: String = ""
     var seatPosition: String = ""  // "" | "pasillo" | "medio" | "ventana"
     var cabinClass: String = ""    // "" | "turista" | "economy+" | "business" | "first"
@@ -24,7 +30,7 @@ struct FlightLegInfo: Equatable, Sendable {
 /// "Main actor-isolated conformance ... cannot be used in nonisolated context"
 /// cuando se llama desde computed properties de `@Model class Trip`.
 /// La implementación manual queda explícitamente nonisolated.
-extension FlightLegInfo: Codable {
+nonisolated extension FlightLegInfo: Codable {
     enum CodingKeys: String, CodingKey {
         case seatNumber, seatPosition, cabinClass
     }
@@ -42,7 +48,7 @@ extension FlightLegInfo: Codable {
     }
 }
 
-struct FlightInfo: Equatable, Sendable {
+nonisolated struct FlightInfo: Equatable, Sendable {
     var bookingRef: String = ""
     // MARK: Legacy scalars (kept para compat con datos antiguos que nunca tuvieron tramos)
     var seatNumber: String = ""
@@ -69,7 +75,7 @@ struct FlightInfo: Equatable, Sendable {
     }
 }
 
-extension FlightInfo: Codable {
+nonisolated extension FlightInfo: Codable {
     enum CodingKeys: String, CodingKey {
         case bookingRef, seatNumber, seatPosition, cabinClass, outboundLegs, returnLegs
     }

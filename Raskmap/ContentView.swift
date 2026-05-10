@@ -1308,7 +1308,6 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
     /// Trips que matchean el `searchText` actual — busca en título y nombre
     /// localizado del país. Ordenados por dateFrom desc (más reciente primero).
     private var matchingTrips: [Trip] {
@@ -6427,7 +6426,10 @@ struct ExportDataSheet: View {
         top?.present(av, animated: true)
     }
 
-    private static func writeExport(format: ExportFormat, countries: [Country], trips: [Trip]) throws -> URL {
+    /// `nonisolated` para poder llamarse desde Task.detached sin await en
+    /// Swift 6 strict concurrency. La struct ExportDataSheet es @MainActor
+    /// por ser SwiftUI View, pero esta función es pura (no toca estado UI).
+    nonisolated private static func writeExport(format: ExportFormat, countries: [Country], trips: [Trip]) throws -> URL {
         let tmp = FileManager.default.temporaryDirectory
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let url = tmp.appendingPathComponent("raskmap-export-\(stamp).\(format.ext)")
@@ -6440,7 +6442,7 @@ struct ExportDataSheet: View {
         return url
     }
 
-    private static func buildJSON(countries: [Country], trips: [Trip]) throws -> Data {
+    nonisolated private static func buildJSON(countries: [Country], trips: [Trip]) throws -> Data {
         let dfISO = ISO8601DateFormatter()
         let countryDicts: [[String: Any]] = countries.map { c in
             [
@@ -6495,7 +6497,7 @@ struct ExportDataSheet: View {
         return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
     }
 
-    private static func buildCSV(trips: [Trip]) -> String {
+    nonisolated private static func buildCSV(trips: [Trip]) -> String {
         let df = DateFormatter()
         df.dateFormat = "yyyy-MM-dd"
         df.locale = Locale(identifier: "en_US_POSIX")
