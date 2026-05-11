@@ -6,9 +6,15 @@
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
 ### Última acción completada
-**Merge `remodelacion_integral_v2` → `master`** (fast-forward, commit `771835f`).
-Ambas ramas están alineadas en remoto. Se sigue trabajando sobre
-`remodelacion_integral_v2` para mantener histórico ordenado.
+**Fase A (App Store readiness) — parcial:**
+- ✅ A1 — `IPHONEOS_DEPLOYMENT_TARGET` 26.2 → 17.0 (commit `c24d8f1`).
+- ✅ A2 — `PrivacyInfo.xcprivacy` añadido a app + widget (mismo commit).
+- ⏸️ A3 — Verificar CloudKit container: pendiente de Apple Developer Account.
+- ⏸️ A4 — Verificar Restore Purchases en sandbox: pendiente de Apple Developer Account.
+
+**Próxima sesión:** arrancar **Fase B (error handling)** — los 234 force-unwraps,
+los `try?` sin recovery y los 26 `DispatchQueue.asyncAfter` como hacks de timing.
+No requiere Apple Developer Account.
 
 ### Lo último que se entregó (sesión 2026-05-11)
 - Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
@@ -25,11 +31,17 @@ Ambas ramas están alineadas en remoto. Se sigue trabajando sobre
 ### 🎯 Próximos pasos priorizados (de la auditoría)
 
 **Sprint 1 — Bloqueantes App Store (1 semana):**
-1. [ ] **B1** Verificar y bajar `IPHONEOS_DEPLOYMENT_TARGET` de 26.2 a 17.0/18.0.
+1. [x] **B1** Verificar y bajar `IPHONEOS_DEPLOYMENT_TARGET` de 26.2 a 17.0 ✅ commit `c24d8f1`.
 2. [ ] **B2** Crear `Localizable.xcstrings` con EN + ES (mínimo 50 strings).
-3. [ ] **B5** Generar `PrivacyInfo.xcprivacy`.
-4. [ ] **B3** Test funcional Restore Purchases en sandbox.
-5. [ ] **B4** Verificar CloudKit container `iCloud.RealDev.Raskmap` en prod.
+3. [x] **B5** Generar `PrivacyInfo.xcprivacy` (app + widget) ✅ commit `c24d8f1`.
+4. [ ] ⏸️ **B3** Test funcional Restore Purchases en sandbox.
+       _Bloqueado: requiere Apple Developer Account (99€/año) — el usuario lo está retrasando intencionalmente._
+5. [ ] ⏸️ **B4** Verificar CloudKit container `iCloud.RealDev.Raskmap` en prod.
+       _Bloqueado: misma razón que B3._
+
+> **Nota:** B3 y B4 quedan pausados hasta que el usuario active su Apple Developer Account.
+> En cuanto la tenga, son ~30 min de verificación combinada. No bloquean el desarrollo
+> técnico restante; solo bloquean el submit a App Store.
 
 **Sprint 2 — Estabilidad (2 semanas):**
 6. [ ] Auditar 234 force-unwraps en `ContentView.swift`, proteger los más arriesgados.
