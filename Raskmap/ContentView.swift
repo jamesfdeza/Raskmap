@@ -789,7 +789,7 @@ struct ContentView: View {
             modelContext.delete(trip)
             changed = true
         }
-        if changed { try? modelContext.save() }
+        if changed { modelContext.saveOrWarn() }
     }
 
     fileprivate func handleVisitedCountChange(_ newCount: Int) {
@@ -933,7 +933,7 @@ struct ContentView: View {
                             country.plannedTitle = nil
                             for t in allToDelete { modelContext.delete(t) }
                             removeFromTopTable(flagEmojis: removedEmoji)
-                            try? modelContext.save()
+                            modelContext.saveOrWarn()
                             for iso in siblingIsos {
                                 let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
                                 guard let c = modelContext.fetchFirstOrWarn(cd) else { continue }
@@ -978,7 +978,7 @@ struct ContentView: View {
                             country.status = .none
                             country.hasLived = false
                         }
-                        try? modelContext.save()
+                        modelContext.saveOrWarn()
                     },
                     onSetDate: filter == .wantToVisit ? { country, trip in
                         if let trip = trip {
@@ -1022,7 +1022,7 @@ struct ContentView: View {
                             country.transport = nil
                             country.plannedTitle = nil
                         }
-                        try? modelContext.save()
+                        modelContext.saveOrWarn()
                     } : nil,
                     onDeleteAll: {
                         let today = Calendar.current.startOfDay(for: Date())
@@ -1060,7 +1060,7 @@ struct ContentView: View {
                                 c.status = .none; c.hasLived = false
                             }
                         }
-                        try? modelContext.save()
+                        modelContext.saveOrWarn()
                     }
                 )
             }
@@ -1080,7 +1080,7 @@ struct ContentView: View {
                     country.plannedDate = earliest.dateFrom
                     country.plannedDateTo = earliest.dateTo
                     country.plannedTitle = earliest.title
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 }
                 let b = nextProximosBanner
                 cachedNextBanner = b
@@ -1114,7 +1114,7 @@ struct ContentView: View {
                     features: features,
                     onSave: { trip, childNames in
                         modelContext.insert(trip)
-                        try? modelContext.save()
+                        modelContext.saveOrWarn()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             refreshTrigger.toggle()
                         }
@@ -1134,7 +1134,7 @@ struct ContentView: View {
                         // Only revert if we changed the status (not for visited->addTrip)
                         if statusBeforeVisit != .visited {
                             country.status = statusBeforeVisit
-                            try? modelContext.save()
+                            modelContext.saveOrWarn()
                         } else {
                             fixZeroXVisitedIfNeeded(country: country)
                         }
@@ -1715,7 +1715,7 @@ struct ContentView: View {
                     country.transport = trip.transport
                     country.plannedTitle = trip.title
                 }
-                try? modelContext.save()
+                modelContext.saveOrWarn()
                 highlightedIsoCode = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { centerMap(on: country.isoCode) }
                 if country.isoCode == locationIsoCode {
@@ -1848,7 +1848,7 @@ struct ContentView: View {
             showCountdown: $showCountdown,
             onClearStatus: { status in
                 for country in countries where country.status == status { country.status = .none; country.hasLived = false }
-                try? modelContext.save()
+                modelContext.saveOrWarn()
             },
             onProximosTap: nil,
             onDiscoveryTap: { feature in
@@ -1951,7 +1951,7 @@ struct ContentView: View {
 
         // Primera vez viendo este país: insertar + save + esperar a @Query
         modelContext.insert(tapped)
-        try? modelContext.save()
+        modelContext.saveOrWarn()
 
         DispatchQueue.main.async {
             if let saved = self.countries.first(where: { $0.isoCode == isoCode }) {
@@ -2065,7 +2065,7 @@ struct ContentView: View {
             country.status = .none
             country.hasLived = false
         }
-        try? modelContext.save()
+        modelContext.saveOrWarn()
     }
 
     @MainActor
@@ -2156,7 +2156,7 @@ struct ContentView: View {
             country.plannedTitle = nil
             changed = true
         }
-        if changed { try? modelContext.save() }
+        if changed { modelContext.saveOrWarn() }
     }
 
     private func handleScenePhaseActive(_ phase: ScenePhase) {
@@ -2184,7 +2184,7 @@ struct ContentView: View {
             }
             changed = true
         }
-        if changed { try? modelContext.save() }
+        if changed { modelContext.saveOrWarn() }
     }
 
     private func updateCountryStatus(country: Country, newStatus: CountryStatus) {
@@ -2269,7 +2269,7 @@ struct ContentView: View {
                 }
             }
 
-            try? modelContext.save()
+            modelContext.saveOrWarn()
             refreshTrigger.toggle()  // force @Query refresh
             highlightedIsoCode = nil
             if newStatus == .visited {
@@ -4579,7 +4579,7 @@ struct ProfileSheet: View {
                         country.transport = nil
                         country.plannedTitle = nil
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 },
                 onSetDate: { country, trip in
                     if let trip = trip {
@@ -4624,7 +4624,7 @@ struct ProfileSheet: View {
                         country.transport = nil
                         country.plannedTitle = nil
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 },
                 onDeleteAll: {
                     let today = Calendar.current.startOfDay(for: Date())
@@ -4644,7 +4644,7 @@ struct ProfileSheet: View {
                             if Calendar.current.startOfDay(for: t.dateFrom) > today { modelContext.delete(t) }
                         }
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 }
             )
         }
@@ -4668,7 +4668,7 @@ struct ProfileSheet: View {
                         country.transport = trip.transport
                         country.plannedTitle = trip.title
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 }
             )
             .environmentObject(colorTheme)
@@ -4695,7 +4695,7 @@ struct ProfileSheet: View {
                         if seenIDs.insert(ObjectIdentifier(trip)).inserted { allToDelete.append(trip) }
                     }
                     for t in allToDelete { modelContext.delete(t) }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                     // Reevaluar el estado de los países tocados
                     let touched = Set(allToDelete.map { $0.isoCode })
                     for iso in touched {
@@ -4718,7 +4718,7 @@ struct ProfileSheet: View {
                             c.plannedTitle = nil
                         }
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                     // Refrescar el sheet con las filas actualizadas — si no quedan, cerramos
                     let updated = finalizadoRows(year: payload.year)
                     if updated.isEmpty {
@@ -4788,7 +4788,7 @@ struct ProfileSheet: View {
                         }
                         _ = cal // suppress unused warning if calendar isn't used elsewhere
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                     // Refrescar el sheet
                     finalizadosPayload = FinalizadosSheetPayload(year: payload.year)
                 }
@@ -7785,7 +7785,7 @@ private extension AllCountriesSheet {
                 country.transport = nil
                 country.visitCount = 0
                 for t in allToDelete { modelContext.delete(t) }
-                try? modelContext.save()
+                modelContext.saveOrWarn()
                 for iso in siblingIsos {
                     let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
                     guard let c = modelContext.fetchFirstOrWarn(cd) else { continue }
@@ -7807,7 +7807,7 @@ private extension AllCountriesSheet {
                         c.plannedTitle = nil
                     }
                 }
-                try? modelContext.save()
+                modelContext.saveOrWarn()
                 onCountryDeleted?(country.isoCode)
                 confirmDeleteCountry = nil
             }
@@ -7834,7 +7834,7 @@ private extension AllCountriesSheet {
                 features: features,
                 onSave: { trip, _ in
                     modelContext.insert(trip)
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 }
             )
         }
@@ -8916,13 +8916,13 @@ struct VisitCountPickerSheet: View {
                 Text("Visitas manuales").font(.palatino(.title3, weight: .bold))
                 HStack(spacing: 24) {
                     Button {
-                        if country.visitCount > 0 { country.visitCount -= 1; try? modelContext.save() }
+                        if country.visitCount > 0 { country.visitCount -= 1; modelContext.saveOrWarn() }
                     } label: {
                         Image(systemName: "minus.circle.fill").font(.system(size: 44)).foregroundStyle(.red)
                     }
                     Text("\(country.visitCount)").font(.system(size: 64, weight: .bold, design: .rounded))
                     Button {
-                        country.visitCount += 1; try? modelContext.save()
+                        country.visitCount += 1; modelContext.saveOrWarn()
                     } label: {
                         Image(systemName: "plus.circle.fill").font(.system(size: 44)).foregroundStyle(.blue)
                     }
@@ -10227,7 +10227,7 @@ struct CountryTripsSheet: View {
                 Section {
                     Toggle(isOn: Binding(
                         get: { country.hasLived },
-                        set: { country.hasLived = $0; try? modelContext.save() }
+                        set: { country.hasLived = $0; modelContext.saveOrWarn() }
                     )) {
                         HStack(spacing: 6) {
                             Text("He vivido aquí").font(.palatino(.body))
@@ -10255,7 +10255,7 @@ struct CountryTripsSheet: View {
                         Spacer()
                         Stepper("\(country.visitCount)", value: Binding(
                             get: { country.visitCount },
-                            set: { country.visitCount = $0; try? modelContext.save() }
+                            set: { country.visitCount = $0; modelContext.saveOrWarn() }
                         ), in: 0...99)
                         .labelsHidden()
                         Text("\(country.visitCount)x")
@@ -10301,7 +10301,7 @@ struct CountryTripsSheet: View {
                     }
                     let affectedIsos = Set(toDelete.map { $0.isoCode })
                     for t in toDelete { modelContext.delete(t) }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                     for iso in affectedIsos {
                         let cd = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == iso })
                         guard let c = modelContext.fetchFirstOrWarn(cd) else { continue }
@@ -10323,7 +10323,7 @@ struct CountryTripsSheet: View {
                             c.plannedTitle = nil
                         }
                     }
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 }
                 Button("Cancelar", role: .cancel) {}
             } message: { trip in
@@ -10343,7 +10343,7 @@ struct CountryTripsSheet: View {
                     country.plannedDate = earliest.dateFrom
                     country.plannedDateTo = earliest.dateTo
                     country.plannedTitle = earliest.title
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                 }
             }) { trip in
                 EditTripSheet(trip: trip, features: features)
@@ -10528,7 +10528,7 @@ struct TripTitleEditRow: View {
                 Button {
                     let trimmedDraft = draft.trimmingCharacters(in: .whitespaces)
                     trip.title = trimmedDraft.isEmpty ? nil : trimmedDraft
-                    try? modelContext.save()
+                    modelContext.saveOrWarn()
                     editing = false
                 } label: {
                     Image(systemName: "checkmark.circle.fill")
@@ -11112,7 +11112,7 @@ struct EditTripSheet: View {
                 for sibling in siblings { sibling.title = trimmedTitle.isEmpty ? nil : trimmedTitle }
             }
         }
-        try? modelContext.save()
+        modelContext.saveOrWarn()
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }

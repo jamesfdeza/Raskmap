@@ -498,7 +498,11 @@ struct RaskMapView: UIViewRepresentable {
                 }
                 return cached
             }
-            // Fallback — debería estar en cache desde el precalentado
+            // Fallback — debería estar en cache desde el precalentado.
+            // Solo cacheamos si el polígono está en `activeOverlayIsos` (es decir,
+            // realmente lo queremos en el mapa). En otro caso devolvemos el
+            // renderer sin cachear: previene leaks ante requests de MapKit por
+            // overlays que ya quitamos. Cap natural del cache = |activeOverlayIsos|.
             let renderer = MKPolygonRenderer(polygon: polygon)
             if parent.flightMode {
                 renderer.fillColor = .clear
@@ -510,8 +514,26 @@ struct RaskMapView: UIViewRepresentable {
                                        showBucketList: parent.showBucketList,
                                        isUserHere: polygon.isoCode == parent.locationIsoCode)
             }
-            rendererCache[pid] = renderer
+            if activeOverlayIsos.contains(polygon.isoCode) {
+                rendererCache[pid] = renderer
+            }
             return renderer
+        }
+
+        /// Defensa adicional contra crecimiento patológico del cache. Si supera
+        /// el cap (improbable con la arquitectura actual de overlays acotados),
+        /// limpia las entries que ya no corresponden a polígonos activos.
+        /// Pensado para llamarse desde puntos de sync ocasionales.
+        private static let rendererCacheSoftCap = 2000
+        func compactRendererCacheIfNeeded() {
+            guard rendererCache.count > Self.rendererCacheSoftCap else { return }
+            let stale = rendererCache.filter { (_, renderer) -> Bool in
+                guard let polygon = renderer.polygon as? CountryPolygon else { return true }
+                return !activeOverlayIsos.contains(polygon.isoCode)
+            }
+            for (pid, _) in stale {
+                rendererCache.removeValue(forKey: pid)
+            }
         }
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {}
