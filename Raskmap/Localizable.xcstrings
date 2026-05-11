@@ -1,855 +1,4179 @@
 {
-  "sourceLanguage" : "es",
-  "version" : "1.0",
-  "strings" : {
-
-    "Visitados" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Visited"
+  "sourceLanguage": "es",
+  "strings": {
+    "": {},
+    "–": {},
+    "¡El año que viene vuelve a intentarlo!\nEl mundo sigue esperándote ✈️": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again next year!\nThe world is still waiting for you ✈️"
           }
         }
       }
     },
-    "Próximos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Upcoming"
+    "¡Escandinavia completa!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scandinavia completed!"
           }
         }
       }
     },
-    "Quiero" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bucket"
+    "¡Gracias por apoyar Raskmap!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thank you for supporting Raskmap!"
           }
         }
       }
     },
-    "Quiero ir" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bucket list"
+    "¡Guardada!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved!"
           }
         }
       }
     },
-    "Vivido" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lived"
+    "¡Has pisado la Antártida!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've set foot on Antarctica!"
           }
         }
       }
     },
-    "Buscar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search"
+    "¡Has visitado el mundo entero!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited the entire world!"
           }
         }
       }
     },
-    "Buscar país" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search country"
+    "¡Lo conseguiste!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You did it!"
           }
         }
       }
     },
-    "Buscar país o viaje…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search country or trip…"
+    "¡Logro extraordinario!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraordinary achievement!"
           }
         }
       }
     },
-    "Cerrar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close"
+    "¡Los 5 continentes!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All 5 continents!"
           }
         }
       }
     },
-    "Cancelar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
+    "¡Los Balcanes completos!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balkans completed!"
           }
         }
       }
     },
-    "Guardar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save"
+    "¡Más de una vuelta al mundo! 🌍": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More than one trip around the world! 🌍"
           }
         }
       }
     },
-    "Guardar cambios" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save changes"
+    "¡Norte y sur del planeta!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "North and south of the planet!"
           }
         }
       }
     },
-    "Eliminar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete"
+    "¡Pasaporte completo!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passport completed!"
           }
         }
       }
     },
-    "Aceptar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
+    "¡Todos los microestados europeos!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All European microstates!"
           }
         }
       }
     },
-    "Atrás" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Back"
+    "¡Todos los países de la UE!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All EU countries!"
           }
         }
       }
     },
-    "Siguiente" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Next"
+    "¡Todos los pueblos eslavos!": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Slavic peoples!"
           }
         }
       }
     },
-    "Continuar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue"
+    "¿Borrar todos tus datos?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete all your data?"
           }
         }
       }
     },
-    "Editar viaje" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit trip"
+    "¿Cómo quieres que te llamemos?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What should we call you?"
           }
         }
       }
     },
-    "Añadir viaje" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add trip"
+    "¿Cómo vas a viajar?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How will you travel?"
           }
         }
       }
     },
-    "Añadir transporte" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add transport"
+    "¿Cómo viajaste?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How did you travel?"
           }
         }
       }
     },
-    "Añadir viaje pasado" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add past trip"
+    "¿Duplicar este viaje a futuro?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate this trip to the future?"
           }
         }
       }
     },
-    "Añadir próximo viaje" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add upcoming trip"
+    "¿El vuelo de vuelta tiene escala?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Does the return flight have a layover?"
           }
         }
       }
     },
-    "Ver viajes" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View trips"
+    "¿El vuelo tiene escala?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Does the flight have a layover?"
           }
         }
       }
     },
-    "Transporte" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transport"
+    "¿Eliminar datos?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete data?"
           }
         }
       }
     },
-    "País" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Country"
+    "¿Eliminar de la lista?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from list?"
           }
         }
       }
     },
-    "Países" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Countries"
+    "¿Eliminar este premio?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this award?"
           }
         }
       }
     },
-    "Países del tramo" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Segment countries"
+    "¿Eliminar este próximo?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove this upcoming trip?"
           }
         }
       }
     },
-    "Fecha del tramo" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Segment date"
+    "¿Eliminar este territorio?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this territory?"
           }
         }
       }
     },
-    "Viajes" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trips"
+    "¿Eliminar este viaje?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this trip?"
           }
         }
       }
     },
-    "Total" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total"
+    "¿Eliminar lista?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete list?"
           }
         }
       }
     },
-    "total" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "total"
+    "¿HARÁS PARADA EN...?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WILL YOU STOP IN…?"
           }
         }
       }
     },
-    "Sin viajes" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No trips"
+    "¿Misma aerolínea a la vuelta?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same airline on the return?"
           }
         }
       }
     },
-    "Sin datos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No data"
+    "¿Misma ruta a la vuelta?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same route on the return?"
           }
         }
       }
     },
-    "Aeropuertos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Airports"
+    "¿Mismas aerolíneas en todos los tramos?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same airlines on all segments?"
           }
         }
       }
     },
-    "Aerolíneas" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Airlines"
+    "¿Te gusta Raskmap?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do you like Raskmap?"
           }
         }
       }
     },
-    "Ajustes" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings"
+    "¿VISITASTE ALGUNA ESCALA?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DID YOU VISIT A LAYOVER?"
           }
         }
       }
     },
-    "Perfil" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profile"
+    "·": {},
+    "· %@": {},
+    "\"%@\"": {},
+    "@": {},
+    "@ %@": {},
+    "@jaimeviajando": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@jaimeviajando"
           }
         }
       }
     },
-    "Lugares por descubrir" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Places to discover"
+    "#ABC123": {},
+    "%": {},
+    "%@ – %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ – %2$@"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
+          }
+        }
+      }
+    },
+    "%@ (%lld)": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ (%2$lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "%@ %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ %lld %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$lld %3$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$lld %3$@"
+          }
+        }
+      }
+    },
+    "%@ → %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ → %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "%@ km": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ km"
+          }
+        }
+      }
+    },
+    "%@ se añade como visitado": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is added as visited"
+          }
+        }
+      }
+    },
+    "%@ se eliminará de la lista.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ will be removed from the list."
+          }
+        }
+      }
+    },
+    "%@ se eliminará de próximos.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ will be removed from upcoming."
+          }
+        }
+      }
+    },
+    "%@: %lld viajes": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@: %2$lld viajes"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld trips"
+          }
+        }
+      }
+    },
+    "%@. %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@. %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. %2$@"
+          }
+        }
+      }
+    },
+    "%@%@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@%2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@%2$@"
+          }
+        }
+      }
+    },
+    "%lld": {},
+    "%lld %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld %2$@"
+          }
+        }
+      }
+    },
+    "%lld días": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld days"
+          }
+        }
+      }
+    },
+    "%lld territorios en %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld territorios en %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld territories in %2$@"
+          }
+        }
+      }
+    },
+    "%lld viajes en %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld viajes en %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld trips in %2$@"
+          }
+        }
+      }
+    },
+    "%lld/%lld": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld/%2$lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "%lld×": {},
+    "%lldd": {},
+    "%lldx": {},
+    "→": {},
+    "→ %@": {},
+    "↩️  Sí, ida y vuelta (×2)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↩️  Yes, round-trip (×2)"
+          }
+        }
+      }
+    },
+    "+": {},
+    "|": {},
+    "−": {},
+    "≈ %@ km recorridos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ %@ km traveled"
+          }
+        }
+      }
+    },
+    "≈ %lld%% de la vuelta al mundo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ %lld%% around the world"
+          }
+        }
+      }
+    },
+    "🇯🇵": {},
+    "✈️": {},
+    "✈️  No, solo ida": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✈️  No, one-way"
+          }
+        }
+      }
+    },
+    "✈️  Vuelo directo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✈️  Direct flight"
+          }
+        }
+      }
+    },
+    "✈️ %lld %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "✈️ %1$lld %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✈️ %1$lld %2$@"
+          }
+        }
+      }
+    },
+    "✈️ Aeropuertos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✈️ Airports"
+          }
+        }
+      }
+    },
+    "⭐️": {},
+    "🏠": {},
+    "💺 Asientos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "💺 Seats"
+          }
+        }
+      }
+    },
+    "🔀  Ruta de vuelta diferente": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔀  Different return route"
+          }
+        }
+      }
+    },
+    "🔄  Con escala(s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔄  With layover(s)"
+          }
+        }
+      }
+    },
+    "🗺️": {},
+    "🥇": {},
+    "🥈": {},
+    "🥉": {},
+    "🪟 Tipo asiento": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🪟 Seat type"
+          }
+        }
+      }
+    },
+    "🛫 Aerolíneas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🛫 Airlines"
+          }
+        }
+      }
+    },
+    "1 día": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 day"
+          }
+        }
+      }
+    },
+    "1:1 (cuadrado)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1:1 (square)"
+          }
+        }
+      }
+    },
+    "9:16 (vertical)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9:16 (vertical)"
+          }
+        }
+      }
+    },
+    "19A": {},
+    "42 días": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "42 days"
+          }
+        }
+      }
+    },
+    "ABC123": {},
+    "Aceptar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "Activar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activate"
+          }
+        }
+      }
+    },
+    "Actualizando colores…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updating colors…"
+          }
+        }
+      }
+    },
+    "Aerolíneas": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Airlines"
+          }
+        }
+      }
+    },
+    "Aeropuerto favorito": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorite airport"
+          }
+        }
+      }
+    },
+    "Aeropuertos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Airports"
+          }
+        }
+      }
+    },
+    "Ahora no": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
+          }
+        }
+      }
+    },
+    "Ajusta los conteos si es necesario": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjust the counts if needed"
+          }
+        }
+      }
+    },
+    "Ajustes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        }
+      }
+    },
+    "Al que más volviste: %@ · %lld viajes": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Al que más volviste: %1$@ · %2$lld viajes"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Most returned to: %@ · %lld trips"
+          }
+        }
+      }
+    },
+    "Algunos países se extienden por ambos hemisferios (norte y sur). Aquí decides en cuál contarlos —o en ambos— para tus estadísticas y el logro «Ambos hemisferios». Afecta también a los porcentajes de hemisferio en la pantalla de logros.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some countries span both hemispheres (north and south). Here you decide which to count them in —or both— for your statistics and the «Both hemispheres» achievement. It also affects the hemisphere percentages on the achievements screen."
+          }
+        }
+      }
+    },
+    "Algunos países se extienden por dos continentes (como Rusia, Turquía o Egipto). Aquí decides en qué continente contarlos —o en ambos— para tus estadísticas por regiones y los logros de continentes completos.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some countries span two continents (like Russia, Turkey, or Egypt). Here you decide which continent to count them in —or both— for your regional statistics and the complete continents achievements."
+          }
+        }
+      }
+    },
+    "Ambos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Both"
+          }
+        }
+      }
+    },
+    "Añade el medio de transporte en tus viajes para ver estadísticas.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add the transport method to your trips to see statistics."
+          }
+        }
+      }
+    },
+    "Añade estos widgets en la pantalla de bloqueo manteniéndola pulsada y tocando \"Personalizar\".": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add these widgets on the lock screen by long-pressing it and tapping \"Customize\"."
+          }
+        }
+      }
+    },
+    "Añade las complicaciones de Raskmap en tu esfera de Apple Watch desde la app Watch o pulsando la esfera.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Raskmap complications to your Apple Watch face from the Watch app or by tapping the face."
+          }
+        }
+      }
+    },
+    "Añadir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
+    "Añadir a Próximos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to Upcoming"
+          }
+        }
+      }
+    },
+    "Añadir otra escala": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add another layover"
+          }
+        }
+      }
+    },
+    "Añadir próximo viaje": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add upcoming trip"
+          }
+        }
+      }
+    },
+    "Añadir ruta de vuelo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add flight route"
+          }
+        }
+      }
+    },
+    "Añadir título…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add title…"
+          }
+        }
+      }
+    },
+    "Añadir tramo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add segment"
+          }
+        }
+      }
+    },
+    "Añadir transporte": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add transport"
+          }
+        }
+      }
+    },
+    "Añadir viaje": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add trip"
+          }
+        }
+      }
+    },
+    "Añadir viaje pasado": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add past trip"
+          }
+        }
+      }
+    },
+    "Andando": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walking"
+          }
+        }
+      }
+    },
+    "Andorra, Liechtenstein, Malta, Mónaco, San Marino y Vaticano": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Andorra, Liechtenstein, Malta, Monaco, San Marino and Vatican"
+          }
+        }
+      }
+    },
+    "Aplicando color…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applying color…"
+          }
+        }
+      }
+    },
+    "Aplicar clase y posición a todos los tramos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply class and position to all segments"
+          }
+        }
+      }
+    },
+    "Apoya el desarrollo de Raskmap\ny desbloquea funciones exclusivas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Support the development of Raskmap\nand unlock exclusive features"
+          }
+        }
+      }
+    },
+    "Apple Watch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Watch"
+          }
+        }
+      }
+    },
+    "ASÍ FUE MI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MY"
+          }
+        }
+      }
+    },
+    "ASÍ FUE TU": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR"
+          }
+        }
+      }
+    },
+    "Asiento": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seat"
+          }
+        }
+      }
+    },
+    "ASUNTO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SUBJECT"
+          }
+        }
+      }
+    },
+    "Atrás": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        }
+      }
+    },
+    "Aún no conseguido": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet earned"
+          }
+        }
+      }
+    },
+    "Aún no has registrado vuelos.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You haven't registered any flights yet."
+          }
+        }
+      }
+    },
+    "Aún no has volado": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You haven't flown yet"
+          }
+        }
+      }
+    },
+    "Aún no hay asientos registrados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No seats recorded yet"
+          }
+        }
+      }
+    },
+    "Aún no hay tipos de asiento registrados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No seat types recorded yet"
+          }
+        }
+      }
+    },
+    "Avión": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plane"
+          }
+        }
+      }
+    },
+    "Ayuda": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help"
+          }
+        }
+      }
+    },
+    "Barco": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boat"
+          }
+        }
+      }
+    },
+    "Bienvenido a Raskmap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to Raskmap"
+          }
+        }
+      }
+    },
+    "Borrar lista completa": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete entire list"
+          }
+        }
+      }
+    },
+    "Borrar todo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete all"
+          }
+        }
+      }
+    },
+    "Borrar todos mis datos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete all my data"
+          }
+        }
+      }
+    },
+    "Bronce": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bronze"
+          }
+        }
+      }
+    },
+    "Bus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bus"
+          }
+        }
+      }
+    },
+    "Buscar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search"
+          }
+        }
+      }
+    },
+    "Buscar aerolínea": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search airline"
+          }
+        }
+      }
+    },
+    "Buscar aeropuerto o IATA": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search airport or IATA"
+          }
+        }
+      }
+    },
+    "Buscar país": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search country"
+          }
+        }
+      }
+    },
+    "Buscar país o viaje…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search country or trip…"
+          }
+        }
+      }
+    },
+    "Buscar país...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search country..."
+          }
+        }
+      }
+    },
+    "Buscar país…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search country…"
+          }
+        }
+      }
+    },
+    "Buscar territorio…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search territory…"
+          }
+        }
+      }
+    },
+    "Cambia al mapa de países visitados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to visited countries map"
+          }
+        }
+      }
+    },
+    "Cambiar colores": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change colors"
+          }
+        }
+      }
+    },
+    "Cancelar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Candidatos (%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Candidates (%lld)"
+          }
+        }
+      }
+    },
+    "Cargando el mundo...": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading the world..."
+          }
+        }
+      }
+    },
+    "Categorías personales": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal categories"
+          }
+        }
+      }
+    },
+    "Cerrar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
+    "Coche": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Car"
+          }
+        }
+      }
+    },
+    "Código de activación": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activation code"
+          }
+        }
+      }
+    },
+    "Colores del mapa:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map colors:"
+          }
+        }
+      }
+    },
+    "Colores restablecidos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colors reset"
+          }
+        }
+      }
+    },
+    "Compartir mi año": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share my year"
+          }
+        }
+      }
+    },
+    "Compartir viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share trip"
+          }
+        }
+      }
+    },
+    "Confirmación final": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final confirmation"
+          }
+        }
+      }
+    },
+    "Confirmar viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm trip"
+          }
+        }
+      }
+    },
+    "Contacto": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contact"
+          }
+        }
+      }
+    },
+    "Contador": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Counter"
+          }
+        }
+      }
+    },
+    "Contador manual": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manual counter"
+          }
+        }
+      }
+    },
+    "Contador próximo viaje:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming trip counter:"
+          }
+        }
+      }
+    },
+    "Conteo actualizado": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Count updated"
+          }
+        }
+      }
+    },
+    "Conteo de territorios/países:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Territory/country count:"
+          }
+        }
+      }
+    },
+    "CONTINENTES": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CONTINENTS"
+          }
+        }
+      }
+    },
+    "Continuar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "Continuar → Aerolíneas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue → Airlines"
+          }
+        }
+      }
+    },
+    "Créditos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credits"
+          }
+        }
+      }
+    },
+    "Cuéntanos qué falta o qué falla. Leemos cada mensaje.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell us what's missing or broken. We read every message."
+          }
+        }
+      }
+    },
+    "Datos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data"
+          }
+        }
+      }
+    },
+    "Datos borrados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data deleted"
+          }
+        }
+      }
+    },
+    "de los 5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "of 5"
+          }
+        }
+      }
+    },
+    "del mundo visitado": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "of the world visited"
+          }
+        }
+      }
+    },
+    "Desbloquear Pro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock Pro"
+          }
+        }
+      }
+    },
+    "Desde": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From"
+          }
+        }
+      }
+    },
+    "DESDE": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FROM"
+          }
+        }
+      }
+    },
+    "destino": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "destination"
+          }
+        }
+      }
+    },
+    "destino nuevo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "new destination"
+          }
+        }
+      }
+    },
+    "destinos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "destinations"
+          }
+        }
+      }
+    },
+    "destinos nuevos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "new destinations"
+          }
+        }
+      }
+    },
+    "Detalle del viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trip detail"
+          }
+        }
+      }
+    },
+    "DETALLES DEL VUELO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLIGHT DETAILS"
+          }
+        }
+      }
+    },
+    "día": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "day"
+          }
+        }
+      }
+    },
+    "DÍA": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DAY"
+          }
+        }
+      }
+    },
+    "días": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "days"
+          }
+        }
+      }
+    },
+    "DÍAS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DAYS"
+          }
+        }
+      }
+    },
+    "DÍAS POR PAÍS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DAYS PER COUNTRY"
+          }
+        }
+      }
+    },
+    "días seguidos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "consecutive days"
+          }
+        }
+      }
+    },
+    "Duplicar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate"
+          }
+        }
+      }
+    },
+    "Duplicar a +1 año": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate to +1 year"
+          }
+        }
+      }
+    },
+    "Editar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
+    "Editar fecha de viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit trip date"
+          }
+        }
+      }
+    },
+    "Editar lista": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit list"
+          }
+        }
+      }
+    },
+    "Editar viaje": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit trip"
+          }
+        }
+      }
+    },
+    "Ej: Vacaciones de verano": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "E.g.: Summer vacation"
+          }
+        }
+      }
+    },
+    "El continente más inhóspito del planeta": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The most inhospitable continent on the planet"
+          }
+        }
+      }
+    },
+    "El pago único desbloquea Pro de forma permanente.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The one-time payment unlocks Pro permanently."
+          }
+        }
+      }
+    },
+    "Elige tu pasaporte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your passport"
+          }
+        }
+      }
+    },
+    "Eliminar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        }
+      }
+    },
+    "Eliminar %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %@"
+          }
+        }
+      }
+    },
+    "Eliminar premio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete award"
+          }
+        }
+      }
+    },
+    "Eliminar selección": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete selection"
+          }
+        }
+      }
+    },
+    "empate múltiple 🤝": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "multiple tie 🤝"
+          }
+        }
+      }
+    },
+    "Empezar a explorar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start exploring"
+          }
+        }
+      }
+    },
+    "en %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %@"
+          }
+        }
+      }
+    },
+    "EN EL AIRE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IN THE AIR"
+          }
+        }
+      }
+    },
+    "EN RASKMAP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ON RASKMAP"
+          }
+        }
+      }
+    },
+    "Entendido": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got it"
+          }
+        }
+      }
+    },
+    "Enviar mensaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send message"
+          }
+        }
+      }
+    },
+    "Escríbenos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write to us"
+          }
+        }
+      }
+    },
+    "ESTE AÑO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "THIS YEAR"
+          }
+        }
+      }
+    },
+    "Este contador es para sumar viajes que sabes que has hecho en el pasado a este país o territorio pero no recuerdas los datos para rellenarlo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This counter is for adding trips you know you've taken in the past to this country or territory but don't remember the details to fill in."
+          }
+        }
+      }
+    },
+    "Europa, Asia, África, América y Oceanía": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Europe, Asia, Africa, America and Oceania"
+          }
+        }
+      }
+    },
+    "Exportar datos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export data"
+          }
+        }
+      }
+    },
+    "Exportar genera un JSON con tus países, viajes y preferencias para que puedas guardarlo o moverlo a otro dispositivo. Borrar elimina todo localmente; con iCloud activo, también se sincroniza el borrado.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export generates a JSON with your countries, trips and preferences so you can save it or move it to another device. Delete removes everything locally; with iCloud enabled, the deletion is also synced."
+          }
+        }
+      }
+    },
+    "Exportar mis datos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export my data"
+          }
+        }
+      }
+    },
+    "Exportar tus datos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export your data"
+          }
+        }
+      }
+    },
+    "Fecha del tramo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segment date"
+          }
+        }
+      }
+    },
+    "FECHAS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DATES"
+          }
+        }
+      }
+    },
+    "Filtro vuelos: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flight filter: %@"
+          }
+        }
+      }
+    },
+    "Finalizados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finished"
+          }
+        }
+      }
+    },
+    "Finalizados %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finished %@"
+          }
+        }
+      }
+    },
+    "FORMATO": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FORMAT"
+          }
+        }
+      }
+    },
+    "Formato de imagen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image format"
+          }
+        }
+      }
+    },
+    "Función Pro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro feature"
+          }
+        }
+      }
+    },
+    "Genera un archivo con tus países, viajes y preferencias para guardarlo o moverlo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generates a file with your countries, trips and preferences to save or move."
+          }
+        }
+      }
+    },
+    "Generando mapa…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating map…"
+          }
+        }
+      }
+    },
+    "Generando…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating…"
+          }
+        }
+      }
+    },
+    "Generar y compartir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate and share"
+          }
+        }
+      }
+    },
+    "Guardar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "Guardar cambios": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save changes"
+          }
+        }
+      }
+    },
+    "Guardar en galería": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save to gallery"
+          }
+        }
+      }
+    },
+    "Guardar viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save trip"
+          }
+        }
+      }
+    },
+    "Has estado en ambos hemisferios": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've been in both hemispheres"
+          }
+        }
+      }
+    },
+    "HAS VISITADO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOU'VE VISITED"
+          }
+        }
+      }
+    },
+    "Has visitado los 5 países nórdicos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited the 5 Nordic countries"
+          }
+        }
+      }
+    },
+    "Has visitado los 13 países de habla eslava": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited the 13 Slavic-speaking countries"
+          }
+        }
+      }
+    },
+    "Has visitado los 27 estados miembros": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited the 27 member states"
+          }
+        }
+      }
+    },
+    "Has visitado todos los países balcánicos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited all Balkan countries"
+          }
+        }
+      }
+    },
+    "Has visitado todos los países de tu pasaporte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited all countries on your passport"
+          }
+        }
+      }
+    },
+    "Has visitado todos los territorios de la zona": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You've visited all territories in the zone"
+          }
+        }
+      }
+    },
+    "HASTA": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TO"
+          }
+        }
+      }
+    },
+    "Hasta (opcional)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Until (optional)"
+          }
+        }
+      }
+    },
+    "He vivido aquí": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I've lived here"
+          }
+        }
+      }
+    },
+    "Hola, me gustaría reportar…\n\n· Bug encontrado:\n· Aeropuerto/aerolínea que falta:\n· Sugerencia:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hi, I'd like to report…\n\n· Bug found:\n· Missing airport/airline:\n· Suggestion:"
+          }
+        }
+      }
+    },
+    "Información sobre cómo reportar bugs o sugerir contenido": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Information on how to report bugs or suggest content"
+          }
+        }
+      }
+    },
+    "Instagram": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instagram"
+          }
+        }
+      }
+    },
+    "KM VOLADOS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KM FLOWN"
+          }
+        }
+      }
+    },
+    "La lista muestra todos los territorios que has visitado, independientemente del sistema de conteo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The list shows all territories you've visited, regardless of the counting system."
+          }
+        }
+      }
+    },
+    "Legal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legal"
+          }
+        }
+      }
+    },
+    "Listo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "Listo (%lld aerolínea%@)": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Listo (%1$lld aerolínea%2$@)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done (%1$lld airline%2$@)"
+          }
+        }
+      }
+    },
+    "Live Activities": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live Activities"
+          }
+        }
+      }
+    },
+    "Logro legendario": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legendary achievement"
+          }
+        }
+      }
+    },
+    "Logros": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Achievements"
+          }
+        }
+      }
+    },
+    "Lugares por descubrir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Places to discover"
+          }
+        }
+      }
+    },
+    "lun., 15 jun. 2026": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mon, Jun 15 2026"
+          }
+        }
+      }
+    },
+    "Marca este país como uno en el que has vivido. Aparecerá una 🏠 junto a su contador en la lista de visitados y se contabiliza como visitado en todas las stats.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark this country as one you've lived in. A 🏠 will appear next to its counter in the visited list and it counts as visited in all stats."
+          }
+        }
+      }
+    },
+    "Más antiguos primero": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldest first"
+          }
+        }
+      }
+    },
+    "Más recientes primero": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Most recent first"
+          }
+        }
+      }
+    },
+    "Máx. 10 caracteres alfanuméricos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max. 10 alphanumeric characters"
+          }
+        }
+      }
+    },
+    "Medallas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medals"
+          }
+        }
+      }
+    },
+    "MENSAJE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MESSAGE"
+          }
+        }
+      }
+    },
+    "Mi mapa": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My map"
+          }
+        }
+      }
+    },
+    "MIS DESTINOS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MY DESTINATIONS"
+          }
+        }
+      }
+    },
+    "Mostrar contador": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show counter"
+          }
+        }
+      }
+    },
+    "Muestra las rutas aéreas de tus viajes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows the flight routes of your trips"
+          }
+        }
+      }
+    },
+    "Ningún país marcado como": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No country marked as"
+          }
+        }
+      }
+    },
+    "Ninguno": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
+    "No existen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do not exist"
+          }
+        }
+      }
+    },
+    "No mostrar más": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don't show again"
+          }
+        }
+      }
+    },
+    "No tienes países visitados en esta región.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have no visited countries in this region."
+          }
+        }
+      }
+    },
+    "No tienes países visitados que coincidan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have no matching visited countries."
+          }
+        }
+      }
+    },
+    "no viajaste": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "you didn't travel"
+          }
+        }
+      }
+    },
+    "No, diferente aerolínea": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No, different airline"
+          }
+        }
+      }
+    },
+    "No, introduzco tramo a tramo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No, I'll enter segment by segment"
+          }
+        }
+      }
+    },
+    "Nombre de usuario": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username"
+          }
+        }
+      }
+    },
+    "Nombre del premio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Award name"
+          }
+        }
+      }
+    },
+    "Norte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "North"
+          }
+        }
+      }
+    },
+    "Novedades": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's new"
+          }
+        }
+      }
+    },
+    "Nueva lista": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New list"
+          }
+        }
+      }
+    },
+    "Oro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gold"
+          }
+        }
+      }
+    },
+    "Pago único · Vitalicio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time payment · Lifetime"
+          }
+        }
+      }
+    },
+    "País": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Country"
+          }
+        }
+      }
+    },
+    "Países": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Countries"
+          }
+        }
+      }
+    },
+    "Países del tramo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segment countries"
+          }
+        }
+      }
+    },
+    "Países en más de un continente": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Countries in more than one continent"
+          }
+        }
+      }
+    },
+    "Países en más de un hemisferio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Countries in more than one hemisphere"
+          }
+        }
+      }
+    },
+    "Países pluricontinentales": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multi-continent countries"
+          }
+        }
+      }
+    },
+    "Países plurihemisferiales": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multi-hemisphere countries"
+          }
+        }
+      }
+    },
+    "Países visitados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visited countries"
+          }
+        }
+      }
+    },
+    "Pantalla de bloqueo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock screen"
+          }
+        }
+      }
+    },
+    "Pantalla principal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home screen"
+          }
+        }
+      }
+    },
+    "PARA": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TO"
+          }
+        }
+      }
+    },
+    "Perfil": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile"
+          }
+        }
+      }
+    },
+    "Plata": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silver"
+          }
+        }
+      }
+    },
+    "Política de Privacidad": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
+          }
+        }
+      }
+    },
+    "POR AQUÍ HAS PASADO MÁS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WHERE YOU'VE BEEN MOST"
+          }
+        }
+      }
+    },
+    "POR PRIMERA VEZ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FOR THE FIRST TIME"
+          }
+        }
+      }
+    },
+    "Premios personales": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal awards"
+          }
+        }
+      }
+    },
+    "Privacidad": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        }
+      }
+    },
+    "Pro activo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro active"
+          }
+        }
+      }
+    },
+    "PRÓXIMO VIAJE": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "UPCOMING TRIP"
+          }
+        }
+      }
+    },
+    "Próximos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upcoming"
+          }
+        }
+      }
+    },
+    "Queda": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        }
+      }
+    },
+    "Quedan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        }
+      }
+    },
+    "Quiero": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bucket"
+          }
+        }
+      }
+    },
+    "Quiero ir": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bucket list"
+          }
+        }
+      }
+    },
+    "Quitar filtro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear filter"
+          }
+        }
+      }
+    },
+    "Raskmap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raskmap"
+          }
+        }
+      }
+    },
+    "RASKMAP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RASKMAP"
+          }
+        }
+      }
+    },
+    "Raskmap Pro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raskmap Pro"
+          }
+        }
+      }
+    },
+    "raskmap_soporte@icloud.com": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "raskmap_soporte@icloud.com"
+          }
+        }
+      }
+    },
+    "Recordatorios de viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trip reminders"
+          }
+        }
+      }
+    },
+    "Reserva": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Booking"
+          }
+        }
+      }
+    },
+    "Restablecer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        }
+      }
+    },
+    "Restablecer colores predeterminados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset default colors"
+          }
+        }
+      }
+    },
+    "Restablecer cuadrantes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset quadrants"
+          }
+        }
+      }
+    },
+    "Restaurar compras": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore purchases"
+          }
+        }
+      }
+    },
+    "Restaurar compras anteriores": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore previous purchases"
+          }
+        }
+      }
+    },
+    "Ruta": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route"
+          }
+        }
+      }
+    },
+    "RUTA DE VUELO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLIGHT ROUTE"
+          }
+        }
+      }
+    },
+    "Salida vuelta: %@ · %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Salida vuelta: %1$@ · %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return departure: %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Salida: %@ · %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Salida: %1$@ · %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Departure: %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Se borrará el viaje a %@ (y sus tramos asociados).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The trip to %@ (and its associated segments) will be deleted."
+          }
+        }
+      }
+    },
+    "Se borrarán todos los cuadrantes actuales y se restaurarán los predeterminados.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All current quadrants will be deleted and the defaults will be restored."
+          }
+        }
+      }
+    },
+    "Se creará una copia de %@ con las mismas fechas pero +365 días en el futuro. Podrás editarla luego.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A copy of %@ will be created with the same dates but +365 days in the future. You can edit it later."
+          }
+        }
+      }
+    },
+    "Se eliminará «%@».": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» will be deleted."
+          }
+        }
+      }
+    },
+    "Se eliminarán todas las entradas de esta lista. Esta acción no se puede deshacer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All entries in this list will be deleted. This action cannot be undone."
+          }
+        }
+      }
+    },
+    "Se eliminarán todos los datos de %@: visitas, viajes y fechas.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All data for %@ will be deleted: visits, trips and dates."
+          }
+        }
+      }
+    },
+    "Se eliminarán todos los países de Bucket list. Esta acción no se puede deshacer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Bucket list countries will be deleted. This action cannot be undone."
+          }
+        }
+      }
+    },
+    "Se ha marcado el país de tu localización como visitado. Puedes editarlo en la lista de Visitados.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The country of your location has been marked as visited. You can edit it in the Visited list."
+          }
+        }
+      }
+    },
+    "Selecciona aeropuertos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select airports"
+          }
+        }
+      }
+    },
+    "Selecciona tu aeropuerto favorito:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select your favorite airport:"
+          }
+        }
+      }
+    },
+    "Será tu avatar en la app.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It will be your avatar in the app."
+          }
+        }
+      }
+    },
+    "Será tu avatar en la app. Puedes cambiarlo más tarde.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It will be your avatar in the app. You can change it later."
+          }
+        }
+      }
+    },
+    "Si activas los recordatorios, recibirás avisos 7 días antes, el día anterior y el día del viaje.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you enable reminders, you'll receive alerts 7 days before, the day before, and the day of the trip."
+          }
+        }
+      }
+    },
+    "Si te está siendo útil, una valoración nos ayuda mucho.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If it's being useful, a rating helps us a lot."
+          }
+        }
+      }
+    },
+    "Si te faltan aeropuertos, aerolíneas o has tenido un bug, repórtalo en **Ajustes › Contacto**.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you're missing airports, airlines or had a bug, report it in **Settings › Contact**."
+          }
         }
       }
     },
-    "Exportar datos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export data"
+    "Sí, borrar todo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, delete all"
           }
         }
       }
     },
-    "Exportar mis datos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export my data"
+    "Sí, las mismas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, the same"
           }
         }
       }
     },
-    "Exportar tus datos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export your data"
+    "Siguiente": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
           }
         }
       }
     },
-    "Borrar todos mis datos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete all my data"
+    "Siguiente →": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next →"
           }
         }
       }
     },
-    "Restaurar compras" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restore purchases"
+    "SIGUIENTES": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FOLLOWING"
           }
         }
       }
     },
-    "Generar y compartir" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generate and share"
+    "Sin datos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No data"
           }
         }
       }
     },
-    "Generando…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Generating…"
+    "Sin logros aún": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No achievements yet"
           }
         }
       }
     },
-    "Compartir mi año" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Share my year"
+    "Sin próximo\nviaje": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No upcoming\ntrip"
           }
         }
       }
     },
-    "Empezar a explorar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start exploring"
+    "Sin resultados con este filtro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No results with this filter"
           }
         }
       }
     },
-    "DÍA" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DAY"
+    "Sin viajes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No trips"
           }
         }
       }
     },
-    "DÍAS" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DAYS"
+    "Sin viajes finalizados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No finished trips"
           }
         }
       }
     },
-    "día" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "day"
+    "Sin viajes próximos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No upcoming trips"
           }
         }
       }
     },
-    "días" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "days"
+    "Sin visitar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unvisited"
           }
         }
       }
     },
-    "Queda" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Left"
+    "Sur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "South"
           }
         }
       }
     },
-    "Quedan" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Left"
+    "Tamaños disponibles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available sizes"
           }
         }
       }
     },
-    "PRÓXIMO VIAJE" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "UPCOMING TRIP"
+    "Términos de uso": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms of use"
           }
         }
       }
     },
-    "SIGUIENTES" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FOLLOWING"
+    "Territorios visitados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visited territories"
           }
         }
       }
     },
-    "TRAMOS" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "SEGMENTS"
+    "Título": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
           }
         }
       }
     },
-    "DESDE" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FROM"
+    "Título de la lista": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List title"
           }
         }
       }
     },
-    "HASTA" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TO"
+    "Título del viaje": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trip title"
           }
         }
       }
     },
-    "FORMATO" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FORMAT"
+    "TÍTULO DEL VIAJE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TRIP TITLE"
           }
         }
       }
     },
-    "KM VOLADOS" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "KM FLOWN"
+    "Toca para empezar →": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to start →"
           }
         }
       }
     },
-    "Sin próximo\nviaje" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No upcoming\ntrip"
+    "Todos los derechos reservados": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All rights reserved"
           }
         }
       }
     },
-    "Tu mapa personal" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your personal map"
+    "total": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "total"
           }
         }
       }
     },
-    "Contacto" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contact"
+    "Total": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total"
           }
         }
       }
     },
-    "Novedades" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's new"
+    "Total de vuelos: %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total flights: %lld"
           }
         }
       }
     },
-    "Privacidad" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Privacy"
+    "TRAMOS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SEGMENTS"
           }
         }
       }
     },
-    "Política de Privacidad" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Privacy Policy"
+    "Tramos adicionales": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Additional segments"
           }
         }
       }
     },
-    "Términos de uso" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Terms of use"
+    "TRAMOS DEL VIAJE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TRIP SEGMENTS"
           }
         }
       }
     },
-    "Créditos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Credits"
+    "Transporte": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
           }
         }
       }
     },
-    "Sin viajes próximos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No upcoming trips"
+    "TRANSPORTE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TRANSPORT"
           }
         }
       }
     },
-    "Aún no has volado" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You haven't flown yet"
+    "trayecto": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "journey"
           }
         }
       }
     },
-    "Aún no has registrado vuelos." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You haven't registered any flights yet."
+    "trayectos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "journeys"
           }
         }
       }
     },
-    "Avión" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plane"
+    "Tren": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Train"
           }
         }
       }
     },
-    "Coche" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Car"
+    "Tres listas para tu mundo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three lists for your world"
           }
         }
       }
     },
-    "Tren" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Train"
+    "TU AÑO EN": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR YEAR IN"
           }
         }
       }
     },
-    "Bus" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bus"
+    "TU ESTANCIA MÁS LARGA": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR LONGEST STAY"
           }
         }
       }
     },
-    "Barco" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Boat"
+    "Tu mapa personal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your personal map"
+          }
+        }
+      }
+    },
+    "TU MES MÁS VIAJERO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR MOST TRAVELED MONTH"
+          }
+        }
+      }
+    },
+    "Tu mundo, en un mapa": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your world, on a map"
+          }
+        }
+      }
+    },
+    "Tu nombre de usuario": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your username"
+          }
+        }
+      }
+    },
+    "TUS AEROLÍNEAS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR AIRLINES"
+          }
+        }
+      }
+    },
+    "TUS MEDIOS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR TRANSPORT"
+          }
+        }
+      }
+    },
+    "TUS MESES MÁS VIAJEROS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YOUR MOST TRAVELED MONTHS"
+          }
+        }
+      }
+    },
+    "Ubicación detectada": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location detected"
+          }
+        }
+      }
+    },
+    "Última oportunidad. Si tienes iCloud activo los datos también se eliminarán de tu nube tras la siguiente sincronización.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last chance. If you have iCloud enabled, the data will also be deleted from your cloud after the next sync."
+          }
+        }
+      }
+    },
+    "usuario": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "user"
+          }
+        }
+      }
+    },
+    "v.1.0  ·  %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "v.1.0  ·  %@"
+          }
+        }
+      }
+    },
+    "Valorar ahora": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate now"
+          }
+        }
+      }
+    },
+    "Vas a borrar TODOS los países, viajes, premios, listas y preferencias. Esta acción no se puede deshacer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're about to delete ALL countries, trips, awards, lists and preferences. This action cannot be undone."
+          }
+        }
+      }
+    },
+    "Ver mapa de vuelos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View flight map"
+          }
+        }
+      }
+    },
+    "Ver todos →": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View all →"
+          }
+        }
+      }
+    },
+    "Ver viajes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View trips"
+          }
+        }
+      }
+    },
+    "Verifica con tu Apple ID si ya compraste Raskmap Pro previamente": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify with your Apple ID if you've already purchased Raskmap Pro previously"
+          }
+        }
+      }
+    },
+    "VIAJE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TRIP"
+          }
+        }
+      }
+    },
+    "Viaje Tokio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tokyo Trip"
+          }
+        }
+      }
+    },
+    "Viajes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trips"
+          }
+        }
+      }
+    },
+    "Viajes registrados (%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trips recorded (%lld)"
+          }
+        }
+      }
+    },
+    "Visitados": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visited"
+          }
+        }
+      }
+    },
+    "Visitados (%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visited (%lld)"
+          }
+        }
+      }
+    },
+    "Visitas manuales": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manual visits"
+          }
+        }
+      }
+    },
+    "Vitalicio ✓": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lifetime ✓"
+          }
+        }
+      }
+    },
+    "Vivido": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lived"
+          }
+        }
+      }
+    },
+    "Volver a empezar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start over"
+          }
+        }
+      }
+    },
+    "Volver al mapa": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to map"
+          }
+        }
+      }
+    },
+    "vs %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vs %@"
+          }
+        }
+      }
+    },
+    "vuelo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flight"
+          }
+        }
+      }
+    },
+    "vuelos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "flights"
+          }
+        }
+      }
+    },
+    "Widgets": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Widgets"
+          }
+        }
+      }
+    },
+    "y %lld %@": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "new",
+            "value": "y %1$lld %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "and %1$lld %2$@"
           }
         }
       }
     },
-    "Andando" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Walking"
+    "Y mucho más": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "And much more"
           }
         }
       }
     }
-
-  }
+  },
+  "version": "1.0"
 }
