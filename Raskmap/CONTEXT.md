@@ -5,11 +5,12 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada (2026-05-11, noche)
-**Fase D — 15 sheets extraídos a `Raskmap/Sheets/`:**
+### Última acción completada (2026-05-11, noche tarde)
+**Fase D — COMPLETADA. 24 archivos extraídos a `Raskmap/Sheets/`:**
 
-- ContentView.swift: 14 951 → **7 827 líneas (-47.7%)**.
-- Build OK tras los 2 hotfixes de import (CoreLocation/MapKit, UIKit).
+- ContentView.swift: 14 951 → **2 380 líneas (-84.1%)**. 🎯 Objetivo
+  <3 000 líneas conseguido.
+- Build OK tras hotfixes de imports y access levels.
 
 **Archivos en `Raskmap/Sheets/` (orden de creación):**
 
@@ -30,6 +31,22 @@
 | `SubjectiveSheets.swift` | 479 | `ca9e605` | 9 153 |
 | `AwardsSheets.swift` | 433 | `9ce3632` | 8 736 |
 | `MapQuadrantsSheets.swift` | 925 | `951e6ab` | 7 827 |
+| `SettingsExtraSheets.swift` | 545 | `295765b` | 7 306 |
+| `FlightInfoSection.swift` | 625 | `709650e` | 6 698 |
+| `YearTravelView.swift` | 390 | `22469d6` | 6 321 |
+| `PassportAndFlightSlider.swift` | 236 | `e3deba1` | 6 102 |
+| `TopBarWidgets.swift` | 207 | `7e2bbb6` | 5 912 |
+| `AchievementKind.swift` | 415 | `75f29c1` | 5 513 |
+| `AddTripSheet.swift` | 424 | `0f66f30` | 5 105 |
+| `EditTripSheet.swift` | 834 | `bed4181` | 4 286 |
+| `ProfileSheet.swift` | 992 | `f9a654e` | 3 316 |
+| `SettingsSheet.swift` | 957 | `6f9bf0c` | **2 380** |
+
+**Hotfixes durante la fase:**
+· `028646f`: imports faltantes (CoreLocation/MapKit en MapQuadrants,
+  UIKit en Contact y PlannedDatePicker).
+· `9ba80d6`: `confirmCardContent` cambia a `internal` (cross-file) +
+  `format` captured antes de Task.detached en ExportDataSheet.
 
 ### Acción completada anterior (2026-05-11, mañana)
 **Fase A (App Store readiness) — parcial:**
@@ -93,34 +110,25 @@ Fix intermedio (`04d96e6`): `raskmapProLifetimeID/raskmapProAllIDs`
 cambiados de `private` a `internal` para cross-file + reemplazo de
 `%lld%%` por `%@` en una key del catalog (warning Xcode 16).
 
-**Próxima sesión:** continuar **Fase D** con los sheets restantes
-(ContentView 7 827 → objetivo ~3 000 líneas, falta ~50%).
+**Próxima sesión:** Fase D **completada**. Próximos focos posibles:
 
-Sheets pendientes en ContentView (líneas aprox tras última extracción):
-- ProfileSheet — el más grande, ~970 líneas.
-- SettingsSheet — ~942 líneas.
-- ExportDataSheet — ~270 líneas.
-- WidgetHomeColorSheet — ~175 líneas.
-- FlightInfoSection — ~310 líneas.
-- TableFlagPickerSheet — ~120 líneas.
-- UsernameEditView — ~90 líneas.
-- YearTravelView — ~370 líneas.
-- AddTripSheet — ~410 líneas.
-- EditTripSheet — ~820 líneas.
-- PassportAvatarView + PassportPickerSheet — ~100 líneas.
-- FlightFilterSlider — ~110 líneas.
-- AchievementKind enum — ~400 líneas.
-- StatBadge, LegendItem, CountryBottomSheet, ActionButton — ~250 líneas.
-- TripNotifications (enum) — ~75 líneas.
+1. **B3 diferido** — los 26 `DispatchQueue.main.asyncAfter` ahora se
+   pueden abordar más fácilmente: cada sheet vive en su propio archivo
+   y puede tener su propio `@State Task?` para cancelación.
+2. **Sprint 3 (Calidad UX)** del roadmap original:
+   - `DesignTokens.swift` (BrandColor + Radius + Typography + Anim).
+   - Auditoría a11y: subir de 13 a 100+ annotations.
+   - Empty states completos.
+   - Tap targets ≥ 44pt.
+3. **iOS 18 Migration** (opcional): migrar el mapa a SwiftUI `Map { MapPolygon }`
+   con aceleración Metal → eliminaría el flicker definitivamente.
+4. **Tests adicionales**: snapshot diff con swift-snapshot-testing,
+   UI Tests del onboarding y add trip flow.
 
-**Convención de la fase:** 1 commit por extracción, máx ~1 500 líneas por
-commit, verificar imports tras cada uno (los faltantes típicos:
-CoreLocation, MapKit, UIKit, MessageUI, StoreKit, SwiftData).
-
-Los 4 últimos grandes (ProfileSheet, SettingsSheet, AddTripSheet,
-EditTripSheet) tienen más acoplamiento con ContentView (acceso a
-@State, handlers, refresh helpers) — dejarlos para el final cuando
-el resto esté estable.
+ContentView ahora contiene solo: `MapStore` class + `ContentView` struct
+(root view), handlers (handleCountryTap, recheckLocation, etc.), helpers
+internos del map view y los data models cross-file (AirportData,
+AirlineData).
 
 ### Lo último que se entregó (sesión 2026-05-11)
 - Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
