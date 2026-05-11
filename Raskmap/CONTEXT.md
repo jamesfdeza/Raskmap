@@ -31,9 +31,24 @@
   (3) ROI bajo ahora — mejor abordar durante Sprint 4 (modularización),
   cuando ya estaremos tocando cada sheet de todos modos.
 
-**Próxima sesión:** arrancar **Fase C (Localización EN)** — crear
-`Localizable.xcstrings`, migrar los 30 strings más visibles primero.
-No requiere Apple Developer Account.
+**Fase C (Localización EN) — completada:**
+- ✅ C1 — `developmentRegion = es`, knownRegions = (en, es, Base) en pbxproj
+  (commit `17dfdcf`).
+- ✅ C2 — `Raskmap/Localizable.xcstrings` creado con 77 keys iniciales clave
+  + traducciones EN (commit `17dfdcf`).
+- ✅ Fix — `STRING_CATALOG_GENERATE_SYMBOLS = NO` para evitar colisiones
+  case-insensitive en accessors auto-generados (commit `2946222`).
+- ✅ C3 — Traducción masiva: 396/424 keys traducidas a EN = **93.4% coverage**
+  (commit `dce37ed`). Las 28 restantes son símbolos puros (emojis,
+  placeholders, IATAs) que no necesitan traducción.
+
+Cobertura por área tras C3: alerts 100%, onboarding 100%, settings 100%,
+logros 100%, wrapped 100%, widget 100%, empty states 100%, stats 100%.
+
+**Próxima sesión:** arrancar **Fase D (Modularización ContentView)** —
+extraer sheets a archivos propios (~12 000 → ~3 000 líneas). Riesgo medio,
+muy invasivo. Ver tabla detallada en sección 5.1 de la auditoría.
+Alternativa: pulir más detalles de UX/diseño antes de la refactorización.
 
 ### Lo último que se entregó (sesión 2026-05-11)
 - Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
@@ -51,7 +66,7 @@ No requiere Apple Developer Account.
 
 **Sprint 1 — Bloqueantes App Store (1 semana):**
 1. [x] **B1** Verificar y bajar `IPHONEOS_DEPLOYMENT_TARGET` de 26.2 a 17.0 ✅ commit `c24d8f1`.
-2. [ ] **B2** Crear `Localizable.xcstrings` con EN + ES (mínimo 50 strings).
+2. [x] **B2** Crear `Localizable.xcstrings` con EN + ES (93.4% coverage) ✅ commit `dce37ed`.
 3. [x] **B5** Generar `PrivacyInfo.xcprivacy` (app + widget) ✅ commit `c24d8f1`.
 4. [ ] ⏸️ **B3** Test funcional Restore Purchases en sandbox.
        _Bloqueado: requiere Apple Developer Account (99€/año) — el usuario lo está retrasando intencionalmente._
