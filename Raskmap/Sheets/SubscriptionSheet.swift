@@ -16,8 +16,10 @@ import StoreKit
 
 // MARK: - Raskmap Pro
 // IDs de producto en App Store Connect.
-private let raskmapProLifetimeID = "com.raskmap.pro.lifetime"
-private let raskmapProAllIDs     = [raskmapProLifetimeID]
+// `internal` (default access) para que ContentView pueda leerlos al hacer
+// matching contra `raskmapProPlanID` desde su SettingsSheet inline.
+let raskmapProLifetimeID = "com.raskmap.pro.lifetime"
+let raskmapProAllIDs     = [raskmapProLifetimeID]
 
 struct SubscriptionSheet: View {
     @Environment(\.dismiss) private var dismiss

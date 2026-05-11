@@ -1066,7 +1066,11 @@ struct YearWrappedSheet: View {
                         .padding(.top, 4)
                 } else {
                     let pct = Int((Double(stats.flightKm) / 40_075.0) * 100)
-                    Text("≈ \(pct)% de la vuelta al mundo")
+                    // Formateamos "\(pct)%" como String para que la key del catalog
+                    // use `%@` (placeholder de String) y no `%lld%%` (que Xcode 16
+                    // advierte por diferencias de formato de porcentaje entre idiomas).
+                    let pctText = "\(pct)%"
+                    Text("≈ \(pctText) de la vuelta al mundo")
                         .font(.custom("Satoshi-Regular", size: 14))
                         .foregroundStyle(.white.opacity(0.75))
                         .padding(.top, 4)

@@ -651,16 +651,6 @@
         }
       }
     },
-    "≈ %lld%% de la vuelta al mundo": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "≈ %lld%% around the world"
-          }
-        }
-      }
-    },
     "🇯🇵": {},
     "✈️": {},
     "✈️  No, solo ida": {
@@ -4170,6 +4160,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "And much more"
+          }
+        }
+      }
+    },
+    "≈ %@ de la vuelta al mundo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ %@ around the world"
           }
         }
       }
