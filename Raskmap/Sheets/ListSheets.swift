@@ -17,6 +17,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 // MARK: - Sheet lista de países por estado
 struct StatusListSheet: View {
