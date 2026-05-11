@@ -1,5 +1,316 @@
 # CONTEXT.md — Raskmap
 
+## 🧭 ESTADO ACTUAL · Punto de continuación (2026-05-11)
+
+> **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
+> que nada. Aquí está exactamente por dónde íbamos y qué falta.
+
+### Última acción completada
+**Merge `remodelacion_integral_v2` → `master`** (fast-forward, commit `771835f`).
+Ambas ramas están alineadas en remoto. Se sigue trabajando sobre
+`remodelacion_integral_v2` para mantener histórico ordenado.
+
+### Lo último que se entregó (sesión 2026-05-11)
+- Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
+  rediseño de "Lugares por descubrir" (1 por región + sancionados + tappable),
+  README rewrite, eliminación de auto-marcado por ubicación, highlight solo
+  si visitado, optimización de mapa (solo overlays coloreados + sin cap zoom),
+  widget mediano (header arriba + bandera centrada + título o país),
+  Wrapped (sin emoji 🗺️ en footer + tipografía mayor en cuadrantes),
+  Live Activity revertida a mostrar días (no HH:MM:SS).
+- **Auditoría integral** del proyecto (rol experto Swift + UX/UI tester) →
+  ver sección [`📋 Auditoría integral`](#-auditor%C3%ADa-integral-del-proyecto-2026-05-11)
+  más abajo en este documento.
+
+### 🎯 Próximos pasos priorizados (de la auditoría)
+
+**Sprint 1 — Bloqueantes App Store (1 semana):**
+1. [ ] **B1** Verificar y bajar `IPHONEOS_DEPLOYMENT_TARGET` de 26.2 a 17.0/18.0.
+2. [ ] **B2** Crear `Localizable.xcstrings` con EN + ES (mínimo 50 strings).
+3. [ ] **B5** Generar `PrivacyInfo.xcprivacy`.
+4. [ ] **B3** Test funcional Restore Purchases en sandbox.
+5. [ ] **B4** Verificar CloudKit container `iCloud.RealDev.Raskmap` en prod.
+
+**Sprint 2 — Estabilidad (2 semanas):**
+6. [ ] Auditar 234 force-unwraps en `ContentView.swift`, proteger los más arriesgados.
+7. [ ] Migrar `try? modelContext.save()` críticos a `do/catch` con logging vía `os.Logger`.
+8. [ ] Implementar LRU en `Coordinator.rendererCache` (max 500 entradas).
+9. [ ] Reducir 26 `DispatchQueue.main.asyncAfter` → 10 (los restantes a `.task` cancelables).
+
+**Sprint 3 — Calidad UX (2 semanas):**
+10. [ ] Sistema de tokens: `DesignTokens.swift` con `BrandColor`, `Radius`, `Typography`, `Anim`.
+11. [ ] Auditoría a11y: subir de 13 a 100+ annotations.
+12. [ ] Empty states completos (aeropuertos sin vuelos, Wrapped vacío, search sin resultados).
+13. [ ] Audit tap targets ≥ 44pt.
+
+**Sprint 4 — Modularización (3 semanas):**
+14. [ ] Extraer `Sheets/AddTripSheet.swift`, `Sheets/ProfileSheet.swift`,
+       `Sheets/SettingsSheet.swift`, `Sheets/StatsSheet.swift`,
+       `Sheets/ListSheets.swift`, `Sheets/RouteWizardSheet.swift` de ContentView.swift
+       (ContentView pasa de 14 943 → ~3 000 líneas).
+15. [ ] Aplicar paleta refinada (visited=siena, wantToVisit=verde mar, lived=violeta,
+       bucket=miel) — eliminar la cercanía visual entre visited y lived.
+16. [ ] Snapshot tests reales con `swift-snapshot-testing` (SPM dep).
+
+**Sprint 5 — Submission:**
+17. [ ] Screenshots EN + ES.
+18. [ ] App Preview video.
+19. [ ] TestFlight beta con 20 usuarios externos.
+
+### ⚠️ Single biggest blocker
+
+> El iOS deployment target `26.2` y la ausencia de `PrivacyInfo.xcprivacy`
+> rechazarán el binario en submission. Empezar por ahí.
+
+### Notas operativas
+- Branch activa: `remodelacion_integral_v2`. Master nivelado en `771835f`.
+- Worktree: `/Users/jaimefernandezarenas/Documents/Raskmap/.claude/worktrees/hopeful-goldwasser/`.
+- Repo path principal: `/Users/jaimefernandezarenas/Documents/Raskmap/`.
+- Sin commits pendientes ni archivos dirty críticos (solo `.DS_Store` y un par de assets sin importancia).
+
+### Convenciones para futuras sesiones
+- **Cada nueva sesión actualiza la sección "ESTADO ACTUAL"** al inicio de
+  CONTEXT.md con: última acción completada, último entregable, próximos
+  pasos pendientes, blockers actuales.
+- **No borrar el histórico** de "Cambios recientes (FECHA)" — crece hacia abajo.
+- **Auditoría se mueve a "Histórico"** cuando se aborda; mientras esté pendiente,
+  vive en sección activa.
+
+---
+
+## 📋 Auditoría integral del proyecto (2026-05-11)
+
+> Informe técnico generado al final de la sesión. Lectura recomendada para
+> retomar el proyecto con visión completa de deuda y oportunidades.
+
+### Resumen ejecutivo
+
+Raskmap es una app sólida y funcionalmente rica (mapa 250+ países, segmentos
+multi-modal, Wrapped, Live Activity, widgets, GDPR). Deuda técnica acumulada
+en tres frentes que impactan App Store:
+
+1. **Monolitos** — `ContentView.swift` tiene **14 943 líneas**.
+2. **Localización inexistente** — sin `Localizable.xcstrings`, todo es español
+   hardcoded (~77 strings). Limita TAM al ~6% de iOS.
+3. **Error handling silencioso** — `try?` sin recovery, 26 `DispatchQueue.asyncAfter`
+   como hacks de timing, **234 force-unwraps** sin verificar.
+
+La app es ligera de subir hoy (no es crash-prone), pero esas grietas crecerán
+con cada feature.
+
+### 🔴 Bloqueantes App Store
+
+| ID | Issue | Detalle | Acción |
+|---|---|---|---|
+| **B1** | `IPHONEOS_DEPLOYMENT_TARGET = 26.2` | Solo iOS 26.2+ → excluye 80% de la base instalada. | Bajar a iOS 17.0 o 18.0. SwiftData necesita 17; MapPolygon nativo necesita 18. |
+| **B2** | No hay `Localizable.xcstrings` | App 100% en español. Revisión Apple puede señalar metadata mismatch. | Crear `Localizable.xcstrings` con EN + ES base. |
+| **B3** | Restore Purchases verificable | Falta confirmar que llama `Transaction.currentEntitlements` y actualiza `isRaskmapPro`. | Tests manuales sandbox + unit test mockeando `Transaction.all`. |
+| **B4** | CloudKit container hardcoded | `iCloud.RealDev.Raskmap` debe existir en cuenta prod. | Verificar CloudKit Dashboard pre-submit. |
+| **B5** | `PrivacyInfo.xcprivacy` ausente | Apple lo exige desde mayo 2024 para APIs sensibles (UserDefaults, FileTimestamp). | Generar XML declarando `NSPrivacyAccessedAPICategoryUserDefaults` razón `CA92.1`. |
+
+### 🟠 Bugs latentes y riesgos
+
+- **3.1 — `RaskMapView.rendererCache` sin límite**: con 200 países × 1-5 polígonos
+  → 500-1000 entradas con `CGPath` rasterizado. Memory pressure en iPhone SE.
+  Implementar LRU.
+- **3.2 — Race condition pre-warm**: `DispatchQueue.global.async` (RaskMapView:149)
+  vs delegate `mapView(_:rendererFor:)`. Race en Dictionary durante primer segundo.
+- **3.3 — 26 `DispatchQueue.main.asyncAfter` en `ContentView`**: hacks de timing.
+  Si el usuario navega rápido, closures sobre views inexistentes → estado stale
+  o crash silencioso. Migrar a `.task(id:)` + `Task.sleep` cancelable.
+- **3.4 — 234 force-unwraps**: la mayoría seguros, pero ~10-20 son bombas reales.
+  Patrones a buscar: `[key]!`, `firstIndex(...)!`, `URL(string:)!`.
+- **3.5 — `try?` silencioso en SwiftData**: 30+ `try? modelContext.save()`. Si
+  CloudKit rechaza, el usuario no se entera y pierde la edición. Loguear vía
+  `os.Logger`.
+- **3.6 — `GeoJSONLoader` en main thread**: carga síncrona ~200-500ms en arranque.
+  Migrar a `Task.detached`.
+- **3.7 — Live Activities huérfanas**: verificar limpieza tras `wipeAllData` con
+  `Activity<RaskmapTripAttributes>.activities`.
+
+### ⚡ Performance
+
+- **4.1 — Compilación lenta de ContentView**: 14 943 líneas → Xcode 30-60s por
+  incremental. Modular reduce a 5-10s.
+- **4.2 — `@Query` sin predicado**: carga toda la BD en memoria. Para usuarios
+  con 500+ trips se nota.
+- **4.3 — Recomputaciones por body render**: `allProximoRows`, `topVisitedFlagsString`,
+  `discoveryCandidates` se invocan en cada body. Memoizar con `@State` +
+  fingerprint (patrón ya usado para `tripsFingerprint`).
+- **4.4 — Polígonos GeoJSON sin LOD**: una sola resolución. A zoom-out global,
+  Rusia/Canadá rinden miles de vértices innecesarios. Aplicar Douglas-Peucker
+  por nivel de zoom.
+- **4.5 — Considerar `MKMultiPolygon`** para países archipiélago (Indonesia,
+  Filipinas, Grecia) → reduce coste de delegate calls.
+
+### 🏗 Arquitectura y deuda técnica
+
+**5.1 — Modularización de `ContentView.swift`** (candidatos):
+
+| Archivo nuevo | Sheets/structs a mover | Líneas est. |
+|---|---|---|
+| `Sheets/AddTripSheet.swift` | `AddTripSheet`, `EditTripSheet` | ~1500 |
+| `Sheets/ProfileSheet.swift` | `ProfileSheet`, `MedalSlot`, `TopRegion` | ~2000 |
+| `Sheets/SettingsSheet.swift` | `SettingsSheet`, sub-sheets legales | ~1500 |
+| `Sheets/StatsSheet.swift` | `TransportStatsSheet`, `FlightLegsListSheet`, `AirportStatsSheet`, etc. | ~1500 |
+| `Sheets/ListSheets.swift` | `StatusListSheet`, `FinalizadosListSheet`, `AllCountriesSheet` | ~2000 |
+| `Sheets/RouteWizardSheet.swift` | `RouteWizardSheet`, `RoutePickerSheet` | ~1000 |
+| `ViewModels/TripActions.swift` | Mutaciones de trips (saveTrip, etc.) | ~800 |
+
+ContentView quedaría en ~3000 líneas (root + mapCore + handlers).
+
+- **5.2 — Migrar a `@Observable` (iOS 17+)**: `ColorThemeManager: ObservableObject`
+  con `@Published` es API antigua. `@Observable` macro re-renderiza solo views
+  que leen la propiedad cambiada.
+- **5.3 — `LocationManager.shared` como singleton**: `@StateObject private var
+  locationManager = LocationManager.shared` siempre llama init. Convertir a
+  `@Observable` o inyectar via `.environment(\.locationManager)`.
+- **5.4 — Naming inconsistencias**: `wantToVisit` vs "próximos" vs "planned"
+  intercambiables; `featuresByIso` y `allFeatures` coexisten; tres `pending*Country`
+  para "país de la sheet siguiente" → consolidar a un `pendingSheet: PendingSheet?`
+  con enum.
+
+### 🎨 UX / UI
+
+- **6.1 — Onboarding (4 pasos)** bien implementado pero `didShowOnboarding`
+  se marca true en paso 1, no en paso 3 → si abandona a mitad, nunca vuelve a verlo.
+- **6.2 — Empty states (~10 detectados)**: cobertura baja. Faltan en Aeropuertos
+  sin vuelos, Wrapped vacío, search "Sin resultados".
+- **6.3 — Confirmaciones destructivas inconsistentes**: mezcla `.alert` y
+  `.confirmationDialog`. Estandarizar.
+- **6.4 — Tap targets pequeños (<44pt)**: `ActionButton` country sheet, chips
+  filtro transporte rondan 32-36pt. iOS HIG mínimo es 44pt.
+- **6.5 — Falta feedback al guardar**: solo haptic. Añadir toast verde + animación
+  de bandera entrando.
+- **6.6 — Densidad informativa en home**: en iPhone SE/mini cabe justo
+  (mapa + dock + flightMode + countdown + ad banner + ubicación toast). Considerar
+  modo "minimal".
+- **6.7 — `presentationDetents` inconsistentes**: algunos `.fraction(0.50)` con
+  2 acciones; otros `.large` con 4 inputs. Auditar.
+
+### 🎨 Sistema de diseño y paleta
+
+**7.1 — Paleta actual (`ColorThemeManager`):**
+
+| Token | Hex | Evaluación |
+|---|---|---|
+| `defaultVisited` | `#DC6647` | ✅ Terracota vibrante |
+| `defaultWantToVisit` | `#00CB7C` | ⚠️ Muy saturado — vibra con terracota |
+| `defaultLived` | `#5DAD6E` | ⚠️ Demasiado cercano al esmeralda — confusión |
+| `defaultBucketList` | `#E5B257` | ✅ Ámbar sutil |
+| Accent cobalto `#4072D4` | (hardcoded 11 sitios) | ⚠️ Debería estar centralizado |
+| Onboarding blue `#53A3FE` | (hardcoded onboarding) | ⚠️ DIFERENTE del cobalto |
+
+**7.2 — Problemas:**
+- 2 azules distintos (`#4072D4` vs `#53A3FE`).
+- Visited/Lived demasiado parecidos.
+- Accent hardcoded 11 veces.
+- Sin design tokens para neutrales (uso ad-hoc de `.systemGray3..6`).
+
+**7.3 — Recomendación: `DesignTokens.swift`:**
+
+```swift
+enum BrandColor {
+    static let accent       = Color(.sRGB, red: 64/255,  green: 114/255, blue: 212/255)
+    static let accentLight  = Color(.sRGB, red: 83/255,  green: 163/255, blue: 254/255)
+    static let success      = ColorThemeManager.defaultVisited
+    static let pending      = ColorThemeManager.defaultWantToVisit
+    static let lived        = ColorThemeManager.defaultLived
+    static let bucket       = ColorThemeManager.defaultBucketList
+}
+enum Radius {
+    static let chip: CGFloat = 10
+    static let card: CGFloat = 14
+    static let sheet: CGFloat = 22
+}
+enum Typography {
+    static let titleL: Font = .custom("Satoshi-Bold", size: 24)
+    static let title: Font  = .custom("Satoshi-Bold", size: 18)
+    static let body: Font   = .custom("Satoshi-Regular", size: 15)
+    static let caption: Font = .custom("Satoshi-Medium", size: 12)
+    static let mono: Font   = .custom("Satoshi-Bold", size: 14).monospacedDigit()
+}
+enum Anim {
+    static let snappy = Animation.spring(response: 0.3, dampingFraction: 0.8)
+    static let smooth = Animation.spring(response: 0.45, dampingFraction: 0.75)
+    static let bouncy = Animation.smooth(duration: 0.5, extraBounce: 0.15)
+}
+```
+
+Estado actual ad-hoc detectado: **11 valores distintos de `cornerRadius`**
+(8, 10, 11, 12, 14, 16, 18, 20, 22, 24…), **15+ tamaños de fuente** (9, 10,
+11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 36, 44, 52, 64…), **23 `withAnimation`**
+con variedad de configuraciones.
+
+**7.4 — Paleta refinada propuesta:**
+
+| Status | Actual | Sugerencia | Razón |
+|---|---|---|---|
+| Visited | `#DC6647` terracota | **`#D65B3F` siena tostado** | Más cálido, tierra explorada |
+| WantToVisit | `#00CB7C` esmeralda | **`#5BA89B` verde mar** | Menos saturado |
+| Lived | `#5DAD6E` salvia | **`#7B5BAB` violeta apagado** | Diferenciación total — "echar raíces" |
+| BucketList | `#E5B257` ámbar | **`#F2C265` miel** | Ligeramente más suave |
+| Accent | `#4072D4` cobalto | **mantener** ✅ | Funciona con la nueva paleta |
+
+**7.5 — Iconografía**: Twemoji para banderas ✅; emojis transporte
+(✈️ 🚗 🚂 🚌 🚢 🚶) inconsistentes entre iOS — considerar SF Symbols para UI
+no decorativa.
+
+### ♿ Accesibilidad
+
+- Solo **13 `.accessibility*` annotations en 14k líneas** — crítico.
+- **VoiceOver inutilizable** hoy. Cada FlagLabel necesita "Bandera de [País]".
+  Mapa entero requiere `accessibilityRepresentation` con texto descriptivo.
+- **Dynamic Type no funciona**: todos los textos en tamaños fijos. Migrar
+  textos largos a `.font(.body)` + `.dynamicTypeSize(.medium ... .accessibility2)`.
+- **Contraste**: verificar texto blanco sobre fondos coloreados (banners,
+  widgets) con xScope/Stark.
+- **Tap targets <44pt** en chips, picker grids — Apple bloquea fácil.
+
+### 🧪 Tests — estado y gaps
+
+**Actual:**
+- `DaysPerCountryTests.swift` (252 L) — 9 casos ✅
+- `RenderSmokeTests.swift` (112 L) — 7 tests render-no-crash ✅
+- `RaskmapTests.swift` (17 L) — placeholder vacío
+- UITests — boilerplate
+
+**Gaps críticos:**
+1. SwiftData migrations (snapshots de schemas).
+2. CloudKit conflict resolution (mock).
+3. `WrappedStats.compute()` con edge cases.
+4. `FlightRoutesBuilder` todos los tipos de trip.
+5. Discovery candidates (dedup, sanctioned, regiones vacías).
+6. Codable round-trip (FlightInfo, TripSegment, MapQuadrant).
+7. UI Tests: onboarding completo, add trip flow, export, wipe.
+
+### 💡 Nice-to-haves priorizado
+
+| Pri | Feature | Esfuerzo | Impacto |
+|---|---|---|---|
+| ⭐⭐⭐ | Localización EN | M | TAM 6% → 60% |
+| ⭐⭐⭐ | Modularizar ContentView | L | Velocidad dev × 3 |
+| ⭐⭐⭐ | Privacy Manifest | XS | Rechazo Apple sin esto |
+| ⭐⭐ | SwiftUI Map + MapPolygon (iOS 18+) | L | Render Metal, 0 flicker |
+| ⭐⭐ | DesignTokens.swift | M | Coherencia escalable |
+| ⭐⭐ | Dark Mode audit completo | M | UX premium |
+| ⭐⭐ | Snapshot testing real | M | Regresiones visuales |
+| ⭐⭐ | Apple Watch app real | XL | Diferenciación competitiva |
+| ⭐ | iPad layout (master-detail) | L | App Store featured potential |
+| ⭐ | iOS 18 Lock Screen accessoryRectangular | S | Visibilidad |
+| ⭐ | Share trip con preview rich (mapa) | M | Viralidad |
+| ⭐ | Animar marcado (zoom + ripple) | S | Delight moment |
+| ⭐ | Achievements como Live Activities | M | Engagement |
+| ⭐ | Modo "competición con amigos" via CloudKit shared | XL | Diferenciador real |
+
+### 🔥 Single ship blocker
+
+> **No subas todavía:** `IPHONEOS_DEPLOYMENT_TARGET = 26.2` y la ausencia de
+> `PrivacyInfo.xcprivacy` te van a rechazar el binario en submission. El resto
+> es deuda gestionable.
+
+---
+
 ## Cambios recientes (2026-05-11) — sesión de hotfixes UX
 
 Sesión dedicada a pulir UX y bugs reportados por el usuario después de la
