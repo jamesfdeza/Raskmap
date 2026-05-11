@@ -61,6 +61,7 @@ struct AddSegmentSheet: View {
     // When editing an existing segment
     @State private var didSetupInitial = false
     private let initialSegment: TripSegment?
+    private let initialTransportRaw: String?
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
     private var tomorrow: Date {
@@ -78,6 +79,7 @@ struct AddSegmentSheet: View {
         self.features = features
         self.isForFuture = isForFuture
         self.initialSegment = initialSegment
+        self.initialTransportRaw = initialTransport
         self.onAdd = onAdd
         let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
         let sorted = features.sorted { $0.localizedName.compare($1.localizedName, options: opts) == .orderedAscending }
@@ -107,7 +109,11 @@ struct AddSegmentSheet: View {
             }
         } else if let pre = initialTransport, !pre.isEmpty {
             _selectedTransport = State(initialValue: pre)
-            _step = State(initialValue: 2)
+            // ✈️ usa RoutePicker como UI de "tramo"; el step 2 (countries) no
+            // aplica. Mantenemos step=1 detrás y abrimos RoutePicker en onAppear;
+            // si el usuario cancela, queda en step 1 con ✈️ marcado para elegir
+            // otro transporte si quiere. Para no-✈️ saltamos directamente a step 2.
+            _step = State(initialValue: pre == "✈️" ? 1 : 2)
             if !existingSegments.isEmpty {
                 let sortedSegs = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
                 let last = sortedSegs.last!
@@ -202,11 +208,26 @@ struct AddSegmentSheet: View {
         }
         .presentationDetents([.large])
         .onAppear {
-            guard !didSetupInitial, initialSegment?.transport == "✈️", !segmentAirports.isEmpty else {
-                didSetupInitial = true; return
-            }
+            guard !didSetupInitial else { return }
             didSetupInitial = true
-            deriveFlightCountries()
+            // Edición de un segmento ✈️ existente: derivar countries del routing.
+            if initialSegment?.transport == "✈️", !segmentAirports.isEmpty {
+                deriveFlightCountries()
+                return
+            }
+            // Plantilla rápida: belt-and-suspenders frente a posible identity
+            // reuse del @State entre presentaciones del sheet.
+            if initialSegment == nil, let pre = initialTransportRaw, !pre.isEmpty {
+                if selectedTransport != pre { selectedTransport = pre }
+                if pre == "✈️" {
+                    // Para ✈️: auto-abrir RoutePicker (UI nativa para vuelos).
+                    // Step queda en 1 detrás; al completar RoutePicker pasa a 3.
+                    // Si cancela, regresa a step 1 con ✈️ marcado.
+                    if segmentAirports.isEmpty { showRoutePicker = true }
+                } else {
+                    if step != 2 { step = 2 }
+                }
+            }
         }
         .sheet(isPresented: $showRoutePicker) {
             RouteWizardSheet(airports: $segmentAirports, returnAirports: $segmentReturnAirports,
