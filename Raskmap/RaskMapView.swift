@@ -33,7 +33,7 @@ struct RaskMapView: UIViewRepresentable {
             center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
             span: MKCoordinateSpan(latitudeDelta: 140, longitudeDelta: 180)
         ), animated: false)
-        mapView.cameraZoomRange = MKMapView.CameraZoomRange(maxCenterCoordinateDistance: 25_000_000)
+        // Sin cameraZoomRange: el usuario quiere poder hacer zoom-out sin tope.
 
         let tap = InstantTapGestureRecognizer(target: context.coordinator,
                                               action: #selector(Coordinator.handleTap(_:)))
@@ -134,22 +134,31 @@ struct RaskMapView: UIViewRepresentable {
             let allPolygons = features.flatMap { $0.polygons }
             let statusSnap = statusMap
             let highlightSnap = highlightedIsoCode
-
             let showBucketSnap = showBucketList
 
-            // Pre-calentar CGPaths en background para TODOS los polígonos
-            // (no solo los coloreados). Antes solo se calentaban los coloreados,
-            // lo que provocaba que al hacer pan los polígonos `.none` que
-            // entraban en vista cayeran al fallback `rendererFor(_:)` (línea 477)
-            // y MapKit computase el path en el primer `draw` — visible como
-            // un "pop" de color/render al desplazar.
-            // El coste extra es una sola pasada de allocación de
-            // MKPolygonRenderer + path en background; el cache ya estaba
-            // dimensionado para crecer hasta este tamaño con uso normal.
+            // CAMBIO CLAVE para reducir flicker en pan: solo registramos como
+            // overlays los polígonos COLOREADOS (visited/lived/wantToVisit/
+            // bucketList si toggle on) + el highlight actual si es .none.
+            // Antes añadíamos los ~1000+ polígonos como overlays y MapKit
+            // los re-rasterizaba por tile en cada pan; ahora solo procesa
+            // ~5-30 polígonos (los del usuario), reduciendo drásticamente
+            // el coste de renderizado por tile.
+            // Tap-detection sigue funcionando — usa `features` directamente,
+            // no la lista de overlays (ver handleTap).
+            let coloredIsos = Self.coloredIsoCodes(from: statusMap, showBucketList: showBucketSnap)
+            var activeIsos = coloredIsos
+            if let hl = highlightSnap, !activeIsos.contains(hl) {
+                activeIsos.insert(hl)  // .none country highlighted: añadir temporalmente
+            }
+            let activePolygons = allPolygons.filter { activeIsos.contains($0.isoCode) }
+            coord.activeOverlayIsos = activeIsos
+
+            // Pre-warm en background SOLO para polígonos activos. Path
+            // computado offline para que el primer draw del tile sea rápido.
             DispatchQueue.global(qos: .utility).async { [weak coordinator = coord] in
                 var built: [(ObjectIdentifier, MKPolygonRenderer)] = []
-                built.reserveCapacity(allPolygons.count)
-                for polygon in allPolygons {
+                built.reserveCapacity(activePolygons.count)
+                for polygon in activePolygons {
                     let pid = ObjectIdentifier(polygon)
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnap[polygon.isoCode] ?? .none
@@ -167,8 +176,7 @@ struct RaskMapView: UIViewRepresentable {
                 }
             }
 
-            // Añadir TODOS los overlays — necesario para tap y highlight en países .none
-            mapView.addOverlays(allPolygons, level: .aboveRoads)
+            mapView.addOverlays(activePolygons, level: .aboveRoads)
             return
         }
 
@@ -215,13 +223,18 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         // ── 2. Actualizar highlight ──
+        // Si el destacado es un país .none, hay que añadirlo TEMPORALMENTE al
+        // mapa como overlay (con stroke pero sin fill). Al perder el destacado
+        // se elimina del mapa para volver al estado óptimo (solo coloreados).
         let newHighlight = highlightedIsoCode
         let oldHighlight = coord.lastHighlighted
         if newHighlight != oldHighlight {
             coord.lastHighlighted = newHighlight
+            // OLD highlight: si era .none y no es coloreado, quitar del mapa.
             if let old = oldHighlight,
                let feature = features.first(where: { $0.isoCode == old }) {
                 let status = coord.lastKnownStatus[old] ?? .none
+                let stillActive = Self.isColored(status, showBucketList: showBucketList)
                 for polygon in feature.polygons {
                     if let renderer = coord.rendererCache[ObjectIdentifier(polygon)] {
                         Self.applyStyle(status: status, to: renderer, highlighted: false,
@@ -229,31 +242,41 @@ struct RaskMapView: UIViewRepresentable {
                         renderer.setNeedsDisplay()
                     }
                 }
-                // País .none — el overlay sigue en el mapa, solo actualizar renderer
-                if status == .none {
+                if !stillActive {
+                    coord.activeOverlayIsos.remove(old)
+                    mapView.removeOverlays(feature.polygons)
                     for polygon in feature.polygons {
                         coord.rendererCache.removeValue(forKey: ObjectIdentifier(polygon))
                     }
                 }
             }
+            // NEW highlight: si no estaba en el mapa, añadir overlay.
             if let new = newHighlight,
                let feature = features.first(where: { $0.isoCode == new }) {
                 let status = coord.lastKnownStatus[new] ?? .none
-                for polygon in feature.polygons {
-                    let pid = ObjectIdentifier(polygon)
-                    // Con pre-warm completo, cache normalmente hit. Si miss
-                    // (race con tap muy rápido), creamos sin remove+add para
-                    // no invalidar tiles innecesariamente.
-                    let renderer: MKPolygonRenderer
-                    if let cached = coord.rendererCache[pid] {
-                        renderer = cached
-                    } else {
-                        renderer = MKPolygonRenderer(polygon: polygon)
+                let needsAdd = !coord.activeOverlayIsos.contains(new)
+                if needsAdd {
+                    coord.activeOverlayIsos.insert(new)
+                    // Crear renderers en cache antes de addOverlays para que
+                    // mapView(_:rendererFor:) tenga el cache hit al primer draw.
+                    for polygon in feature.polygons {
+                        let pid = ObjectIdentifier(polygon)
+                        let renderer = MKPolygonRenderer(polygon: polygon)
+                        Self.applyStyle(status: status, to: renderer, highlighted: true,
+                                        showBucketList: showBucketList)
+                        _ = renderer.path
                         coord.rendererCache[pid] = renderer
                     }
-                    Self.applyStyle(status: status, to: renderer, highlighted: true,
-                                    showBucketList: showBucketList)
-                    renderer.setNeedsDisplay()
+                    mapView.addOverlays(feature.polygons, level: .aboveRoads)
+                } else {
+                    for polygon in feature.polygons {
+                        let pid = ObjectIdentifier(polygon)
+                        if let renderer = coord.rendererCache[pid] {
+                            Self.applyStyle(status: status, to: renderer, highlighted: true,
+                                            showBucketList: showBucketList)
+                            renderer.setNeedsDisplay()
+                        }
+                    }
                 }
             }
             else if newHighlight == nil, let locIso = coord.lastLocationIso,
@@ -261,17 +284,12 @@ struct RaskMapView: UIViewRepresentable {
                 let status = coord.lastKnownStatus[locIso] ?? .none
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
-                    let renderer: MKPolygonRenderer
-                    if let cached = coord.rendererCache[pid] {
-                        renderer = cached
-                    } else {
-                        renderer = MKPolygonRenderer(polygon: polygon)
-                        coord.rendererCache[pid] = renderer
+                    if let renderer = coord.rendererCache[pid] {
+                        Self.applyStyle(status: status, to: renderer, highlighted: false,
+                                        showBucketList: showBucketList,
+                                        isUserHere: true)
+                        renderer.setNeedsDisplay()
                     }
-                    Self.applyStyle(status: status, to: renderer, highlighted: false,
-                                    showBucketList: showBucketList,
-                                    isUserHere: true)
-                    renderer.setNeedsDisplay()
                 }
             }
         }
@@ -293,26 +311,40 @@ struct RaskMapView: UIViewRepresentable {
             guard let feature = features.first(where: { $0.isoCode == isoCode }) else { continue }
             let newStatus = newMap[isoCode] ?? .none
             let isHighlighted = isoCode == coord.lastHighlighted
+            let isNowActive = Self.isColored(newStatus, showBucketList: showBucketSnap) || isHighlighted
+            let wasActive = coord.activeOverlayIsos.contains(isoCode)
 
-            // Con TODOS los polígonos ya añadidos al mapa desde initial load y
-            // TODOS pre-warmados en cache, cualquier cambio de status (incluido
-            // .none → coloured y coloured → .none) se resuelve actualizando el
-            // renderer cacheado + setNeedsDisplay. Antes hacíamos remove+add de
-            // overlay en transiciones a/desde .none, lo que invalidaba todos
-            // los tiles del bounding box del polígono y provocaba flicker.
-            for polygon in feature.polygons {
-                let pid = ObjectIdentifier(polygon)
-                let renderer: MKPolygonRenderer
-                if let cached = coord.rendererCache[pid] {
-                    renderer = cached
-                } else {
-                    // Race con pre-warm: crear sin remove+add.
-                    renderer = MKPolygonRenderer(polygon: polygon)
+            if isNowActive && !wasActive {
+                // ⇢ Añadir el país al mapa (estaba .none, ahora coloreado).
+                coord.activeOverlayIsos.insert(isoCode)
+                for polygon in feature.polygons {
+                    let pid = ObjectIdentifier(polygon)
+                    let renderer = MKPolygonRenderer(polygon: polygon)
+                    Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
+                                    showBucketList: showBucketSnap)
                     coord.rendererCache[pid] = renderer
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        _ = renderer.path
+                        DispatchQueue.main.async { mapView.addOverlay(polygon, level: .aboveRoads) }
+                    }
                 }
-                Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                showBucketList: showBucketSnap)
-                renderer.setNeedsDisplay()
+            } else if !isNowActive && wasActive {
+                // ⇠ Quitar el país del mapa (pasó a .none y sin highlight).
+                coord.activeOverlayIsos.remove(isoCode)
+                mapView.removeOverlays(feature.polygons)
+                for polygon in feature.polygons {
+                    coord.rendererCache.removeValue(forKey: ObjectIdentifier(polygon))
+                }
+            } else if wasActive {
+                // Cambio de color entre estados coloreados (visited ↔ wantToVisit, etc.).
+                for polygon in feature.polygons {
+                    let pid = ObjectIdentifier(polygon)
+                    if let renderer = coord.rendererCache[pid] {
+                        Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
+                                        showBucketList: showBucketSnap)
+                        renderer.setNeedsDisplay()
+                    }
+                }
             }
         }
     }
@@ -378,6 +410,12 @@ struct RaskMapView: UIViewRepresentable {
         var lastHighlighted: String? = nil
         var lastLocationIso: String? = nil
         var initialLoadDone = false
+        /// ISOs cuyos polígonos están ACTUALMENTE registrados como overlays
+        /// en el MKMapView. Subset de `features` — solo coloreados +
+        /// (opcionalmente) el highlight actual si es .none. Mantener este set
+        /// sincronizado evita el flicker en pan: MapKit solo re-rasteriza
+        /// estos overlays por tile.
+        var activeOverlayIsos: Set<String> = []
         private var colorCancellables = Set<AnyCancellable>()
         weak var mapView: MKMapView?
 

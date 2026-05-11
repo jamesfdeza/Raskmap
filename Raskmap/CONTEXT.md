@@ -1,11 +1,118 @@
 # CONTEXT.md — Raskmap
 
-## Cambios recientes (2026-05-10) — rama `remodelacion_integral_v2`
+## Cambios recientes (2026-05-11) — sesión de hotfixes UX
+
+Sesión dedicada a pulir UX y bugs reportados por el usuario después de la
+iteración integral del 2026-05-10. Trabajo encima de `remodelacion_integral_v2`.
+
+### Banner countdown solo en modo mapa (`eef298b`)
+
+Antes el banner "Quedan N días" aparecía también en modo vuelo
+(comentario `el usuario lo pidió así` ahora obsoleto). El usuario lo
+prefiere oculto para no estorbar la vista de rutas. Añadido `!flightMode`
+al guard del branch del countdown.
+
+### Widget mediano: título o país + centrado vertical (`eef298b` + `efa5ba6`)
+
+· El row principal ahora muestra `entry.nextTitle` si existe; cae a
+  `entry.nextName` (país) solo si está vacío. Alineado con Small y Large.
+· Layout: header "PRÓXIMO VIAJE" + booking ref pegados arriba, bandera +
+  destino centrados verticalmente (Spacer entre header y row, otro Spacer
+  antes del strip "PRÓXIMOS").
+
+### Plantillas rápidas eliminadas (`cb99023` + `efa5ba6`)
+
+Iteración inicial: AddTripSheet tenía 4 quick-templates (Vuelo/Coche/
+Tren/Bus) que pre-cargaban transporte y saltaban a step 2/3 de
+AddSegmentSheet. Generaban redundancia (re-pregunta para ✈️) y placeholders
+intermedios complicados. El usuario prefirió **eliminar las plantillas**
+y dejar solo el botón "Añadir transporte" que abre el wizard normal
+desde step 1. Eliminado:
+· `quickTemplate(emoji:label:)` helper.
+· Sección "PLANTILLAS RÁPIDAS" en AddTripSheet.
+· `@State selectedTransport` y todo el flujo `initialTransport` de
+  AddSegmentSheet (parámetro, branch en init, onAppear, placeholder en
+  countriesStep, toolbar leading custom).
+
+Cualquier flujo (añadir/editar pasado/próximo) usa ahora el wizard 1→2→3
+estándar. Sin atajos.
+
+### "Lugares por descubrir": rediseño completo (`1f18eca` + `9d0db43`)
+
+Heurística antigua: hasta 6 sugerencias acumuladas, varias del mismo
+bloque regional, ordenadas alfabéticamente por ISO (sesgo hacia AND/ALB).
+
+Heurística nueva:
+· **1 sugerencia por región**, evaluando las 9 regiones SIEMPRE (incluido
+  Oceanía aunque no la hayas visitado — el usuario lo quiere así).
+· Por región, candidato = unvisited cuyo bbox-center está más cerca de
+  CUALQUIER país visitado globalmente (proxy de fronteras compartidas).
+· **No repeticiones**: si Israel pertenece a Asia ∩ Medio Oriente, solo
+  una región se lo queda. `pickedSet` excluye ya-elegidos de pools
+  posteriores.
+· **ISOs sancionados**: set estático `sanctionedDiscoveryISOs = ["ISR"]`.
+  Israel nunca aparece como recomendación.
+· Tie-breaker estable alfabético por ISO si dos candidatos están a la
+  misma distancia.
+· Fallback alfabético cuando no hay visitas en absoluto.
+
+### README rewrite (`b72986f`)
+
+El README anterior era una guía de setup inicial pre-multi-segmento
+(Item.swift, 5 archivos, sin widgets/Wrapped). Reemplazado por overview
+moderno con features agrupadas, stack técnico tabulado, estructura de
+carpetas actualizada, estado del desarrollo apuntando a
+`remodelacion_integral_v2` + CONTEXT.md, setup mínimo y legal.
+
+### Eliminar auto-marcado por ubicación (`56a9c1f` + `3e2ea12`)
+
+`autoMarkIfNeeded(isoCode:)` mutaba `Country.status` a `.visited` cuando
+CoreLocation detectaba al usuario dentro del polígono de un país. Esto se
+disparaba al detectar ubicación inicial y tras "Eliminar de la lista"
+si el país coincidía con la ubicación → no podías borrar tu propio país.
+
+Cambios:
+· Función `autoMarkIfNeeded` eliminada por completo + sus 2 callers.
+· La detección de ubicación ahora solo actualiza `locationIsoCode`
+  (highlight visual). Sin mutación de modelo.
+· Y MÁS: el highlight `isUserHere` ahora **solo se aplica si el país
+  está en status `.visited`**. Si está en `.none`, `.wantToVisit`,
+  `.bucketList` o `.lived`, `locationIsoCode` queda nil → sin aro.
+
+### Optimización del mapa: solo overlays coloreados + sin cap de zoom (`HEAD`)
+
+El usuario seguía viendo flicker / "pop in" de colores al hacer pan.
+Cambio clave: **solo se registran como overlays los polígonos
+COLOREADOS** (visited/lived/wantToVisit/bucketList si toggle activo) +
+el highlight actual si es .none. Antes añadíamos los ~1000+ polígonos
+(toda la GeoJSON) y MapKit los re-rasterizaba por tile en cada pan,
+incluso los `.none` invisibles. Ahora MapKit solo procesa ~5-30
+polígonos (los del usuario), reduciendo drásticamente el coste por tile.
+
+Gestión dinámica del set activo:
+· `Coordinator.activeOverlayIsos: Set<String>` mantiene los ISOs
+  actualmente en el mapa.
+· Status change `.none → coloured`: addOverlay + renderer en cache.
+· Status change `coloured → .none` (sin highlight): removeOverlays +
+  limpiar cache.
+· Status change entre coloreados: solo `setNeedsDisplay()`.
+· Highlight de un país `.none`: addOverlay temporalmente; removeOverlay
+  al perder el highlight.
+· Tap-detection sigue funcionando — usa `features` directamente, no la
+  lista de overlays.
+
+Además, `mapView.cameraZoomRange` eliminado: el usuario quiere zoom-out
+sin tope (antes había `maxCenterCoordinateDistance: 25_000_000`).
+
+---
+
+## Cambios recientes (2026-05-10/11) — rama `remodelacion_integral_v2`
 
 Iteración integral sobre App Store readiness, performance, UX y nice-to-have.
-La rama contiene 6 commits incrementales con todos los items del análisis A·B·C·D
+La rama contiene 9 commits incrementales con todos los items del análisis A·B·C·D
 de la sesión anterior (ver [Roadmap exhaustivo](#roadmap-pendiente--an%C3%A1lisis-exhaustivo)
-en versiones anteriores de este doc).
+en versiones anteriores de este doc), seguidos de tres commits de hotfixes
+(Swift 6 strict concurrency + 3 bugs reportados por usuario).
 
 ### Commit 1 (`7f53cef`) — App Store readiness + perf base
 
@@ -188,6 +295,81 @@ en versiones anteriores de este doc).
   - `FlightLegInfo` empty.
 - No requieren `swift-snapshot-testing` — solo verifican que vistas críticas
   rendericen sin nil y que el modelo Codable no se rompa con cambios futuros.
+
+### Commit 7 (`9b5e0a3`) — fix Swift 6 strict concurrency + ViewBuilder accidental
+
+Compilación de los Commits 1-6 disparó dos clases de errores en Swift 6
+con `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`:
+
+- **ViewBuilder accidental**: `matchingTrips: [Trip]` (no es View) tenía
+  `@ViewBuilder` heredado por copy-paste. Removed.
+- **FlightInfo Codable cross-isolation**: la conformancia sintetizada por
+  Swift 6 hereda el aislamiento del contexto (`@MainActor` por default del
+  proyecto), y las computed properties `flightInfo` / `flightInfoRaw` de
+  `@Model class Trip` son nonisolated. Marcamos `FlightLegInfo` y
+  `FlightInfo` como `nonisolated struct ... Sendable` con extensión
+  `nonisolated extension ...: Codable` con init/encode manuales.
+- **writeExport/buildJSON/buildCSV**: marcados `nonisolated private static`
+  para poder llamarse desde `Task.detached`.
+
+### Commit 8 (`8ccbf90`) — fix Swift 6: ExportFormat enum nonisolated
+
+Después de Commit 7 quedaban dos errores en `ExportDataSheet`:
+
+- `Main actor-isolated property 'format' cannot be accessed from outside of the actor`
+- `Main actor-isolated property 'ext' can not be referenced from a nonisolated context`
+
+Causa: el enum `ExportFormat` quedaba `@MainActor` por default del proyecto,
+así que `format` (la @State) y `format.ext` no eran accesibles desde
+`Task.detached`. Fix: `nonisolated enum ExportFormat: ... Sendable`.
+
+### Commit 9 (`cc09cbe`) — fix 3 bugs reportados por usuario
+
+**Bug A — "Eliminar de próximos" no eliminaba al tap directo**:
+- En `updateCountryStatus(country:newStatus:)`, cuando el usuario tappea un
+  país en próximos y elige "Eliminar de la lista", se llamaba con
+  `newStatus = .none`. El código solo borraba trips PASADOS, detectaba el
+  trip futuro existente y reanudaba `country.status = .wantToVisit` →
+  efectivamente "deshacía" la eliminación.
+- Fix: distinguimos por `previousStatus`. Si `.wantToVisit → .none`, purga
+  todos los trips del país (también futuros), sin posibilidad de
+  resurrección. El path original ("desmarcar visitado") mantiene su lógica
+  de preservar trips futuros y degradar a `.wantToVisit`.
+
+**Bug B — Conteo "Avión" desincronizado**:
+- `TransportStatsSheet.counts` cuenta `max(1, outLegs + retLegs)` por
+  segmento ✈️ (suma al menos 1 aunque el segmento no tenga aeropuertos
+  rellenos) y filtra por `pastTrips` (`effectiveEndDate <= today`).
+- `FlightLegsListSheet.legs` solo añadía rows si `airports.count >= 2`,
+  ignoraba el caso `>2 unique airports` (generaba 1 row resumen en lugar
+  de `max(1, totalTouches/2)`) y filtraba por `dateFrom <= today` (incluye
+  in-progress). Resultado: title del sheet mostraba menos vuelos que la
+  barra "Avión" de la pantalla anterior.
+- Fix:
+  - Unifico filtro a `effectiveEndDate <= today` (mismo que `pastTrips`).
+  - Para ✈️ segments sin aeropuertos: row sintética con flag `isSynthetic`.
+  - Para legacy con `>2 unique airports`: genera `max(1, totalTouches/2)`
+    rows alternando consecutivos en lugar de 1 row.
+  - Para legacy con 0/1 airports: `max(1, totalTouches/2)` rows sintéticos.
+  - Render: filas sintéticas muestran icono `airplane` + título del trip
+    en lugar de "🌐 → 🌐  — → —".
+
+**Bug C — Flicker del mapa al hacer pan**:
+- Pre-warm en background solo cubría polígonos COLOREADOS. Cuando un
+  polígono `.none` entraba en vista durante pan, MapKit caía al fallback
+  `rendererFor(_:)` que creaba renderer en frío, y el path se computaba
+  lazy en el primer `draw` → "pop in" visible de color/render.
+- Varias transiciones de estado (highlight, location update, status change)
+  hacían `removeOverlay + addOverlay`, lo que invalida todos los tiles del
+  bbox del polígono y provoca flicker.
+- Fix:
+  - Pre-warm en background ahora cubre TODOS los polígonos (no solo
+    coloreados), con queue `.utility` para no contender con main thread.
+    Cache siempre lleno → MapKit nunca crea renderers on-demand durante pan.
+  - Todos los `removeOverlay + addOverlay` (4 sitios: status change,
+    highlight on, highlight off, location update) reemplazados por
+    `setNeedsDisplay()` sobre el renderer cacheado. Redraw localizado sin
+    invalidar tiles.
 
 ---
 
