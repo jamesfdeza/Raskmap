@@ -575,9 +575,13 @@ final class AchievementToastController {
         window.rootViewController = host
         window.isHidden = false
         toastWindow = window
-        Task { @MainActor in try? await Task.sleep(for: .seconds(4.0)); [weak self] in
-            self?.toastWindow?.isHidden = true
-            self?.toastWindow = nil }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4.0))
+            await MainActor.run {
+                self?.toastWindow?.isHidden = true
+                self?.toastWindow = nil
+            }
+        }
     }
 }
 
