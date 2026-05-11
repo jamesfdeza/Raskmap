@@ -34,7 +34,7 @@ struct StatBadge: View {
         }
         .frame(minWidth: 70)
         .padding(.vertical, 9)
-        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.cell, style: .continuous))
     }
 }
 
@@ -195,10 +195,10 @@ struct ActionButton: View {
             .padding(.vertical, 15)
             .background(
                 isSelected ? color.opacity(0.12) : Color(.systemGray6),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .stroke(isSelected ? color.opacity(0.35) : .clear, lineWidth: 1)
             )
             .foregroundStyle(isSelected ? color : .primary)

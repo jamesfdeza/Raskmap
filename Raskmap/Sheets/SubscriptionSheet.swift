@@ -111,7 +111,7 @@ struct SubscriptionSheet: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(Color.purple.opacity(0.12),
-                                            in: RoundedRectangle(cornerRadius: 14))
+                                            in: RoundedRectangle(cornerRadius: Radius.card))
                                 .foregroundStyle(.purple)
                             }
                             .buttonStyle(.plain)
@@ -176,7 +176,7 @@ struct SubscriptionSheet: View {
             .padding(.vertical, 14)
             .background(
                 (isPurchasing || product == nil) ? Color.purple.opacity(0.4) : Color.purple,
-                in: RoundedRectangle(cornerRadius: 14)
+                in: RoundedRectangle(cornerRadius: Radius.card)
             )
         }
         .buttonStyle(.plain)

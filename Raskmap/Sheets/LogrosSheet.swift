@@ -297,13 +297,13 @@ struct LogrosSheet: View {
                                     .font(.palatino(.body, weight: .bold))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
-                                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                    .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                                     .foregroundStyle(.white)
                             }
                             .padding(.top, 4)
                         }
                         .padding(24)
-                        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 20))
+                        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: Radius.sheet))
                         .padding(.horizontal, 32)
                         .shadow(radius: 20)
                     }

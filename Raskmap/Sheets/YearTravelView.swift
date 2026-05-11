@@ -196,7 +196,7 @@ struct YearTravelView: View {
                     )
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
             }
         }
     }

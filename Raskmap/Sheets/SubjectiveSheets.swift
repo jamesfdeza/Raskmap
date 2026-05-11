@@ -221,7 +221,7 @@ struct SubjectiveCategoriesSheet: View {
                         VStack(spacing: 4) {
                             Text(medal.emoji).font(.system(size: 14))
                             ZStack {
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: Radius.cell)
                                     .fill(Color(.systemGray5))
                                     .frame(height: 62)
                                 if let emoji {
@@ -241,7 +241,7 @@ struct SubjectiveCategoriesSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.section))
     }
 }
 
@@ -277,7 +277,7 @@ struct SubjectiveFlagPickerSheet: View {
                     TextField("Buscar país…", text: $searchText).autocorrectionDisabled()
                 }
                 .padding(10)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
 
@@ -311,13 +311,13 @@ struct SubjectiveFlagPickerSheet: View {
                                 } label: {
                                     VStack(spacing: 4) {
                                         ZStack {
-                                            RoundedRectangle(cornerRadius: 10)
+                                            RoundedRectangle(cornerRadius: Radius.cell)
                                                 .fill(isChosen
                                                       ? Color.blue.opacity(0.18)
                                                       : isUsed ? Color(.systemGray6).opacity(0.4)
                                                                : Color(.systemGray6))
                                                 .overlay(
-                                                    RoundedRectangle(cornerRadius: 10)
+                                                    RoundedRectangle(cornerRadius: Radius.cell)
                                                         .strokeBorder(isChosen ? Color.blue : Color.clear,
                                                                       lineWidth: 2)
                                                 )

@@ -197,7 +197,7 @@ struct SettingsSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -220,7 +220,7 @@ struct SettingsSheet: View {
                         Divider().padding(.leading, 56)
                         ColorPickerRow(label: "Próximo", color: $pendingWantToVisitColor)
                     }
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 24)
                     Button {
                         colorTheme.visitedColor = pendingVisitedColor
@@ -235,7 +235,7 @@ struct SettingsSheet: View {
                             .font(.palatino(.body, weight: .bold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                             .foregroundStyle(.white)
                     }
                     .padding(.horizontal, 24)
@@ -255,7 +255,7 @@ struct SettingsSheet: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .foregroundStyle(.white)
-                            .background(Color.red, in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color.red, in: RoundedRectangle(cornerRadius: Radius.cell))
                     }
                     .padding(.horizontal, 24)
                     .disabled(isApplyingColors)
@@ -321,7 +321,7 @@ struct SettingsSheet: View {
                                         .buttonStyle(.plain)
                                     }
                                     .padding(10)
-                                    .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                                    .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.cell))
                                     TextField("", text: $usernameDraft)
                                         .font(.palatino(.body))
                                         .autocorrectionDisabled()
@@ -329,7 +329,7 @@ struct SettingsSheet: View {
                                         .focused($usernameFocused)
                                         .opacity(usernameFocused ? 1 : 0.01)
                                         .padding(10)
-                                        .background(usernameFocused ? Color(.systemGray5) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+                                        .background(usernameFocused ? Color(.systemGray5) : Color.clear, in: RoundedRectangle(cornerRadius: Radius.cell))
                                         .onChange(of: usernameDraft) {
                                             usernameDraft = String(usernameDraft.filter { $0.isLetter || $0.isNumber }.prefix(10))
                                         }
@@ -353,7 +353,7 @@ struct SettingsSheet: View {
                     } else {
                         HStack(spacing: 12) {
                             ZStack {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
                                     .fill(Color.purple.opacity(0.15))
                                     .frame(width: 36, height: 36)
                                 Image(systemName: "crown.fill")
@@ -370,7 +370,7 @@ struct SettingsSheet: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 14)
-                        .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                         .padding(.horizontal, 24)
                     }
 
@@ -401,7 +401,7 @@ struct SettingsSheet: View {
                                             isSelected
                                                 ? Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255)
                                                 : Color(.systemGray5),
-                                            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                            in: RoundedRectangle(cornerRadius: Radius.cell, style: .continuous)
                                         )
                                         .foregroundStyle(isSelected ? .white : .primary)
                                 }
@@ -421,7 +421,7 @@ struct SettingsSheet: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
-                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -437,7 +437,7 @@ struct SettingsSheet: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
-                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -528,7 +528,7 @@ struct SettingsSheet: View {
                             .padding(.vertical, 12)
                             .contentShape(Rectangle())
                         }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                         Text("Si activas los recordatorios, recibirás avisos 7 días antes, el día anterior y el día del viaje.")
                             .font(.palatino(.caption))
                             .foregroundStyle(.secondary)
@@ -552,7 +552,7 @@ struct SettingsSheet: View {
                             Rectangle().fill(Color(.separator)).frame(height: 0.5).padding(.leading, 16)
                             settingsRowLocked(label: "Apple Watch", icon: "applewatch") { showWidgetWatch = true }
                         }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     }
                     .padding(.horizontal, 24)
 
@@ -597,7 +597,7 @@ struct SettingsSheet: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     }
                     .padding(.horizontal, 24)
 
@@ -618,7 +618,7 @@ struct SettingsSheet: View {
                             Divider().padding(.leading, 16)
                             settingsRow(label: "Atribuciones", icon: "text.badge.checkmark") { showLegalCredits = true }
                         }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     }
                     .padding(.horizontal, 24)
 
@@ -673,7 +673,7 @@ struct SettingsSheet: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                         Text("Exportar genera un JSON con tus países, viajes y preferencias para que puedas guardarlo o moverlo a otro dispositivo. Borrar elimina todo localmente; con iCloud activo, también se sincroniza el borrado.")
                             .font(.palatino(.caption))
                             .foregroundStyle(.secondary)
@@ -780,7 +780,7 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 28)
                     .padding(.vertical, 20)
-                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
+                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: Radius.section))
                     .transition(.opacity.combined(with: .scale))
                 }
             }
@@ -871,7 +871,7 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 40)
                     .padding(.vertical, 32)
-                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 20))
+                    .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: Radius.sheet))
                 }
             }
         }

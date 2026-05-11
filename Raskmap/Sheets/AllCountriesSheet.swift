@@ -94,12 +94,12 @@ struct AllCountriesSheet: View {
                             Text("Cerrar")
                                 .font(.palatino(.body, weight: .bold))
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .foregroundStyle(.white)
                         }.buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.section))
                     .padding(.horizontal, 32)
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }

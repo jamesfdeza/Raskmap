@@ -102,8 +102,8 @@ struct PlannedDatePickerSheet: View {
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(isSelected ? accent.opacity(0.1) : Color(.systemGray6),
-                                in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12)
+                                in: RoundedRectangle(cornerRadius: Radius.cell))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.cell)
                         .stroke(isSelected ? accent.opacity(0.35) : Color.clear, lineWidth: 1.5))
                 }.buttonStyle(.plain)
             }
@@ -132,8 +132,8 @@ struct PlannedDatePickerSheet: View {
                 Text(value).font(.custom("Satoshi-Bold", size: 15)).foregroundStyle(color)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(active ? accent.opacity(0.08) : Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(active ? accent.opacity(0.3) : Color.clear, lineWidth: 1.5))
+            .background(active ? accent.opacity(0.08) : Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
+            .overlay(RoundedRectangle(cornerRadius: Radius.cell).stroke(active ? accent.opacity(0.3) : Color.clear, lineWidth: 1.5))
         }.buttonStyle(.plain)
     }
 
@@ -162,7 +162,7 @@ struct PlannedDatePickerSheet: View {
                     TextField("Ej: Vacaciones de verano", text: $tripTitle)
                         .font(.palatino(.body))
                         .padding(.horizontal, 16).padding(.vertical, 14)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24)
                 }
                 .padding(.bottom, 20)
@@ -201,7 +201,7 @@ struct PlannedDatePickerSheet: View {
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(.secondary)
                             }
                             .padding(.horizontal, 16).padding(.vertical, 14)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                             .padding(.horizontal, 24)
                         }
                         .buttonStyle(.plain)
@@ -230,7 +230,7 @@ struct PlannedDatePickerSheet: View {
                     Text(isEditing ? "Guardar cambios" : "Añadir a Próximos")
                         .font(.custom("Satoshi-Bold", size: 16))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(canSave ? accent : Color(.systemGray4), in: RoundedRectangle(cornerRadius: 14))
+                        .background(canSave ? accent : Color(.systemGray4), in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                         .shadow(color: canSave ? accent.opacity(0.3) : .clear, radius: 12, y: 4)
                 }
@@ -369,7 +369,7 @@ struct confirmCardContent: View {
                         Text("Cancelar")
                             .font(.custom("Satoshi-Medium", size: 15))
                             .frame(maxWidth: .infinity).padding(.vertical, 14)
-                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.cell))
                             .foregroundStyle(.primary)
                     }.buttonStyle(.plain).disabled(isSaving)
                     Button {
@@ -387,13 +387,13 @@ struct confirmCardContent: View {
                             }
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 14)
-                        .background(accent, in: RoundedRectangle(cornerRadius: 12))
+                        .background(accent, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                     }.buttonStyle(.plain).disabled(isSaving)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 14)
             }
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24))
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: Radius.sheet))
             .padding(.horizontal, 18)
             .shadow(color: .black.opacity(0.25), radius: 30, y: 10)
         }

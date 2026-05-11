@@ -325,8 +325,8 @@ struct AddSegmentSheet: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 22)
                             .background(isSelected ? accent.opacity(0.08) : Color(.systemGray6),
-                                        in: RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16)
+                                        in: RoundedRectangle(cornerRadius: Radius.section))
+                            .overlay(RoundedRectangle(cornerRadius: Radius.section)
                                 .stroke(isSelected ? accent.opacity(0.35) : Color.clear, lineWidth: 1.5))
                         }
                         .buttonStyle(.plain)
@@ -365,7 +365,7 @@ struct AddSegmentSheet: View {
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
             .padding(.horizontal, 24)
             .padding(.bottom, 10)
 
@@ -462,8 +462,8 @@ struct AddSegmentSheet: View {
                             }
                         }
                         .padding(16)
-                        .background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(accent.opacity(0.15), lineWidth: 1))
+                        .background(accent.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.card))
+                        .overlay(RoundedRectangle(cornerRadius: Radius.card).stroke(accent.opacity(0.15), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 24).padding(.bottom, 12)
@@ -493,7 +493,7 @@ struct AddSegmentSheet: View {
                             layoverSection(title: nil, choices: outboundLayoverChoices)
                         }
                         .padding(16)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24).padding(.bottom, 12)
                     }
                 }
@@ -568,7 +568,7 @@ struct AddSegmentSheet: View {
                     Text(isEditing ? "Guardar cambios" : "Añadir tramo")
                         .font(.custom("Satoshi-Bold", size: 16))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(accent, in: RoundedRectangle(cornerRadius: 14))
+                        .background(accent, in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                         .shadow(color: accent.opacity(0.3), radius: 12, y: 4)
                 }
@@ -624,8 +624,8 @@ struct AddSegmentSheet: View {
                 Text(value).font(.custom("Satoshi-Bold", size: 15)).foregroundStyle(color)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(active ? accent.opacity(0.08) : Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(active ? accent.opacity(0.3) : Color.clear, lineWidth: 1.5))
+            .background(active ? accent.opacity(0.08) : Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
+            .overlay(RoundedRectangle(cornerRadius: Radius.cell).stroke(active ? accent.opacity(0.3) : Color.clear, lineWidth: 1.5))
         }.buttonStyle(.plain)
     }
 

@@ -799,7 +799,7 @@ struct FinalizadoTripDetailSheet: View {
                                     }
                                 }
                             }
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                             .padding(.horizontal, 20)
                         }
                     }
@@ -939,7 +939,7 @@ private struct FinalizadoSegmentRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
         .padding(.horizontal, 20)
     }
 }

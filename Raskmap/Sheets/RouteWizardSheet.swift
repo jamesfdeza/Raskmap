@@ -380,7 +380,7 @@ struct RouteWizardSheet: View {
                     Text("Sí, las mismas")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                 }
                 Button {
@@ -398,7 +398,7 @@ struct RouteWizardSheet: View {
                     Text(layoverStops.isEmpty ? "No, diferente aerolínea" : "No, introduzco tramo a tramo")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.primary)
                 }
             }.padding(.horizontal, 24)
@@ -492,14 +492,14 @@ struct RouteWizardSheet: View {
                     Text("✈️  Vuelo directo")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                 }
                 Button { query = ""; step = .layoverAddAirport } label: {
                     Text("🔄  Con escala(s)")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.primary)
                 }
             }.padding(.horizontal, 24)
@@ -532,7 +532,7 @@ struct RouteWizardSheet: View {
                         if i < layoverStops.count - 1 { Divider().padding(.leading, 16) }
                     }
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 16).padding(.top, 16)
             }
             VStack(spacing: 10) {
@@ -544,7 +544,7 @@ struct RouteWizardSheet: View {
                     Text("Siguiente →")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
             }
@@ -581,14 +581,14 @@ struct RouteWizardSheet: View {
                     Text("↩️  Sí, ida y vuelta (×2)")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                 }
                 Button { buildAndSave(isReturn: false) } label: {
                     Text("✈️  No, solo ida")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.primary)
                 }
                 Button {
@@ -603,7 +603,7 @@ struct RouteWizardSheet: View {
                     Text("🔀  Ruta de vuelta diferente")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.primary)
                 }
             }.padding(.horizontal, 24)
@@ -631,14 +631,14 @@ struct RouteWizardSheet: View {
                     Text("✈️  Vuelo directo")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                 }
                 Button { query = ""; step = .returnLayoverAddAirport } label: {
                     Text("🔄  Con escala(s)")
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.primary)
                 }
             }.padding(.horizontal, 24)
@@ -671,7 +671,7 @@ struct RouteWizardSheet: View {
                         if i < returnLayoverStops.count - 1 { Divider().padding(.leading, 16) }
                     }
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 16).padding(.top, 16)
             }
             VStack(spacing: 10) {
@@ -683,7 +683,7 @@ struct RouteWizardSheet: View {
                     Text("Siguiente →")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
             }
@@ -790,7 +790,7 @@ struct RoutePickerSheet: View {
                     Text(airports.isEmpty ? "Selecciona aeropuertos" : "Continuar → Aerolíneas")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(airports.isEmpty ? Color(.systemGray4) : Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(airports.isEmpty ? Color(.systemGray4) : Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
                 .disabled(airports.isEmpty)
@@ -900,7 +900,7 @@ struct AirlinePickerSheet: View {
                     Text(selected.isEmpty ? "Listo" : "Listo (\(selected.count) aerolínea\(selected.count == 1 ? "" : "s"))")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 24).padding(.vertical, 12)

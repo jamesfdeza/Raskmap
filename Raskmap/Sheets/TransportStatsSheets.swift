@@ -306,7 +306,7 @@ struct TransportStatsSheet: View {
                             Spacer()
                         }
                         .padding(.horizontal, 18).padding(.vertical, 14)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24)
                     }
 
@@ -361,7 +361,7 @@ struct TransportStatsSheet: View {
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(12)
-                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                             }
                             .buttonStyle(.plain)
 
@@ -383,7 +383,7 @@ struct TransportStatsSheet: View {
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(12)
-                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                             }
                             .buttonStyle(.plain)
                         }
@@ -408,7 +408,7 @@ struct TransportStatsSheet: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(12)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                         }
                         .buttonStyle(.plain)
 
@@ -429,7 +429,7 @@ struct TransportStatsSheet: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(12)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                         }
                         .buttonStyle(.plain)
                     }
@@ -924,13 +924,13 @@ struct CountryTripsSheet: View {
                                 .font(.palatino(.body, weight: .bold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .foregroundStyle(.white)
                         }
                         .buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.section))
                     .padding(.horizontal, 32)
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
@@ -955,13 +955,13 @@ struct CountryTripsSheet: View {
                                 .font(.palatino(.body, weight: .bold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .foregroundStyle(.white)
                         }
                         .buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.section))
                     .padding(.horizontal, 32)
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
@@ -980,7 +980,7 @@ struct CountryTripsSheet: View {
                 }
                 .padding(.horizontal, 28)
                 .padding(.vertical, 20)
-                .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
+                .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: Radius.section))
                 .transition(.opacity.combined(with: .scale))
                 .allowsHitTesting(false)
             }

@@ -150,7 +150,7 @@ struct WidgetLockScreenSheet: View {
                             }
                         }
                     }
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 20)
                     Spacer(minLength: 32)
                 }
@@ -224,7 +224,7 @@ struct WidgetWatchSheet: View {
                             }
                         }
                     }
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 20)
                     Spacer(minLength: 32)
                 }

@@ -97,7 +97,7 @@ struct ContactSheet: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 20)
 
                     // Subject pill — asunto pre-rellenado
@@ -115,7 +115,7 @@ struct ContactSheet: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 20)
 
                     // Editor del mensaje — body
@@ -126,10 +126,10 @@ struct ContactSheet: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 4)
                         ZStack(alignment: .topLeading) {
-                            RoundedRectangle(cornerRadius: 14)
+                            RoundedRectangle(cornerRadius: Radius.card)
                                 .fill(Color(.systemGray6))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
+                                    RoundedRectangle(cornerRadius: Radius.card)
                                         .stroke(editorFocused ? accent.opacity(0.4) : Color.clear, lineWidth: 1.5)
                                 )
                             if messageText.isEmpty {
@@ -186,7 +186,7 @@ struct ContactSheet: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 15)
                         .background(trimmed.isEmpty ? Color(.systemGray4) : accent,
-                                    in: RoundedRectangle(cornerRadius: 14))
+                                    in: RoundedRectangle(cornerRadius: Radius.card))
                     }
                     .disabled(trimmed.isEmpty)
                     .padding(.horizontal, 20)

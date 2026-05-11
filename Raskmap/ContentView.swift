@@ -386,7 +386,7 @@ struct ContentView: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.cell))
             Spacer()
             Button(action: { showSearch = true }) {
                 Image(systemName: "magnifyingglass")
@@ -583,7 +583,7 @@ struct ContentView: View {
                     .padding(.trailing, 14)
                 }
                 .frame(height: 70)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
                 .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: 6)
                 .padding(.horizontal, 12)
             }
@@ -684,14 +684,14 @@ struct ContentView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(BrandColor.accent, in: RoundedRectangle(cornerRadius: 14))
+                            .background(BrandColor.accent, in: RoundedRectangle(cornerRadius: Radius.card))
                     }.buttonStyle(.plain)
                 }
                 .padding(28)
                 .frame(maxWidth: 340)
-                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: Radius.sheet))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22)
+                    RoundedRectangle(cornerRadius: Radius.sheet)
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                 )
                 .padding(.horizontal, 28)
@@ -1238,7 +1238,7 @@ struct ContentView: View {
                                     .foregroundStyle(.primary)
                             }
                             .padding(.horizontal, 20).padding(.vertical, 13)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.section, style: .continuous))
                             .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
                         }
                     }
@@ -1271,16 +1271,16 @@ struct ContentView: View {
                                 .font(.palatino(.body, weight: .bold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                                 .foregroundStyle(.white)
                         }.buttonStyle(.plain)
                     }
                     .padding(28)
                     // .thickMaterial tiene mejor contraste sobre fondos oscuros
                     // que .regularMaterial. Border sutil refuerza separación.
-                    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                     )
                     .padding(.horizontal, 28)
@@ -1506,7 +1506,7 @@ struct ContentView: View {
                         .submitLabel(.done)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                         .onChange(of: usernameInput) {
                             usernameInput = String(usernameInput.filter { $0.isLetter || $0.isNumber }.prefix(10))
                         }
@@ -1526,7 +1526,7 @@ struct ContentView: View {
                                 usernameInput.isEmpty
                                     ? Color(.systemGray4)
                                     : Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                             )
                             .foregroundStyle(.white)
                     }
@@ -1581,7 +1581,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 32)
@@ -1631,7 +1631,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 32)
@@ -1683,7 +1683,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(Color(red: 0x53/255, green: 0xA3/255, blue: 0xFE/255),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 32)
@@ -1800,9 +1800,9 @@ struct ContentView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 22)
         .frame(maxWidth: 320)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.18), radius: 18, x: 0, y: 8)

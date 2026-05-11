@@ -291,7 +291,7 @@ struct AddTripSheet: View {
                 TextField("Título del viaje", text: $tripTitle)
                     .font(.palatino(.body))
                     .padding(.horizontal, 16).padding(.vertical, 14)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 16).padding(.bottom, 8)
 
                 Divider().padding(.horizontal, 16).padding(.vertical, 4)
@@ -319,7 +319,7 @@ struct AddTripSheet: View {
                                 }.buttonStyle(.plain)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                             .padding(.horizontal, 16)
                         }
                     }
@@ -330,7 +330,7 @@ struct AddTripSheet: View {
                         }
                         .padding(.horizontal, 12).padding(.vertical, 10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 16)
@@ -357,7 +357,7 @@ struct AddTripSheet: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
                 }
@@ -368,7 +368,7 @@ struct AddTripSheet: View {
                     Text(isForFuture ? "Añadir a Próximos" : "Guardar viaje")
                         .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 24).padding(.vertical, 14)

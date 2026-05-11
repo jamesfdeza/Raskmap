@@ -941,7 +941,7 @@ struct YearWrappedSheet: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
-        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     // ── Nuevos países (con banderas de los nuevos y de los repetidos)
@@ -1165,7 +1165,7 @@ struct YearWrappedSheet: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .opacity(animKick ? 1 : 0)
         .offset(y: animKick ? 0 : 10)
         .animation(.easeOut(duration: 0.4).delay(0.15 + delay), value: animKick)
@@ -1539,11 +1539,11 @@ private struct SummaryStatGrid: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 18)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous)
                 .fill(Color.white.opacity(0.12))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.sheet, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.7)
         )
     }
@@ -1699,7 +1699,7 @@ private struct ShareableSummaryCard: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                RoundedRectangle(cornerRadius: Radius.cell, style: .continuous)
                                     .fill(Color.white.opacity(0.18))
                             )
                     } else {

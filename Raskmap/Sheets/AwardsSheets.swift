@@ -113,7 +113,7 @@ struct MedalleroSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.cell))
             }
             .buttonStyle(.plain)
         } else {
@@ -126,7 +126,7 @@ struct MedalleroSheet: View {
                     .font(.title3)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 72)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
             }
             .buttonStyle(.plain)
         }
@@ -160,7 +160,7 @@ struct MedalleroSheet: View {
                                             editingSpot = ProfileSheet.TopSpot(region: region, medal: medal)
                                         } label: {
                                             ZStack {
-                                                RoundedRectangle(cornerRadius: 10)
+                                                RoundedRectangle(cornerRadius: Radius.cell)
                                                     .fill(Color(.systemGray5))
                                                     .frame(width: 52, height: 52)
                                                 if let emoji {
@@ -185,7 +185,7 @@ struct MedalleroSheet: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 20))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.sheet))
                     .padding(.horizontal, 12)
                 // ── Premios personales (2 slots) ──
                 let awardSlots: [PersonalAwardModel?] = (0..<2).map { i in i < personalAwards.count ? personalAwards[i] : nil }
@@ -227,7 +227,7 @@ struct MedalleroSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 12)
                 .padding(.bottom, 24)
             }

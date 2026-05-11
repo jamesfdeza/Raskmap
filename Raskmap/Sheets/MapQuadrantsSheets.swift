@@ -311,7 +311,7 @@ struct MapExportSheet: View {
                                     .font(.palatino(.footnote, weight: selectedZone == zone ? .bold : .regular))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 9)
-                                    .background(selectedZone == zone ? Color.blue : Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                                    .background(selectedZone == zone ? Color.blue : Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.cell))
                                     .foregroundStyle(selectedZone == zone ? .white : .primary)
                             }
                         }
@@ -325,7 +325,7 @@ struct MapExportSheet: View {
                                     .font(.palatino(.footnote, weight: selectedZone == zone ? .bold : .regular))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 9)
-                                    .background(selectedZone == zone ? Color.blue : Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                                    .background(selectedZone == zone ? Color.blue : Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.cell))
                                     .foregroundStyle(selectedZone == zone ? .white : .primary)
                             }
                         }
@@ -336,9 +336,9 @@ struct MapExportSheet: View {
                 ZStack {
                     if let img = renderedImage {
                         Image(uiImage: img).resizable().scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: 12)).shadow(radius: 6)
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.cell)).shadow(radius: 6)
                     } else {
-                        RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6))
+                        RoundedRectangle(cornerRadius: Radius.cell).fill(Color(.systemGray6))
                             .aspectRatio(selectedZone.isWorld ? CGFloat(780)/640 : 1, contentMode: .fit)
                             .overlay { VStack(spacing: 12) { ProgressView(); Text("Generando mapa…").font(.palatino(.caption)).foregroundStyle(.secondary) } }
                     }
@@ -370,7 +370,7 @@ struct MapExportSheet: View {
                         Text(savedToast ? "¡Guardada!" : "Guardar en galería")
                     }
                     .font(.palatino(.body, weight: .bold)).frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(savedToast ? Color.green : Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                    .background(savedToast ? Color.green : Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                     .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 24).padding(.bottom, 24).disabled(renderedImage == nil || isSaving)
@@ -485,7 +485,7 @@ struct MapExportSheet: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 52)
                     .foregroundStyle(.primary)
-                    .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Radius.cell))
                 }
                 .buttonStyle(.plain)
                 if isEditingQuadrants {
@@ -514,7 +514,7 @@ struct MapExportSheet: View {
                     .font(.title3)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
             }
             .buttonStyle(.plain)
             .dropDestination(for: String.self) { items, _ in swapQuadrant(idStr: items.first, toIndex: index) }
@@ -608,7 +608,7 @@ struct MapExportSheet: View {
                 let bgH = brandSize.height + 2 + ts.height + pad * 2
                 let bgRect = CGRect(x: (size.width - bgW) / 2, y: size.height - bgH - 14, width: bgW, height: bgH)
                 UIColor.black.withAlphaComponent(0.55).setFill()
-                UIBezierPath(roundedRect: bgRect, cornerRadius: 8).fill()
+                UIBezierPath(roundedRect: bgRect, cornerRadius: Radius.chip).fill()
                 brandText.draw(at: CGPoint(x: (size.width - brandSize.width) / 2, y: bgRect.minY + pad), withAttributes: brandAttrs)
                 text.draw(at: CGPoint(x: (size.width - ts.width) / 2, y: bgRect.minY + pad + brandSize.height + 2), withAttributes: attrs)
             }
@@ -718,7 +718,7 @@ struct MapExportSheet: View {
                 let bgH = brandSize.height + 2 + ts.height + pad * 2
                 let bgRect = CGRect(x: (displaySize.width - bgW) / 2, y: displaySize.height - bgH - 14, width: bgW, height: bgH)
                 UIColor.black.withAlphaComponent(0.55).setFill()
-                UIBezierPath(roundedRect: bgRect, cornerRadius: 8).fill()
+                UIBezierPath(roundedRect: bgRect, cornerRadius: Radius.chip).fill()
                 brandText.draw(at: CGPoint(x: (displaySize.width - brandSize.width) / 2, y: bgRect.minY + pad), withAttributes: brandAttrs)
                 text.draw(at: CGPoint(x: (displaySize.width - ts.width) / 2, y: bgRect.minY + pad + brandSize.height + 2), withAttributes: attrs)
             }

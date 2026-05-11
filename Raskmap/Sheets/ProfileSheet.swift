@@ -260,7 +260,7 @@ struct ProfileSheet: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
                         .fill(iconColor)
                         .frame(width: 32, height: 32)
                     Image(systemName: icon)
@@ -443,7 +443,7 @@ struct ProfileSheet: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 18)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.section, style: .continuous))
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
                     .padding(.bottom, 4)
@@ -484,7 +484,7 @@ struct ProfileSheet: View {
                             showYearWrapped = true
                         }
                     }
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.section, style: .continuous))
                     .padding(.horizontal, 20)
                     .padding(.bottom, 12)
                 }
@@ -824,7 +824,7 @@ struct ProfileSheet: View {
                     }
                     .padding(20)
                     .frame(maxWidth: 340)
-                    .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 20))
+                    .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: Radius.sheet))
                     .shadow(radius: 20)
                 }
                 .transition(.opacity.combined(with: .scale))
@@ -975,7 +975,7 @@ struct ProfileSheet: View {
                                 }
                                 .padding(.horizontal, 10).padding(.vertical, 12)
                                 .frame(width: 110)
-                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                             }
                             .buttonStyle(.plain)
                         }

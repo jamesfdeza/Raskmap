@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "Gemini_Generated_Image_zuzlrzuzlrzuzlrz.png",
+      "filename" : "Gemini_Generated_Image_vn44xdvn44xdvn44.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "Localización brillante sobre el globo terrestre.png",
+      "filename" : "raskmap_icon_dark.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,6 +25,7 @@
           "value" : "tinted"
         }
       ],
+      "filename" : "Localización brillante sobre el globo terrestre.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"

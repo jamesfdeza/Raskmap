@@ -96,7 +96,7 @@ struct MultiContinentSheet: View {
                         }
                     }
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
                 .padding(.bottom, 20)
@@ -129,12 +129,12 @@ struct MultiContinentSheet: View {
                             Text("Entendido")
                                 .font(.palatino(.body, weight: .bold))
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .foregroundStyle(.white)
                         }.buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.section))
                     .padding(.horizontal, 32)
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
@@ -193,7 +193,7 @@ struct MultiHemisphereSheet: View {
                         }
                     }
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
                 .padding(.bottom, 20)
@@ -226,12 +226,12 @@ struct MultiHemisphereSheet: View {
                             Text("Entendido")
                                 .font(.palatino(.body, weight: .bold))
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                                 .foregroundStyle(.white)
                         }.buttonStyle(.plain)
                     }
                     .padding(24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.section))
                     .padding(.horizontal, 32)
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
@@ -302,7 +302,7 @@ struct FavoriteAirportPickerSheet: View {
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 24).padding(.vertical, 12)

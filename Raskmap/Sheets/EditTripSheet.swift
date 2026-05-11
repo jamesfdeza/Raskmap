@@ -518,7 +518,7 @@ struct EditTripSheet: View {
                     TextField("Ej: Vacaciones de verano", text: $tripTitle)
                         .font(.palatino(.body))
                         .padding(.horizontal, 16).padding(.vertical, 14)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24)
                 }
                 .padding(.top, 24).padding(.bottom, 20)
@@ -541,8 +541,8 @@ struct EditTripSheet: View {
                                     }
                                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                                     .background(isSelected ? accent.opacity(0.1) : Color(.systemGray6),
-                                                in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12)
+                                                in: RoundedRectangle(cornerRadius: Radius.cell))
+                                    .overlay(RoundedRectangle(cornerRadius: Radius.cell)
                                         .stroke(isSelected ? accent.opacity(0.35) : Color.clear, lineWidth: 1.5))
                                 }.buttonStyle(.plain)
                             }
@@ -589,7 +589,7 @@ struct EditTripSheet: View {
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
                         }
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24)
                     }
                     .padding(.bottom, 20)
@@ -625,7 +625,7 @@ struct EditTripSheet: View {
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(.secondary)
                             }
                             .padding(.horizontal, 16).padding(.vertical, 14)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                             .padding(.horizontal, 24)
                         }.buttonStyle(.plain)
                     }
@@ -654,7 +654,7 @@ struct EditTripSheet: View {
                             legacyLayoverSection(title: nil, choices: legacyOutboundLayovers)
                         }
                         .padding(16)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24).padding(.bottom, 12)
                     }
                 }
@@ -711,7 +711,7 @@ struct EditTripSheet: View {
                                         }.buttonStyle(.plain)
                                     }
                                     .padding(.horizontal, 16).padding(.vertical, 10)
-                                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                                     .padding(.horizontal, 24)
 
                                     // Asiento / clase / reserva por leg (ida + vuelta separados).
@@ -751,7 +751,7 @@ struct EditTripSheet: View {
                                 .font(.custom("Satoshi-Bold", size: 15))
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                         if let to = calculatedDateTo {
                             VStack(spacing: 4) {
                                 Text("HASTA").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary).tracking(0.8)
@@ -759,7 +759,7 @@ struct EditTripSheet: View {
                                     .font(.custom("Satoshi-Bold", size: 15))
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                         }
                     }
                     .padding(.horizontal, 24).padding(.bottom, 16)
@@ -769,7 +769,7 @@ struct EditTripSheet: View {
                     Text("Guardar cambios")
                         .font(.custom("Satoshi-Bold", size: 16))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(accent, in: RoundedRectangle(cornerRadius: 14))
+                        .background(accent, in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
                         .shadow(color: accent.opacity(0.3), radius: 12, y: 4)
                 }

@@ -56,7 +56,7 @@ struct FlightInfoSection: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 14)
             }
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 16))
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.section))
             .padding(.horizontal, 24)
 
             if totalLegCount <= 0 {
@@ -293,7 +293,7 @@ struct FlightInfoSection: View {
                             Text(label).font(.system(size: 12, weight: .medium))
                                 .frame(maxWidth: .infinity).padding(.vertical, 8)
                                 .background(pos.wrappedValue == val ? accent : Color(.systemGray5),
-                                            in: RoundedRectangle(cornerRadius: 8))
+                                            in: RoundedRectangle(cornerRadius: Radius.chip))
                                 .foregroundStyle(pos.wrappedValue == val ? .white : .primary)
                         }.buttonStyle(.plain)
                     }
@@ -310,14 +310,14 @@ struct FlightInfoSection: View {
                             Text(label).font(.system(size: 11, weight: .medium))
                                 .frame(maxWidth: .infinity).padding(.vertical, 8)
                                 .background(cabin.wrappedValue == val ? accent : Color(.systemGray5),
-                                            in: RoundedRectangle(cornerRadius: 8))
+                                            in: RoundedRectangle(cornerRadius: Radius.chip))
                                 .foregroundStyle(cabin.wrappedValue == val ? .white : .primary)
                         }.buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 10)
             }
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 16))
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.section))
             .padding(.horizontal, 24)
         }
     }
@@ -357,7 +357,7 @@ struct TableFlagPickerSheet: View {
                     TextField("Buscar país…", text: $searchText).autocorrectionDisabled()
                 }
                 .padding(10)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
 
@@ -389,13 +389,13 @@ struct TableFlagPickerSheet: View {
                                 } label: {
                                     VStack(spacing: 4) {
                                         ZStack {
-                                            RoundedRectangle(cornerRadius: 10)
+                                            RoundedRectangle(cornerRadius: Radius.cell)
                                                 .fill(isChosen
                                                       ? Color.blue.opacity(0.18)
                                                       : isUsed ? Color(.systemGray6).opacity(0.4)
                                                                : Color(.systemGray6))
                                                 .overlay(
-                                                    RoundedRectangle(cornerRadius: 10)
+                                                    RoundedRectangle(cornerRadius: Radius.cell)
                                                         .strokeBorder(isChosen ? Color.blue : Color.clear,
                                                                       lineWidth: 2)
                                                 )
@@ -488,7 +488,7 @@ struct UsernameEditView: View {
                         .padding(.trailing, 12)
                 }
             }
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
             .frame(maxWidth: 240)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 4)
@@ -601,10 +601,10 @@ private struct AchievementToastView: View {
                             Text(kind.medal).font(.title3)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: Radius.card))
                         .overlay {
                             if !isRaskmapPro {
-                                RoundedRectangle(cornerRadius: 14)
+                                RoundedRectangle(cornerRadius: Radius.card)
                                     .fill(.ultraThinMaterial)
                                     .overlay {
                                         Image(systemName: "lock.fill")

@@ -176,7 +176,7 @@ struct ExportDataSheet: View {
                         if f != ExportFormat.allCases.last { Divider().padding(.leading, 50) }
                     }
                 }
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                 .padding(.horizontal, 20)
 
                 Button {
@@ -190,7 +190,7 @@ struct ExportDataSheet: View {
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 15)
-                    .background(accent, in: RoundedRectangle(cornerRadius: 14))
+                    .background(accent, in: RoundedRectangle(cornerRadius: Radius.card))
                 }
                 .buttonStyle(.plain)
                 .disabled(isGenerating)
@@ -395,7 +395,7 @@ struct WidgetHomeColorSheet: View {
             VStack(spacing: 32) {
                 // Mini widget preview — layout idéntico al widget real (small)
                 ZStack {
-                    RoundedRectangle(cornerRadius: 22)
+                    RoundedRectangle(cornerRadius: Radius.sheet)
                         .fill(Color(hex: selectedHex))
                         .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
                     ZStack(alignment: .topLeading) {
@@ -507,7 +507,7 @@ struct WidgetHomeColorSheet: View {
                         .font(.palatino(.body, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: Radius.cell))
                         .foregroundStyle(.white)
                 }
                 .padding(.horizontal, 24)
