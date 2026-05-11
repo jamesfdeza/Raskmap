@@ -13,6 +13,8 @@
 
 import SwiftUI
 import UIKit
+import MapKit
+import CoreLocation
 
 // MARK: - Cuadrante de mapa
 struct MapQuadrant: Codable, Identifiable, Equatable {
