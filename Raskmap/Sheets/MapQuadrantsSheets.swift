@@ -615,7 +615,7 @@ struct MapExportSheet: View {
             DispatchQueue.main.async {
                 UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
                 isSaving = false; savedToast = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { savedToast = false }
+                Task { @MainActor in try? await Task.sleep(for: .seconds(1.5)); savedToast = false }
             }
         }
     }

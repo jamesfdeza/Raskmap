@@ -1129,7 +1129,7 @@ struct ContentView: View {
                         msgs.append(contentsOf: childNames)
                         if !msgs.isEmpty {
                             visitedToastMessages = msgs
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { visitedToastMessages = [] }
+                            Task { @MainActor in try? await Task.sleep(for: .seconds(2.5)); visitedToastMessages = [] }
                         }
                     },
                     onCancel: {
@@ -1745,9 +1745,9 @@ struct ContentView: View {
                 }
                 modelContext.saveOrWarn()
                 highlightedIsoCode = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { centerMap(on: country.isoCode) }
+                Task { @MainActor in try? await Task.sleep(for: .seconds(0.4)); centerMap(on: country.isoCode) }
                 if country.isoCode == locationIsoCode {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { recheckLocationIfNeeded() }
+                    Task { @MainActor in try? await Task.sleep(for: .seconds(0.15)); recheckLocationIfNeeded() }
                 }
             }
         )

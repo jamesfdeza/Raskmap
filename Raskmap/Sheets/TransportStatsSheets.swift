@@ -840,7 +840,7 @@ struct CountryTripsSheet: View {
                     Button {
                         sortNewestFirst.toggle()
                         showSortToast = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showSortToast = false }
+                        Task { @MainActor in try? await Task.sleep(for: .seconds(1.5)); showSortToast = false }
                     } label: {
                         Image(systemName: sortNewestFirst ? "arrow.down.circle" : "arrow.up.circle")
                             .font(.body)
