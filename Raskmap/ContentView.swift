@@ -1851,6 +1851,17 @@ struct ContentView: View {
                 try? modelContext.save()
             },
             onProximosTap: nil,
+            onDiscoveryTap: { feature in
+                // Cerramos el perfil y replicamos el efecto del tap-en-mapa:
+                // centerMap + highlight + sheet del país. Pequeño delay para
+                // dejar a SwiftUI completar la animación de dismiss del sheet.
+                showProfile = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    let country = countries.first(where: { $0.isoCode == feature.isoCode })
+                        ?? Country(name: feature.localizedName, isoCode: feature.isoCode)
+                    handleCountryTap(country)
+                }
+            },
             topTable: $topTable,
             visitedFlags: visitedFlags,
             allFeatures: features,
@@ -4026,6 +4037,10 @@ struct ProfileSheet: View {
     @Binding var showCountdown: Bool
     var onClearStatus: (CountryStatus) -> Void = { _ in }
     var onProximosTap: (() -> Void)? = nil
+    /// Callback opcional: el usuario tappea una bandera en "Lugares por
+    /// descubrir". El parent debe cerrar este sheet y replicar el efecto
+    /// de un tap directo en el mapa (centerMap + highlight + country sheet).
+    var onDiscoveryTap: ((CountryFeature) -> Void)? = nil
     @Binding var topTable: String
     let visitedFlags: Set<String>
     let allFeatures: [CountryFeature]
@@ -4952,17 +4967,24 @@ struct ProfileSheet: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(candidates, id: \.isoCode) { feature in
-                            VStack(spacing: 6) {
-                                FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 32)
-                                Text(feature.localizedName)
-                                    .font(.palatino(.caption, weight: .bold))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
-                                    .frame(maxWidth: 90)
+                            Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                onDiscoveryTap?(feature)
+                            } label: {
+                                VStack(spacing: 6) {
+                                    FlagLabel(emoji: feature.flagEmoji ?? "🌐", size: 32)
+                                    Text(feature.localizedName)
+                                        .font(.palatino(.caption, weight: .bold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                        .frame(maxWidth: 90)
+                                        .foregroundStyle(.primary)
+                                }
+                                .padding(.horizontal, 10).padding(.vertical, 12)
+                                .frame(width: 110)
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
                             }
-                            .padding(.horizontal, 10).padding(.vertical, 12)
-                            .frame(width: 110)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                            .buttonStyle(.plain)
                         }
                     }
                 }
