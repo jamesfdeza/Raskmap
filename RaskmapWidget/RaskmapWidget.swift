@@ -265,6 +265,7 @@ private struct MediumView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
+                Spacer(minLength: 0)
                 HStack(spacing: 5) {
                     Text("PRÓXIMO VIAJE")
                         .font(.custom("Satoshi-Bold", size: 9))
@@ -285,11 +286,16 @@ private struct MediumView: View {
                 }
 
                 if entry.nextDays >= 0 {
+                    let displayName: String = {
+                        let t = entry.nextTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !t.isEmpty { return t }
+                        return entry.nextName.isEmpty ? "—" : entry.nextName
+                    }()
                     HStack(alignment: .center, spacing: 12) {
                         FlagLabel(emoji: entry.nextFlag.isEmpty ? "🌐" : entry.nextFlag, size: 52)
                             .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(entry.nextName.isEmpty ? "—" : entry.nextName)
+                            Text(displayName)
                                 .font(.custom("Satoshi-Bold", size: 19))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)

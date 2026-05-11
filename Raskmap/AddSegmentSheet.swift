@@ -73,7 +73,8 @@ struct AddSegmentSheet: View {
     }()
 
     init(features: [CountryFeature], isForFuture: Bool, initialSegment: TripSegment? = nil,
-         existingSegments: [TripSegment] = [], onAdd: @escaping (TripSegment) -> Void) {
+         existingSegments: [TripSegment] = [], initialTransport: String? = nil,
+         onAdd: @escaping (TripSegment) -> Void) {
         self.features = features
         self.isForFuture = isForFuture
         self.initialSegment = initialSegment
@@ -104,6 +105,20 @@ struct AddSegmentSheet: View {
             } else {
                 _selectedIsoCodes = State(initialValue: Set(seg.isoCodes))
             }
+        } else if let pre = initialTransport, !pre.isEmpty {
+            _selectedTransport = State(initialValue: pre)
+            _step = State(initialValue: 2)
+            if !existingSegments.isEmpty {
+                let sortedSegs = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
+                let last = sortedSegs.last!
+                let lastEnd = cal.startOfDay(for: last.dateTo ?? last.dateFrom)
+                let nextDay = cal.date(byAdding: .day, value: 1, to: lastEnd) ?? lastEnd
+                let suggested = (last.dateTo != nil) ? lastEnd : nextDay
+                _dateFrom = State(initialValue: suggested)
+            } else {
+                _dateFrom = State(initialValue: isForFuture ? tomorrow : today)
+            }
+            _dateTo = State(initialValue: nil)
         } else if !existingSegments.isEmpty {
             // Smart default: el nuevo tramo arranca justo después del último
             // tramo existente (by chronology). Si el último seg tiene `dateTo`,

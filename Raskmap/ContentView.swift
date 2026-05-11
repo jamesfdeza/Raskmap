@@ -1178,11 +1178,8 @@ struct ContentView: View {
             flightModeButton()
 
             // Próximos countdown banner / ad banner — opposite side to menu.
-            // - Anuncio: solo fuera de modo vuelo y si no es Pro.
-            // - Contador: si toggle on y hay viaje próximo, se muestra TAMBIÉN
-            //   en modo vuelo (el usuario lo pidió así).
+            // Ambos solo en modo mapa (fuera de modo vuelo).
             if !flightMode, !isRaskmapPro {
-                // No Pro: mostrar anuncio
                 VStack(spacing: 0) {
                     if menuPositionIsTop { Spacer() }
                     BannerAdView()
@@ -1192,7 +1189,7 @@ struct ContentView: View {
                     if !menuPositionIsTop { Spacer() }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-            } else if showCountdown, let banner = cachedNextBanner {
+            } else if !flightMode, showCountdown, let banner = cachedNextBanner {
                 // Pro + contador activo
                 VStack {
                     if menuPositionIsTop { Spacer() }
@@ -8489,8 +8486,8 @@ struct AddTripSheet: View {
         .onDisappear {
             if !didSave { onCancel?() }
         }
-        .sheet(isPresented: $showAddSegment) {
-            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments) { seg in
+        .sheet(isPresented: $showAddSegment, onDismiss: { selectedTransport = nil }) {
+            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments, initialTransport: selectedTransport) { seg in
                 tripSegments.append(seg)
                 // Mantener el array siempre ordenado por fecha de vuelo,
                 // no por orden de inserción — el del 29 aparece antes del 30
