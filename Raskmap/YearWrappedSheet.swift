@@ -1511,23 +1511,29 @@ private struct SummaryStatGrid: View {
 
     @ViewBuilder
     private func statCard(big: String, label: String, sub: String?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(big)
-                .font(.custom("Satoshi-Bold", size: 40))
+                .font(.custom("Satoshi-Bold", size: 48))
                 .foregroundStyle(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
             Text(label.uppercased())
-                .font(.custom("Satoshi-Bold", size: 11))
+                .font(.custom("Satoshi-Bold", size: 14))
                 .tracking(2)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.white.opacity(0.75))
+                .minimumScaleFactor(0.8)
+                .lineLimit(1)
             if let sub, !sub.isEmpty {
                 Text(sub)
-                    .font(.custom("Satoshi-Regular", size: 12))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.custom("Satoshi-Regular", size: 15))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.vertical, 18)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color.white.opacity(0.12))
@@ -1633,16 +1639,13 @@ private struct ShareableSummaryCard: View {
                     Rectangle()
                         .fill(Color.white.opacity(0.25))
                         .frame(width: 220, height: 0.8)
-                    HStack(spacing: 18) {
-                        Text("🗺️").font(.system(size: 52))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Raskmap")
-                                .font(.custom("Satoshi-Bold", size: 44))
-                                .foregroundStyle(.white)
-                            Text("Tu mapa personal del mundo")
-                                .font(.custom("Satoshi-Regular", size: 22))
-                                .foregroundStyle(.white.opacity(0.75))
-                        }
+                    VStack(alignment: .center, spacing: 3) {
+                        Text("Raskmap")
+                            .font(.custom("Satoshi-Bold", size: 44))
+                            .foregroundStyle(.white)
+                        Text("Tu mapa personal")
+                            .font(.custom("Satoshi-Regular", size: 22))
+                            .foregroundStyle(.white.opacity(0.75))
                     }
                 }
                 .padding(.bottom, 110)
@@ -1674,7 +1677,7 @@ private struct ShareableSummaryCard: View {
         VStack(spacing: 20) {
             HStack(spacing: 10) {
                 Rectangle().fill(Color.white.opacity(0.55)).frame(width: 22, height: 2)
-                Text("MIS BANDERAS")
+                Text("MIS DESTINOS")
                     .font(.custom("Satoshi-Bold", size: 16))
                     .tracking(6)
                     .foregroundStyle(.white.opacity(0.85))
