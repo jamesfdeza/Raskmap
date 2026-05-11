@@ -45,10 +45,32 @@
 Cobertura por área tras C3: alerts 100%, onboarding 100%, settings 100%,
 logros 100%, wrapped 100%, widget 100%, empty states 100%, stats 100%.
 
-**Próxima sesión:** arrancar **Fase D (Modularización ContentView)** —
-extraer sheets a archivos propios (~12 000 → ~3 000 líneas). Riesgo medio,
-muy invasivo. Ver tabla detallada en sección 5.1 de la auditoría.
-Alternativa: pulir más detalles de UX/diseño antes de la refactorización.
+**Fase D (Modularización ContentView) — en progreso, primer chunk:**
+ContentView: 14 951 → 14 098 líneas (-853, -5.7%) tras 4 extracciones:
+
+- ✅ `Sheets/StatsBreakdownSheets.swift` (-169 líneas, commit `e55452e`):
+  AirportStatsSheet, AirlineStatsSheet, SeatStatsSheet, SeatPositionStatsSheet.
+- ✅ `Sheets/SettingsSubSheets.swift` (-227 líneas, commit `42e116b`):
+  SettingsInfoSheet, LegalInfoSheet, WidgetLockScreenSheet, WidgetWatchSheet.
+- ✅ `Sheets/ContactSheet.swift` (-206 líneas, commit `5c1afc0`):
+  ContactSheet + MailComposerView (UIViewControllerRepresentable de
+  MFMailComposeViewController).
+- ✅ `Sheets/SubscriptionSheet.swift` (-251 líneas, commit `501a3a5`):
+  SubscriptionSheet + constantes Raskmap Pro (StoreKit 2 + Restore).
+
+**Próxima sesión:** continuar **Fase D** con los sheets más grandes:
+1. `Sheets/ProfileSheet.swift` (~2000 líneas — el más grande, con
+   sub-structs MedalSlot/TopRegion).
+2. `Sheets/SettingsSheet.swift` (~1500 líneas).
+3. `Sheets/AddEditTripSheets.swift` (AddTripSheet + EditTripSheet, ~3000).
+4. `Sheets/ListSheets.swift` (StatusListSheet + FinalizadosListSheet +
+   AllCountriesSheet, ~2000).
+5. `Sheets/RouteWizardSheet.swift` (RouteWizardSheet + RoutePickerSheet +
+   AirlinePickerSheet, ~1500).
+6. `Sheets/TransportStatsSheet.swift` (TransportStatsSheet +
+   FlightLegsListSheet + TransportTripsListSheet, ~1500).
+
+Objetivo final: ContentView ~3000 líneas (root + mapCore + handlers).
 
 ### Lo último que se entregó (sesión 2026-05-11)
 - Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
