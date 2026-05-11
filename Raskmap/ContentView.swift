@@ -4895,10 +4895,16 @@ struct ProfileSheet: View {
         refreshPastTripsCache()
     }
 
-    /// Sugerencias de países sin visitar más cercanos a los visitados.
-    /// Heurística: por cada región (Europa/Asia/etc.) en la que ya tenga ≥1
-    /// visitado, propone hasta 6 candidatos ISO sin visitar de esa región.
-    /// Estable por ronda (ordenados por ISO) y dedup global.
+    /// Sugerencias de países sin visitar, **1 por región** (máx 9 cards):
+    /// Europa, Asia, África, Medio Oriente, Oceanía, Norteamérica, Caribe,
+    /// Sudamérica, Centroamérica — solo aparece la región si tienes ≥1
+    /// país visitado en ella.
+    ///
+    /// Para cada región se elige el unvisited cuyo **centro del bounding box
+    /// está más cerca de cualquier país visitado** (mismo bloque regional u
+    /// otro). En la práctica, esto prioriza fronterizos / próximos
+    /// geográficamente al cluster del usuario. Como fallback (ningún país
+    /// visitado a "distancia razonable"), cae al orden alfabético del ISO.
     private var discoveryCandidates: [CountryFeature] {
         let visited = Set(visitedIsoCodes)
         let regions: [Set<String>] = [
@@ -4912,19 +4918,40 @@ struct ProfileSheet: View {
             AchievementKind.visitedSudamerica.regionIsoCodes,
             AchievementKind.visitedCentroamerica.regionIsoCodes
         ]
+        // Pre-indexar centros (bbox midpoint) por ISO para O(1) lookup.
+        var centerByIso: [String: MKMapPoint] = [:]
+        centerByIso.reserveCapacity(allFeatures.count)
+        for f in allFeatures {
+            let r = f.boundingMapRect
+            centerByIso[f.isoCode] = MKMapPoint(x: r.midX, y: r.midY)
+        }
+        let visitedCenters: [MKMapPoint] = visited.compactMap { centerByIso[$0] }
+
+        func minDistance(toAnyVisitedFrom p: MKMapPoint) -> Double {
+            guard !visitedCenters.isEmpty else { return .greatestFiniteMagnitude }
+            var best = Double.greatestFiniteMagnitude
+            for v in visitedCenters {
+                let d = p.distance(to: v)
+                if d < best { best = d }
+            }
+            return best
+        }
+
         var picked: [String] = []
-        let pickedSet = NSMutableSet()
         for region in regions {
             let hasVisited = !region.isDisjoint(with: visited)
             guard hasVisited else { continue }
             let unvisited = region.subtracting(visited).filter { countingMode.counts($0) }
-            for iso in unvisited.sorted().prefix(2) {
-                if !pickedSet.contains(iso) {
-                    picked.append(iso)
-                    pickedSet.add(iso)
-                }
+            guard !unvisited.isEmpty else { continue }
+            // Mejor candidato = el centro más cercano a cualquier visitado.
+            // Sin centro indexado (no debería ocurrir): peso ∞ → al final.
+            let best = unvisited.min { a, b in
+                let da = centerByIso[a].map { minDistance(toAnyVisitedFrom: $0) } ?? .greatestFiniteMagnitude
+                let db = centerByIso[b].map { minDistance(toAnyVisitedFrom: $0) } ?? .greatestFiniteMagnitude
+                if da != db { return da < db }
+                return a < b  // tie-breaker estable por ISO
             }
-            if picked.count >= 6 { break }
+            if let pick = best { picked.append(pick) }
         }
         return picked.compactMap { iso in allFeatures.first(where: { $0.isoCode == iso }) }
     }
