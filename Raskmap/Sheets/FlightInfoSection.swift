@@ -26,7 +26,7 @@ struct FlightInfoSection: View {
 
     private let seatPositions: [(String, String)] = [("Pasillo", "pasillo"), ("Medio", "medio"), ("Ventana", "ventana")]
     private let classes: [(String, String)] = [("Turista", "turista"), ("Economy+", "economy+"), ("Business", "business"), ("First", "first")]
-    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+    private let accent = BrandColor.accent
 
     private var outboundLegCount: Int { max(0, outboundRoute.count - 1) }
     private var returnLegCount: Int { max(0, returnRoute.count - 1) }

@@ -668,7 +668,7 @@ struct ContentView: View {
                 VStack(spacing: 18) {
                     Image(systemName: "questionmark.circle.fill")
                         .font(.system(size: 44))
-                        .foregroundStyle(Color(red: 64/255, green: 114/255, blue: 212/255))
+                        .foregroundStyle(BrandColor.accent)
                     Text("Ayuda")
                         .font(.custom("Satoshi-Bold", size: 22))
                     Text("Si te faltan aeropuertos, aerolíneas o has tenido un bug, repórtalo en **Ajustes › Contacto**.")
@@ -684,7 +684,7 @@ struct ContentView: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(Color(red: 64/255, green: 114/255, blue: 212/255), in: RoundedRectangle(cornerRadius: 14))
+                            .background(BrandColor.accent, in: RoundedRectangle(cornerRadius: 14))
                     }.buttonStyle(.plain)
                 }
                 .padding(28)
@@ -1785,7 +1785,7 @@ struct ContentView: View {
         VStack(spacing: 14) {
             Image(systemName: "airplane.departure")
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Color(red: 64/255, green: 114/255, blue: 212/255).opacity(0.9))
+                .foregroundStyle(BrandColor.accent.opacity(0.9))
             VStack(spacing: 6) {
                 Text(title)
                     .font(.custom("Satoshi-Bold", size: 17))

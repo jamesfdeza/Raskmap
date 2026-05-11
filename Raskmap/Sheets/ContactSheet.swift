@@ -53,7 +53,7 @@ struct ContactSheet: View {
     @FocusState private var editorFocused: Bool
 
     private let maxChars = 600
-    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+    private let accent = BrandColor.accent
     private var subject: String { "Solicitud de \(username.isEmpty ? "usuario" : username)" }
     private var trimmed: String { messageText.trimmingCharacters(in: .whitespacesAndNewlines) }
 

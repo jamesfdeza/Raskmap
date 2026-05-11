@@ -295,7 +295,7 @@ struct TransportStatsSheet: View {
                         HStack(spacing: 12) {
                             Image(systemName: "airplane")
                                 .font(.system(size: 22))
-                                .foregroundStyle(Color(red: 64/255, green: 114/255, blue: 212/255))
+                                .foregroundStyle(BrandColor.accent)
                                 .frame(width: 36)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("KM VOLADOS").font(.system(size: 10, weight: .semibold))

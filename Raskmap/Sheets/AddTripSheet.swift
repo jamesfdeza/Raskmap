@@ -416,7 +416,7 @@ struct AddTripSheet: View {
             confirmVisits: $confirmVisits,
             confirmAirports: $confirmAirports,
             confirmAirlines: $confirmAirlines,
-            accent: Color(red: 64/255, green: 114/255, blue: 212/255),
+            accent: BrandColor.accent,
             onSave: onSave,
             onCancel: onCancel
         )

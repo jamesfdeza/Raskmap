@@ -480,7 +480,7 @@ struct RaskMapView: UIViewRepresentable {
             if let route = overlay as? MKGeodesicPolyline,
                flightRouteOverlays.contains(where: { $0 === route }) {
                 let renderer = MKPolylineRenderer(polyline: route)
-                let accent = UIColor(red: 64/255, green: 114/255, blue: 212/255, alpha: 1.0)
+                let accent = BrandColor.accentUI
                 renderer.strokeColor = accent.withAlphaComponent(0.85)
                 renderer.lineWidth = 1.6
                 renderer.lineCap = .round
@@ -558,7 +558,7 @@ struct RaskMapView: UIViewRepresentable {
                 view.isUserInteractionEnabled = false
                 // Reutilizar el dot si ya existe (evita churn de subviews al reusar celdas).
                 if view.subviews.isEmpty {
-                    let accent = UIColor(red: 64/255, green: 114/255, blue: 212/255, alpha: 1.0)
+                    let accent = BrandColor.accentUI
                     let dot = UIView(frame: view.bounds)
                     dot.tag = 1001
                     dot.backgroundColor = .white

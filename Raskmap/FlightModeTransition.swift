@@ -17,7 +17,7 @@ struct FlightModeTransition: View {
     @State private var pulseScale: CGFloat = 0.35
     @State private var pulseOpacity: Double = 0
 
-    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+    private let accent = BrandColor.accent
 
     var body: some View {
         ZStack {

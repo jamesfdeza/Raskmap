@@ -25,6 +25,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Brand colors
 
@@ -35,6 +36,11 @@ enum BrandColor {
     /// como `Color(red: 64/255, green: 114/255, blue: 212/255)`.
     /// Usado para botones primarios, flight mode, links, badges activos.
     static let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+
+    /// Variante UIColor del accent (mismo valor). Necesario para APIs
+    /// UIKit como `MKPolylineRenderer.strokeColor` que NO acepta
+    /// SwiftUI Color directamente.
+    static let accentUI = UIColor(red: 64/255, green: 114/255, blue: 212/255, alpha: 1.0)
 
     /// Azul más claro — variante del accent. Aparece en onboarding como
     /// `#53A3FE` (línea 1467 anterior a refactor). Para hover/active

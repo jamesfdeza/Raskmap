@@ -87,7 +87,7 @@ struct PlannedDatePickerSheet: View {
         selectedAirlines.map { "\($0.name) \($0.count)x" }.joined(separator: ", ")
     }
 
-    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+    private let accent = BrandColor.accent
 
     @ViewBuilder
     private func transportRow() -> some View {

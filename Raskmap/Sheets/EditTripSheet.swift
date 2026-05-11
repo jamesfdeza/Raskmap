@@ -502,7 +502,7 @@ struct EditTripSheet: View {
         dismiss()
     }
 
-    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+    private let accent = BrandColor.accent
 
     var body: some View {
         ZStack {

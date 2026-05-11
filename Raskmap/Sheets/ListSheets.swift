@@ -355,7 +355,7 @@ struct FinalizadosListSheet: View {
             Text(label)
                 .font(.custom("Satoshi-Bold", size: 13))
                 .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(active ? Color(red: 64/255, green: 114/255, blue: 212/255) : Color(.systemGray5),
+                .background(active ? BrandColor.accent : Color(.systemGray5),
                             in: Capsule())
                 .foregroundStyle(active ? .white : .primary)
         }

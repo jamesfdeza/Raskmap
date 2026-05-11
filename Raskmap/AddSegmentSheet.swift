@@ -278,7 +278,7 @@ struct AddSegmentSheet: View {
         }
     }
 
-    private let accent = Color(red: 64/255, green: 114/255, blue: 212/255)
+    private let accent = BrandColor.accent
 
     private var stepTitle: String {
         switch step {
