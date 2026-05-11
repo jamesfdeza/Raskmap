@@ -1375,6 +1375,29 @@ struct ContentView: View {
                         }
                     }
                 }
+                // Empty state: query no vacía pero no hay matches ni en viajes
+                // ni en países. Muestra mensaje en lugar de Lista vacía silenciosa.
+                if !searchText.isEmpty && matchingTrips.isEmpty
+                    && groupedSearchResults.allSatisfy({ $0.features.isEmpty }) {
+                    Section {
+                        VStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 36))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 32)
+                            Text("Sin resultados")
+                                .font(.palatino(.body, weight: .bold))
+                            Text("Prueba con otro nombre de país o viaje")
+                                .font(.palatino(.caption))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.bottom, 24)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                }
             }
             .listStyle(.plain)
             .scrollIndicators(.visible)
