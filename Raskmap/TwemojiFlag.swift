@@ -110,6 +110,7 @@ struct FlagLabel: View {
                 .font(.system(size: size))
                 .frame(width: size, height: size)
                 .minimumScaleFactor(0.5)
+                .accessibilityLabel("Bandera")
         }
     }
 }

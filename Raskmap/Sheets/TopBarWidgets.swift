@@ -35,6 +35,10 @@ struct StatBadge: View {
         .frame(minWidth: 70)
         .padding(.vertical, 9)
         .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.cell, style: .continuous))
+        // VoiceOver: combina los dos textos en una sola cadena legible
+        // en lugar de leer "42" y "Visitados" como elementos separados.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(value) \(label)")
     }
 }
 
@@ -54,6 +58,8 @@ struct LegendItem: View {
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Leyenda: \(label)")
     }
 }
 
