@@ -18,6 +18,9 @@ import SwiftUI
 import SwiftData
 import UIKit
 import StoreKit
+import ActivityKit
+import UserNotifications
+import WidgetKit
 
 // MARK: - Pantalla de ajustes
 struct SettingsSheet: View {
