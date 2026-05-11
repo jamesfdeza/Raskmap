@@ -4897,14 +4897,23 @@ struct ProfileSheet: View {
 
     /// Sugerencias de países sin visitar, **1 por región** (máx 9 cards):
     /// Europa, Asia, África, Medio Oriente, Oceanía, Norteamérica, Caribe,
-    /// Sudamérica, Centroamérica — solo aparece la región si tienes ≥1
-    /// país visitado en ella.
+    /// Sudamérica, Centroamérica. Siempre se evalúan TODAS las regiones,
+    /// incluso aquellas sin visitas previas (el usuario quiere descubrir
+    /// Oceanía aunque no haya estado allí nunca).
     ///
     /// Para cada región se elige el unvisited cuyo **centro del bounding box
-    /// está más cerca de cualquier país visitado** (mismo bloque regional u
-    /// otro). En la práctica, esto prioriza fronterizos / próximos
-    /// geográficamente al cluster del usuario. Como fallback (ningún país
-    /// visitado a "distancia razonable"), cae al orden alfabético del ISO.
+    /// está más cerca de cualquier país visitado** (priorización por
+    /// proximidad geográfica → fronterizos a tu cluster). Fallback alfabético
+    /// por ISO cuando no hay visitas o todos quedan a igual distancia.
+    ///
+    /// Garantías:
+    /// · **No repeticiones** — si un país pertenece a varias regiones (p.ej.
+    ///   ISR ∈ Asia ∩ Medio Oriente) solo la primera región que lo elija
+    ///   se lo queda; el resto buscan otra opción de su pool.
+    /// · **Sanctioned ISOs excluidos** — países que no queremos recomendar
+    ///   por motivos políticos/éticos (lista en `sanctionedDiscoveryISOs`).
+    private static let sanctionedDiscoveryISOs: Set<String> = ["ISR"]
+
     private var discoveryCandidates: [CountryFeature] {
         let visited = Set(visitedIsoCodes)
         let regions: [Set<String>] = [
@@ -4938,20 +4947,26 @@ struct ProfileSheet: View {
         }
 
         var picked: [String] = []
+        var pickedSet = Set<String>()
+        let sanctioned = Self.sanctionedDiscoveryISOs
         for region in regions {
-            let hasVisited = !region.isDisjoint(with: visited)
-            guard hasVisited else { continue }
-            let unvisited = region.subtracting(visited).filter { countingMode.counts($0) }
-            guard !unvisited.isEmpty else { continue }
-            // Mejor candidato = el centro más cercano a cualquier visitado.
-            // Sin centro indexado (no debería ocurrir): peso ∞ → al final.
-            let best = unvisited.min { a, b in
+            // Pool por región: ISOs - visitados - sancionados - ya elegidos.
+            let pool = region
+                .subtracting(visited)
+                .subtracting(sanctioned)
+                .subtracting(pickedSet)
+                .filter { countingMode.counts($0) }
+            guard !pool.isEmpty else { continue }
+            let best = pool.min { a, b in
                 let da = centerByIso[a].map { minDistance(toAnyVisitedFrom: $0) } ?? .greatestFiniteMagnitude
                 let db = centerByIso[b].map { minDistance(toAnyVisitedFrom: $0) } ?? .greatestFiniteMagnitude
                 if da != db { return da < db }
                 return a < b  // tie-breaker estable por ISO
             }
-            if let pick = best { picked.append(pick) }
+            if let pick = best {
+                picked.append(pick)
+                pickedSet.insert(pick)
+            }
         }
         return picked.compactMap { iso in allFeatures.first(where: { $0.isoCode == iso }) }
     }
