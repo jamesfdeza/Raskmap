@@ -423,6 +423,10 @@ struct confirmCardContent: View {
                         .frame(width: 34, height: 34)
                         .background(Color(.systemGray5), in: Circle())
                         .foregroundStyle(.primary)
+                        // Hit area expandida a 44pt mínimo (Apple HIG) sin
+                        // cambiar el círculo visual de 34pt.
+                        .frame(minWidth: TapTarget.min, minHeight: TapTarget.min)
+                        .contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 Text("\(count.wrappedValue)")
                     .font(.custom("Satoshi-Bold", size: 16))
@@ -432,6 +436,8 @@ struct confirmCardContent: View {
                         .frame(width: 34, height: 34)
                         .background(accent, in: Circle())
                         .foregroundStyle(.white)
+                        .frame(minWidth: TapTarget.min, minHeight: TapTarget.min)
+                        .contentShape(Rectangle())
                 }.buttonStyle(.plain)
             }
         }
