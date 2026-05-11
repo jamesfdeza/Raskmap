@@ -2239,29 +2239,46 @@ struct ContentView: View {
                     removeFromTopTable(flagEmojis: Set([emoji]))
                 }
             }
-            // When unmarking visited: delete past trips, keep future trips
+            // Diferenciamos dos intenciones distintas que comparten newStatus = .none:
+            //  · "Eliminar de próximos" (previousStatus == .wantToVisit): el usuario
+            //    quiere QUITAR el país de próximos, por lo que también hay que
+            //    borrar TODOS los trips futuros de ese país (sin ellos no se
+            //    revivirá el .wantToVisit).
+            //  · "Desmarcar visitado/vivido": preservamos trips futuros y, si los
+            //    hay, el país pasa a .wantToVisit.
+            // Antes este bloque siempre conservaba los trips futuros, lo que
+            // hacía que "eliminar de próximos" reanimara el país inmediatamente.
             if newStatus == .none {
                 let today = Calendar.current.startOfDay(for: Date())
                 var deletedIDs: Set<ObjectIdentifier> = []
                 var hasFutureTrip = false
+                let removingFromProximos = (previousStatus == .wantToVisit)
 
                 for trip in trips where trip.isoCode == country.isoCode {
                     let tripDay = Calendar.current.startOfDay(for: trip.dateFrom)
-                    if tripDay > today {
-                        hasFutureTrip = true
+                    let shouldDelete: Bool
+                    if removingFromProximos {
+                        // Purga total: no queremos que ningún trip futuro
+                        // resurrecte el .wantToVisit más abajo.
+                        shouldDelete = true
+                    } else if tripDay <= today {
+                        shouldDelete = true
                     } else {
-                        // Delete past trip and any grouped siblings
-                        if let groupID = trip.segmentGroupID {
-                            let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.segmentGroupID == groupID })
-                            let siblings = modelContext.fetchOrWarn(desc, fallback: [trip])
-                            for s in siblings {
-                                guard deletedIDs.insert(ObjectIdentifier(s)).inserted else { continue }
-                                modelContext.delete(s)
-                            }
-                        } else {
-                            guard deletedIDs.insert(ObjectIdentifier(trip)).inserted else { continue }
-                            modelContext.delete(trip)
+                        shouldDelete = false
+                        hasFutureTrip = true
+                    }
+                    guard shouldDelete else { continue }
+                    // Borrar trip y, si pertenece a un grupo de segmentos, sus hermanos.
+                    if let groupID = trip.segmentGroupID {
+                        let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.segmentGroupID == groupID })
+                        let siblings = modelContext.fetchOrWarn(desc, fallback: [trip])
+                        for s in siblings {
+                            guard deletedIDs.insert(ObjectIdentifier(s)).inserted else { continue }
+                            modelContext.delete(s)
                         }
+                    } else {
+                        guard deletedIDs.insert(ObjectIdentifier(trip)).inserted else { continue }
+                        modelContext.delete(trip)
                     }
                 }
 
@@ -2273,6 +2290,7 @@ struct ContentView: View {
                     country.plannedDate = nil
                     country.plannedDateTo = nil
                     country.transport = nil
+                    country.plannedTitle = nil
                     country.visitCount = 0
                 }
             }
@@ -9972,6 +9990,11 @@ struct FlightLegsListSheet: View {
     }()
 
     /// Un tramo de avión = despegue + aterrizaje.
+    /// `isSynthetic` marca rows generados por fallback (segmento ✈️ sin
+    /// aeropuertos definidos o legacy con datos insuficientes). Sirven para
+    /// que `legs.count` coincida con la barra "Avión" de TransportStatsSheet,
+    /// que cuenta `max(1, ...)` por segmento — si ocultáramos estos rows el
+    /// título mostraría menos vuelos que la barra.
     private struct FlightLeg: Identifiable {
         let id = UUID()
         let originIATA: String
@@ -9981,20 +10004,27 @@ struct FlightLegsListSheet: View {
         let tripIsoCode: String
         let airline: String?
         let direction: Direction
+        let isSynthetic: Bool
         enum Direction { case outbound, returning }
     }
 
+    /// Filtro alineado con `TransportStatsSheet.pastTrips` (effectiveEndDate <= today)
+    /// para que el conteo `legs.count` coincida con la barra "Avión" de la
+    /// pantalla anterior.
     private var legs: [FlightLeg] {
         let today = Calendar.current.startOfDay(for: Date())
         var result: [FlightLeg] = []
         for trip in trips where !trip.isSegmentChild {
-            guard Calendar.current.startOfDay(for: trip.dateFrom) <= today else { continue }
+            guard Calendar.current.startOfDay(for: trip.effectiveEndDate) <= today else { continue }
             let segs = trip.tripSegments.filter { $0.transport == "✈️" }
             if !segs.isEmpty {
                 for seg in segs {
                     let airline = seg.airlines?.first?.name
+                    let aps = seg.airports ?? []
+                    let raps = seg.returnAirports ?? []
+                    var addedAny = false
                     // Outbound
-                    if let aps = seg.airports, aps.count >= 2 {
+                    if aps.count >= 2 {
                         let outDate = seg.dateFrom
                         for i in 0..<(aps.count - 1) {
                             result.append(FlightLeg(
@@ -10004,12 +10034,14 @@ struct FlightLegsListSheet: View {
                                 tripTitle: trip.title,
                                 tripIsoCode: trip.isoCode,
                                 airline: airline,
-                                direction: .outbound
+                                direction: .outbound,
+                                isSynthetic: false
                             ))
+                            addedAny = true
                         }
                     }
                     // Return
-                    if let raps = seg.returnAirports, raps.count >= 2 {
+                    if raps.count >= 2 {
                         let retDate = seg.dateTo ?? seg.dateFrom
                         for i in 0..<(raps.count - 1) {
                             result.append(FlightLeg(
@@ -10019,19 +10051,36 @@ struct FlightLegsListSheet: View {
                                 tripTitle: trip.title,
                                 tripIsoCode: trip.isoCode,
                                 airline: airline,
-                                direction: .returning
+                                direction: .returning,
+                                isSynthetic: false
                             ))
+                            addedAny = true
                         }
                     }
+                    // Fallback: ✈️ sin aeropuertos rellenos. counts.bump usa
+                    // max(1, outLegs+retLegs) para estos casos, así que
+                    // generamos un row sintético para no perder el conteo.
+                    if !addedAny {
+                        result.append(FlightLeg(
+                            originIATA: "",
+                            destIATA: "",
+                            date: seg.dateFrom,
+                            tripTitle: trip.title,
+                            tripIsoCode: trip.isoCode,
+                            airline: airline,
+                            direction: .outbound,
+                            isSynthetic: true
+                        ))
+                    }
                 }
-            } else if trip.transport == "✈️", trip.tripAirports.count >= 2 {
-                // Legacy sin segments — no tenemos orden real de la ruta,
-                // así que representamos los pares deducibles como una sola
-                // fila "A ↔ B" con la fecha del trip.
-                let iatas = trip.tripAirports.map { $0.iata }
+            } else if trip.transport == "✈️" {
+                // Legacy sin segments. counts.bump usa max(1, totalTouches/2).
+                // Generamos el mismo número de rows aquí.
+                let aps = trip.tripAirports
+                let totalTouches = aps.reduce(0) { $0 + $1.count }
+                let numLegs = max(1, totalTouches / 2)
+                let iatas = aps.map { $0.iata }
                 if iatas.count == 2 {
-                    let totalTouches = trip.tripAirports.reduce(0) { $0 + $1.count }
-                    let numLegs = max(1, totalTouches / 2)
                     for i in 0..<numLegs {
                         result.append(FlightLeg(
                             originIATA: i % 2 == 0 ? iatas[0] : iatas[1],
@@ -10040,21 +10089,42 @@ struct FlightLegsListSheet: View {
                             tripTitle: trip.title,
                             tripIsoCode: trip.isoCode,
                             airline: trip.tripAirlines.first?.name,
-                            direction: i % 2 == 0 ? .outbound : .returning
+                            direction: i % 2 == 0 ? .outbound : .returning,
+                            isSynthetic: false
+                        ))
+                    }
+                } else if iatas.count > 2 {
+                    // >2 aeropuertos deduplicados sin orden fiable: generamos
+                    // numLegs rows alternando consecutivos para que el conteo
+                    // coincida con counts.bump(...).
+                    for i in 0..<numLegs {
+                        let oIdx = i % iatas.count
+                        let dIdx = (i + 1) % iatas.count
+                        result.append(FlightLeg(
+                            originIATA: iatas[oIdx],
+                            destIATA: iatas[dIdx],
+                            date: trip.dateFrom,
+                            tripTitle: trip.title,
+                            tripIsoCode: trip.isoCode,
+                            airline: trip.tripAirlines.first?.name,
+                            direction: i % 2 == 0 ? .outbound : .returning,
+                            isSynthetic: false
                         ))
                     }
                 } else {
-                    // >2 aeropuertos deduplicados: como no hay orden fiable,
-                    // mostramos un único "resumen" con los extremos.
-                    result.append(FlightLeg(
-                        originIATA: iatas.first ?? "",
-                        destIATA: iatas.last ?? "",
-                        date: trip.dateFrom,
-                        tripTitle: trip.title,
-                        tripIsoCode: trip.isoCode,
-                        airline: trip.tripAirlines.first?.name,
-                        direction: .outbound
-                    ))
+                    // 0 ó 1 aeropuerto: numLegs rows sintéticos.
+                    for _ in 0..<numLegs {
+                        result.append(FlightLeg(
+                            originIATA: iatas.first ?? "",
+                            destIATA: "",
+                            date: trip.dateFrom,
+                            tripTitle: trip.title,
+                            tripIsoCode: trip.isoCode,
+                            airline: trip.tripAirlines.first?.name,
+                            direction: .outbound,
+                            isSynthetic: true
+                        ))
+                    }
                 }
             }
         }
@@ -10080,21 +10150,35 @@ struct FlightLegsListSheet: View {
                 }
                 ForEach(legs) { leg in
                     HStack(spacing: 12) {
-                        // Banderas origen → destino
-                        HStack(spacing: 4) {
-                            FlagLabel(emoji: flagEmoji(forIATA: leg.originIATA), size: 20)
-                            Text("→").font(.caption).foregroundStyle(.secondary)
-                            FlagLabel(emoji: flagEmoji(forIATA: leg.destIATA), size: 20)
+                        // Banderas origen → destino. En filas sintéticas
+                        // (segmento ✈️ sin aeropuertos) caemos al icono ✈️.
+                        if leg.isSynthetic {
+                            Image(systemName: "airplane")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 56, alignment: .center)
+                        } else {
+                            HStack(spacing: 4) {
+                                FlagLabel(emoji: flagEmoji(forIATA: leg.originIATA), size: 20)
+                                Text("→").font(.caption).foregroundStyle(.secondary)
+                                FlagLabel(emoji: flagEmoji(forIATA: leg.destIATA), size: 20)
+                            }
                         }
                         VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) {
-                                Text(leg.originIATA)
+                            if leg.isSynthetic {
+                                Text(leg.tripTitle?.isEmpty == false ? (leg.tripTitle ?? "") : "Vuelo sin aeropuertos")
                                     .font(.palatino(.body, weight: .bold))
-                                Image(systemName: "arrow.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(leg.destIATA)
-                                    .font(.palatino(.body, weight: .bold))
+                                    .lineLimit(1)
+                            } else {
+                                HStack(spacing: 6) {
+                                    Text(leg.originIATA)
+                                        .font(.palatino(.body, weight: .bold))
+                                    Image(systemName: "arrow.right")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text(leg.destIATA)
+                                        .font(.palatino(.body, weight: .bold))
+                                }
                             }
                             HStack(spacing: 6) {
                                 Text(Self.fmt.string(from: leg.date))

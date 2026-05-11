@@ -134,17 +134,22 @@ struct RaskMapView: UIViewRepresentable {
             let allPolygons = features.flatMap { $0.polygons }
             let statusSnap = statusMap
             let highlightSnap = highlightedIsoCode
-            
+
             let showBucketSnap = showBucketList
 
-            // Precalentar CGPaths en background — solo para países con color (los .none no necesitan path)
-            let coloredIsoCodes = Self.coloredIsoCodes(from: statusMap,
-                                                        showBucketList: showBucketSnap)
-            let coloredPolygons = allPolygons.filter { coloredIsoCodes.contains($0.isoCode) }
-
-            DispatchQueue.global(qos: .userInitiated).async { [weak coordinator = coord] in
+            // Pre-calentar CGPaths en background para TODOS los polígonos
+            // (no solo los coloreados). Antes solo se calentaban los coloreados,
+            // lo que provocaba que al hacer pan los polígonos `.none` que
+            // entraban en vista cayeran al fallback `rendererFor(_:)` (línea 477)
+            // y MapKit computase el path en el primer `draw` — visible como
+            // un "pop" de color/render al desplazar.
+            // El coste extra es una sola pasada de allocación de
+            // MKPolygonRenderer + path en background; el cache ya estaba
+            // dimensionado para crecer hasta este tamaño con uso normal.
+            DispatchQueue.global(qos: .utility).async { [weak coordinator = coord] in
                 var built: [(ObjectIdentifier, MKPolygonRenderer)] = []
-                for polygon in coloredPolygons {
+                built.reserveCapacity(allPolygons.count)
+                for polygon in allPolygons {
                     let pid = ObjectIdentifier(polygon)
                     let renderer = MKPolygonRenderer(polygon: polygon)
                     let status = statusSnap[polygon.isoCode] ?? .none
@@ -185,26 +190,26 @@ struct RaskMapView: UIViewRepresentable {
                     }
                 }
             }
-            // Refresh new location country
+            // Refresh new location country. Como ahora el pre-warm cubre TODOS
+            // los polígonos, el branch "cache nil" es solo un fallback para
+            // la race window entre `mapView.addOverlays` y la finalización del
+            // pre-warm; ya no hacemos remove+add (causa flicker de tiles).
             if let new = newLocationIso, let feature = features.first(where: { $0.isoCode == new }) {
                 let status = coord.lastKnownStatus[new] ?? .none
                 let isHL = new == coord.lastHighlighted
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
-                    if coord.rendererCache[pid] == nil {
-                        let renderer = MKPolygonRenderer(polygon: polygon)
-                        Self.applyStyle(status: status, to: renderer, highlighted: isHL,
-                                        showBucketList: showBucketList,
-                                        isUserHere: true)
+                    let renderer: MKPolygonRenderer
+                    if let cached = coord.rendererCache[pid] {
+                        renderer = cached
+                    } else {
+                        renderer = MKPolygonRenderer(polygon: polygon)
                         coord.rendererCache[pid] = renderer
-                        mapView.removeOverlay(polygon)
-                        mapView.addOverlay(polygon, level: .aboveRoads)
-                    } else if let renderer = coord.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: isHL,
-                                        showBucketList: showBucketList,
-                                        isUserHere: true)
-                        renderer.setNeedsDisplay()
                     }
+                    Self.applyStyle(status: status, to: renderer, highlighted: isHL,
+                                    showBucketList: showBucketList,
+                                    isUserHere: true)
+                    renderer.setNeedsDisplay()
                 }
             }
         }
@@ -236,21 +241,19 @@ struct RaskMapView: UIViewRepresentable {
                 let status = coord.lastKnownStatus[new] ?? .none
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
-                    // Si es .none, añadir temporalmente para mostrar el borde
-                    if coord.rendererCache[pid] == nil {
-                        let renderer = MKPolygonRenderer(polygon: polygon)
-                        Self.applyStyle(status: status, to: renderer, highlighted: true,
-                                        showBucketList: showBucketList)
-                        _ = renderer.path
+                    // Con pre-warm completo, cache normalmente hit. Si miss
+                    // (race con tap muy rápido), creamos sin remove+add para
+                    // no invalidar tiles innecesariamente.
+                    let renderer: MKPolygonRenderer
+                    if let cached = coord.rendererCache[pid] {
+                        renderer = cached
+                    } else {
+                        renderer = MKPolygonRenderer(polygon: polygon)
                         coord.rendererCache[pid] = renderer
-                        // Overlay ya existe — solo invalidar para que MapKit pida el renderer
-                        mapView.removeOverlay(polygon)
-                        mapView.addOverlay(polygon, level: .aboveRoads)
-                    } else if let renderer = coord.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: true,
-                                        showBucketList: showBucketList)
-                        renderer.setNeedsDisplay()
                     }
+                    Self.applyStyle(status: status, to: renderer, highlighted: true,
+                                    showBucketList: showBucketList)
+                    renderer.setNeedsDisplay()
                 }
             }
             else if newHighlight == nil, let locIso = coord.lastLocationIso,
@@ -258,20 +261,17 @@ struct RaskMapView: UIViewRepresentable {
                 let status = coord.lastKnownStatus[locIso] ?? .none
                 for polygon in feature.polygons {
                     let pid = ObjectIdentifier(polygon)
-                    if let renderer = coord.rendererCache[pid] {
-                        Self.applyStyle(status: status, to: renderer, highlighted: false,
-                                        showBucketList: showBucketList,
-                                        isUserHere: true)
-                        renderer.setNeedsDisplay()
+                    let renderer: MKPolygonRenderer
+                    if let cached = coord.rendererCache[pid] {
+                        renderer = cached
                     } else {
-                        let renderer = MKPolygonRenderer(polygon: polygon)
-                        Self.applyStyle(status: status, to: renderer, highlighted: false,
-                                        showBucketList: showBucketList,
-                                        isUserHere: true)
+                        renderer = MKPolygonRenderer(polygon: polygon)
                         coord.rendererCache[pid] = renderer
-                        mapView.removeOverlay(polygon)
-                        mapView.addOverlay(polygon, level: .aboveRoads)
                     }
+                    Self.applyStyle(status: status, to: renderer, highlighted: false,
+                                    showBucketList: showBucketList,
+                                    isUserHere: true)
+                    renderer.setNeedsDisplay()
                 }
             }
         }
@@ -292,40 +292,27 @@ struct RaskMapView: UIViewRepresentable {
         for isoCode in changed {
             guard let feature = features.first(where: { $0.isoCode == isoCode }) else { continue }
             let newStatus = newMap[isoCode] ?? .none
-            let oldStatus = oldMap[isoCode] ?? .none
             let isHighlighted = isoCode == coord.lastHighlighted
-            let isNowColored = Self.isColored(newStatus, showBucketList: showBucketSnap)
-            let wasColored   = Self.isColored(oldStatus, showBucketList: showBucketSnap)
 
+            // Con TODOS los polígonos ya añadidos al mapa desde initial load y
+            // TODOS pre-warmados en cache, cualquier cambio de status (incluido
+            // .none → coloured y coloured → .none) se resuelve actualizando el
+            // renderer cacheado + setNeedsDisplay. Antes hacíamos remove+add de
+            // overlay en transiciones a/desde .none, lo que invalidaba todos
+            // los tiles del bounding box del polígono y provocaba flicker.
             for polygon in feature.polygons {
                 let pid = ObjectIdentifier(polygon)
-                if isNowColored {
-                    if let renderer = coord.rendererCache[pid] {
-                        // Ya existe — solo actualizar color
-                        Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                        showBucketList: showBucketSnap)
-                        renderer.setNeedsDisplay()
-                    } else {
-                        // Añadir nuevo overlay para este país
-                        let renderer = MKPolygonRenderer(polygon: polygon)
-                        Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                        showBucketList: showBucketSnap)
-                        coord.rendererCache[pid] = renderer
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            _ = renderer.path
-                            DispatchQueue.main.async { mapView.addOverlay(polygon, level: .aboveRoads) }
-                        }
-                    }
-                } else if wasColored && !isHighlighted {
-                    // Pasó a .none — quitar del cache para que MapKit pida renderer limpio
-                    coord.rendererCache.removeValue(forKey: pid)
-                    mapView.removeOverlay(polygon)
-                    mapView.addOverlay(polygon, level: .aboveRoads)
-                } else if let renderer = coord.rendererCache[pid] {
-                    Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
-                                    showBucketList: showBucketSnap)
-                    renderer.setNeedsDisplay()
+                let renderer: MKPolygonRenderer
+                if let cached = coord.rendererCache[pid] {
+                    renderer = cached
+                } else {
+                    // Race con pre-warm: crear sin remove+add.
+                    renderer = MKPolygonRenderer(polygon: polygon)
+                    coord.rendererCache[pid] = renderer
                 }
+                Self.applyStyle(status: newStatus, to: renderer, highlighted: isHighlighted,
+                                showBucketList: showBucketSnap)
+                renderer.setNeedsDisplay()
             }
         }
     }
