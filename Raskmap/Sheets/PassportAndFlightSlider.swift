@@ -92,7 +92,9 @@ struct PassportPickerSheet: View {
     }
 }
 
-private struct PassportSelectableCard: View {
+// `internal` (default access) — ContentView lo usa desde
+// onboardingSheet() para mostrar el grid de pasaportes seleccionables.
+struct PassportSelectableCard: View {
     let key: String
     let isSelected: Bool
 
