@@ -60,6 +60,11 @@ struct AddSegmentSheet: View {
 
     // When editing an existing segment
     @State private var didSetupInitial = false
+    /// True mientras esperamos que el usuario complete el RoutePicker tras
+    /// haber abierto AddSegmentSheet con plantilla ✈️. Si cancela sin elegir
+    /// aeropuertos, dismiss-eamos la hoja entera para evitar dejarle en un
+    /// step intermedio incongruente.
+    @State private var awaitingTemplateRoute = false
     private let initialSegment: TripSegment?
     private let initialTransportRaw: String?
 
@@ -109,11 +114,13 @@ struct AddSegmentSheet: View {
             }
         } else if let pre = initialTransport, !pre.isEmpty {
             _selectedTransport = State(initialValue: pre)
-            // ✈️ usa RoutePicker como UI de "tramo"; el step 2 (countries) no
-            // aplica. Mantenemos step=1 detrás y abrimos RoutePicker en onAppear;
-            // si el usuario cancela, queda en step 1 con ✈️ marcado para elegir
-            // otro transporte si quiere. Para no-✈️ saltamos directamente a step 2.
-            _step = State(initialValue: pre == "✈️" ? 1 : 2)
+            // Plantilla rápida: saltamos directo a step 2 (countries para
+            // no-✈️, placeholder para ✈️). NUNCA renderizamos step 1 — el
+            // usuario ya eligió el transporte vía plantilla y no queremos
+            // que vea el selector de transporte de nuevo.
+            // Para ✈️ el step 2 muestra un placeholder mientras RoutePicker
+            // se abre automáticamente en onAppear.
+            _step = State(initialValue: 2)
             if !existingSegments.isEmpty {
                 let sortedSegs = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
                 let last = sortedSegs.last!
@@ -191,6 +198,11 @@ struct AddSegmentSheet: View {
                     if isEditing {
                         // En modo edición no hay flujo creación al que volver.
                         Button("Cancelar") { dismiss() }.font(.palatino(.body))
+                    } else if initialTransportRaw != nil && step <= 2 {
+                        // Plantilla rápida: no permitimos volver a step 1
+                        // (selector de transporte) porque el usuario ya
+                        // eligió el medio vía plantilla.
+                        Button("Cancelar") { dismiss() }.font(.palatino(.body))
                     } else if step > 1 {
                         Button("Atrás") { step -= 1 }.font(.palatino(.body))
                     } else {
@@ -219,21 +231,32 @@ struct AddSegmentSheet: View {
             // reuse del @State entre presentaciones del sheet.
             if initialSegment == nil, let pre = initialTransportRaw, !pre.isEmpty {
                 if selectedTransport != pre { selectedTransport = pre }
-                if pre == "✈️" {
-                    // Para ✈️: auto-abrir RoutePicker (UI nativa para vuelos).
-                    // Step queda en 1 detrás; al completar RoutePicker pasa a 3.
-                    // Si cancela, regresa a step 1 con ✈️ marcado.
-                    if segmentAirports.isEmpty { showRoutePicker = true }
-                } else {
-                    if step != 2 { step = 2 }
+                if step != 2 { step = 2 }
+                if pre == "✈️", segmentAirports.isEmpty {
+                    // Marcamos el flag ANTES de presentar para que el onDismiss
+                    // del RoutePicker pueda discriminar cancel vs complete.
+                    awaitingTemplateRoute = true
+                    showRoutePicker = true
                 }
             }
         }
-        .sheet(isPresented: $showRoutePicker) {
+        .sheet(isPresented: $showRoutePicker, onDismiss: {
+            // Si veníamos de plantilla ✈️ y el usuario canceló sin elegir
+            // aeropuertos, no tiene sentido quedarse en la hoja (step 2 sin
+            // countries posibles, step 3 sin ruta). Cerramos toda la hoja.
+            if awaitingTemplateRoute, segmentAirports.isEmpty {
+                awaitingTemplateRoute = false
+                dismiss()
+            } else {
+                awaitingTemplateRoute = false
+            }
+        }) {
             RouteWizardSheet(airports: $segmentAirports, returnAirports: $segmentReturnAirports,
                              airlines: $segmentAirlines, hasLayover: $segmentHasLayover) {
                 deriveFlightCountries()
                 step = 3
+                // Completó la ruta — ya no estamos "esperando".
+                awaitingTemplateRoute = false
             }
         }
         .appColorScheme()
@@ -376,6 +399,25 @@ struct AddSegmentSheet: View {
     // MARK: - Step 2: Countries
     @ViewBuilder
     private func countriesStep() -> some View {
+        // Para ✈️ desde plantilla: el step 2 (country list) no aplica — el
+        // tramo se define por aeropuertos vía RoutePicker, que se abre solo.
+        // Mostramos un placeholder mientras el RoutePicker se presenta encima
+        // y/o el usuario lo cancela (en cuyo caso dismiss-eamos toda la hoja).
+        if selectedTransport == "✈️" && segmentAirports.isEmpty {
+            VStack(spacing: 14) {
+                ProgressView().scaleEffect(1.1)
+                Text("Abriendo selector de ruta…")
+                    .font(.palatino(.caption))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            countriesStepBody()
+        }
+    }
+
+    @ViewBuilder
+    private func countriesStepBody() -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(selectedTransport ?? "🌍").font(.system(size: 22))
