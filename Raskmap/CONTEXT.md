@@ -5,7 +5,30 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada
+### Última acción completada (2026-05-11, tarde)
+**Fase D — 7 sheets extraídos a `Raskmap/Sheets/` + 2 hotfixes de import:**
+
+- 7 archivos nuevos bajo `Raskmap/Sheets/` (ver tabla más abajo).
+- ContentView.swift: 14 951 → **11 109 líneas (-25.7%)**.
+- Hotfix `9e4e7bc`: `import CoreLocation` + `import MapKit` en
+  `TransportStatsSheets.swift` (haversine usa CLLocationCoordinate2D).
+- Hotfix `6bbcae3`: `import UIKit` en `ListSheets.swift`
+  (UIActivityViewController para compartir trips).
+- Build OK tras los hotfixes.
+
+**Archivos en `Raskmap/Sheets/` (orden de creación):**
+
+| Archivo | Líneas | Commit |
+|---|---|---|
+| `StatsBreakdownSheets.swift` | 183 | `e55452e` |
+| `SettingsSubSheets.swift` | 243 | `42e116b` |
+| `ContactSheet.swift` | 220 | `5c1afc0` |
+| `SubscriptionSheet.swift` | 266 | `501a3a5` |
+| `RouteWizardSheet.swift` | 922 | `ef7b284` |
+| `TransportStatsSheets.swift` | 1 185 | `cd5d15a` + `9e4e7bc` |
+| `ListSheets.swift` | 945 | `0889454` + `6bbcae3` |
+
+### Acción completada anterior (2026-05-11, mañana)
 **Fase A (App Store readiness) — parcial:**
 - ✅ A1 — `IPHONEOS_DEPLOYMENT_TARGET` 26.2 → 17.0 (commit `c24d8f1`).
 - ✅ A2 — `PrivacyInfo.xcprivacy` añadido a app + widget (mismo commit).
@@ -67,16 +90,40 @@ Fix intermedio (`04d96e6`): `raskmapProLifetimeID/raskmapProAllIDs`
 cambiados de `private` a `internal` para cross-file + reemplazo de
 `%lld%%` por `%@` en una key del catalog (warning Xcode 16).
 
-**Próxima sesión:** continuar **Fase D** con los sheets restantes:
-1. `Sheets/ProfileSheet.swift` (~2000 líneas — el más grande).
-2. `Sheets/SettingsSheet.swift` (~900 líneas tras quitar los sub-sheets).
-3. `Sheets/AddEditTripSheets.swift` (AddTripSheet + EditTripSheet, ~3000).
-4. `Sheets/AllCountriesSheet.swift` (~700 líneas).
-5. `Sheets/LogrosSheet.swift` (~300 líneas).
-6. `Sheets/PlannedDatePickerSheet.swift` (~400 líneas).
-7. Otros sheets pequeños (Quadrant, Medallero, Multi*, Subjective*).
+**Próxima sesión:** continuar **Fase D** con los sheets más grandes que
+restan en ContentView.swift (11 109 → objetivo ~3 000 líneas).
 
-Objetivo final: ContentView ~3000 líneas (root + mapCore + handlers).
+Candidatos en orden recomendado (de menor a mayor riesgo):
+
+1. **AllCountriesSheet** (~7202 actualmente, ~700 líneas) — autocontenida.
+2. **LogrosSheet** (~5007 actualmente, ~300 líneas) — autocontenida.
+3. **PlannedDatePickerSheet** (~9050 actualmente, ~400 líneas).
+4. **CountryBottomSheet + ActionButton + StatBadge + LegendItem**
+   (≤ línea 2500, ~250 líneas) — pequeños widgets reutilizables.
+5. **PassportPickerSheet + PassportAvatarView** (~3416, ~100 líneas).
+6. **MedalleroSheet + PersonalListSheet + PersonalAwardSheet**
+   (sheets de premios personales, ~600 líneas).
+7. **MultiContinentSheet + MultiHemisphereSheet + SubjectiveCategoriesSheet
+   + SubjectiveFlagPickerSheet** (~1200 líneas en bloque).
+8. **MapExportSheet + AddQuadrantSheet + QuadrantDetailSheet**
+   (~700 líneas).
+9. **TransportTripsListSheet, VisitCountPickerSheet, RangeDatePicker,
+   FlightInfoSection, FlagAlphabetSheet, FavoriteAirportPickerSheet,
+   TableFlagPickerSheet, FlightFilterSlider** (sheets/widgets sueltos).
+10. **YearTravelView + FlowLayoutCentered + UsernameEditView** (helpers UI).
+11. **Por último (mayor riesgo)**:
+    - `Sheets/ProfileSheet.swift` (~970 líneas en bloque desde L4036).
+    - `Sheets/SettingsSheet.swift` (~942 líneas desde L5312).
+    - `Sheets/AddTripSheet.swift` (~410 líneas desde L8099).
+    - `Sheets/EditTripSheet.swift` (~820 líneas desde L10638).
+
+Estos 4 últimos acceden más a state inline y comparten lógica con
+ContentView (saveTrip handlers, refreshes), así que conviene tenerlos
+para el final cuando el resto esté estable.
+
+Convención: 1 commit por extracción, máx 1500 líneas movidas por
+commit, verificar imports tras cada extracción (CoreLocation, MapKit,
+UIKit, MessageUI, StoreKit son los típicos faltantes).
 
 ### Lo último que se entregó (sesión 2026-05-11)
 - Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
