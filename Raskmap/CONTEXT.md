@@ -9,11 +9,30 @@
 **Fase A (App Store readiness) — parcial:**
 - ✅ A1 — `IPHONEOS_DEPLOYMENT_TARGET` 26.2 → 17.0 (commit `c24d8f1`).
 - ✅ A2 — `PrivacyInfo.xcprivacy` añadido a app + widget (mismo commit).
+- ✅ Bonus — Gateado `RaskmapWidgetControl` (iOS 18 Control Center API)
+  tras `@available(iOS 18.0, *)` y removido del bundle (commit `eb593ef`).
 - ⏸️ A3 — Verificar CloudKit container: pendiente de Apple Developer Account.
 - ⏸️ A4 — Verificar Restore Purchases en sandbox: pendiente de Apple Developer Account.
 
-**Próxima sesión:** arrancar **Fase B (error handling)** — los 234 force-unwraps,
-los `try?` sin recovery y los 26 `DispatchQueue.asyncAfter` como hacks de timing.
+**Fase B (error handling) — completada:**
+- ✅ B2 — Logger SwiftData (`os.Logger`) + `ModelContext.saveOrWarn()` reemplaza
+  los 34 `try? modelContext.save()` (commit `1968897`).
+- ✅ B4 — Cache de renderers del mapa: fallback en `rendererFor(_:)` solo
+  cachea si el polígono está en `activeOverlayIsos`. Naturalmente acotado
+  por |activeOverlayIsos|. Añadido `compactRendererCacheIfNeeded()` defensivo
+  (cap 2000) por si en el futuro cambia la arquitectura (commit `1968897`).
+- ✅ B1 — 12 force-unwraps reales refactorizados a patrones safe (commit
+  `56e2255`). Los "234" del audit eran mayormente declaraciones de tipo
+  implicitly-unwrapped (`var x: Type!`) — patrón válido. Único restante
+  intencionado: `var parent: RangeDatePicker!` (UIKit delegate pattern).
+- 🟡 B3 — Deuda residual documentada. Los 26 `DispatchQueue.main.asyncAfter`
+  no se migran ahora porque (1) no causan crashes, solo timing oddities raros;
+  (2) migración es mecánica pero multiplicativa (`@State Task?` por sheet);
+  (3) ROI bajo ahora — mejor abordar durante Sprint 4 (modularización),
+  cuando ya estaremos tocando cada sheet de todos modos.
+
+**Próxima sesión:** arrancar **Fase C (Localización EN)** — crear
+`Localizable.xcstrings`, migrar los 30 strings más visibles primero.
 No requiere Apple Developer Account.
 
 ### Lo último que se entregó (sesión 2026-05-11)
@@ -44,10 +63,12 @@ No requiere Apple Developer Account.
 > técnico restante; solo bloquean el submit a App Store.
 
 **Sprint 2 — Estabilidad (2 semanas):**
-6. [ ] Auditar 234 force-unwraps en `ContentView.swift`, proteger los más arriesgados.
-7. [ ] Migrar `try? modelContext.save()` críticos a `do/catch` con logging vía `os.Logger`.
-8. [ ] Implementar LRU en `Coordinator.rendererCache` (max 500 entradas).
-9. [ ] Reducir 26 `DispatchQueue.main.asyncAfter` → 10 (los restantes a `.task` cancelables).
+6. [x] Auditar 234 force-unwraps en `ContentView.swift`, proteger los más arriesgados ✅ commit `56e2255`.
+7. [x] Migrar `try? modelContext.save()` críticos a `do/catch` con logging vía `os.Logger` ✅ commit `1968897`.
+8. [x] Acotar `Coordinator.rendererCache` (fallback no-cachea si no está activo) ✅ commit `1968897`.
+9. [ ] 🟡 Reducir 26 `DispatchQueue.main.asyncAfter` → diferido a Sprint 4. No causan crashes;
+       migración es multiplicativa con ROI bajo aislado. Mejor abordar junto con
+       modularización (cada sheet se tocará igualmente).
 
 **Sprint 3 — Calidad UX (2 semanas):**
 10. [ ] Sistema de tokens: `DesignTokens.swift` con `BrandColor`, `Radius`, `Typography`, `Anim`.
