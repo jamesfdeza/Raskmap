@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- La app NO realiza tracking. Sin SDKs publicitarios, sin analytics, sin
+         identificadores publicitarios. Datos del usuario se almacenan localmente
+         + sync privado vía iCloud (CloudKit) de su propia cuenta. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <!-- Sin dominios de tracking. -->
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- La app no recopila datos personales para el desarrollador. Todo lo que
+         introduce el usuario (países, viajes, preferencias) reside en su
+         dispositivo y opcionalmente en su iCloud privado. -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- APIs con motivos requeridos por Apple (Required Reasons APIs, May 2024). -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <!-- UserDefaults (vía @AppStorage y UserDefaults.standard / App Group).
+             Se usa para persistir preferencias del usuario y datos compartidos
+             con el widget. Razón CA92.1: información dentro de la propia app. -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+
+        <!-- File timestamps. Se usa al generar/leer archivos temporales en el
+             export GDPR (Documents/Export) y al construir el nombre de archivo
+             con ISO8601DateFormatter (no toca timestamps reales del FS).
+             Incluido por seguridad — razón C617.1: archivos dentro del
+             contenedor de la app. -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+            </array>
+        </dict>
+
+        <!-- System boot time. SwiftUI animations y algunos timers internos
+             pueden acceder indirectamente vía mach_absolute_time. Razón 35F9.1:
+             cálculo de duración / animación. -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>35F9.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
