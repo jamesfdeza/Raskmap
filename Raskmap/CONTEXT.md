@@ -79,7 +79,7 @@ Cambios:
   está en status `.visited`**. Si está en `.none`, `.wantToVisit`,
   `.bucketList` o `.lived`, `locationIsoCode` queda nil → sin aro.
 
-### Optimización del mapa: solo overlays coloreados + sin cap de zoom (`HEAD`)
+### Optimización del mapa: solo overlays coloreados + sin cap de zoom (`a1e53f6`)
 
 El usuario seguía viendo flicker / "pop in" de colores al hacer pan.
 Cambio clave: **solo se registran como overlays los polígonos
@@ -103,6 +103,49 @@ Gestión dinámica del set activo:
 
 Además, `mapView.cameraZoomRange` eliminado: el usuario quiere zoom-out
 sin tope (antes había `maxCenterCoordinateDistance: 25_000_000`).
+
+### Wrapped: quita emoji + tipografía mayor en cuadrantes (`a5b59ac`)
+
+· Footer del `ShareableSummaryCard`: removida la línea `Text("🗺️")` de
+  52pt junto al logo. Solo queda "Raskmap" + "Tu mapa personal" centrados.
+· `statCard` del `SummaryStatGrid`: número grande 40→48pt, label 11→14pt,
+  sub-texto 12→15pt, padding interno 16→18pt vertical. `lineLimit(1)` +
+  `minimumScaleFactor` añadidos para evitar truncado en strings largos
+  (continentes, "≈ 12.345 km", etc.).
+
+### Widget medium: "PRÓXIMOS" → "SIGUIENTES" (`9e86ce4`)
+
+Cambio manual del usuario. El strip de banderas al pie del widget mediano
+ahora se llama "SIGUIENTES" para evitar repetición con el header
+"PRÓXIMO VIAJE" que va arriba.
+
+### "Lugares por descubrir" tappable (`d02e9de`)
+
+Las cards eran solo decorativas. Ahora son botones: al tappear una
+bandera, se cierra el perfil, se centra el mapa en ese país, se aplica
+el borde negro de highlight y se abre la sheet del país — el mismo flujo
+que tappear directamente en el mapa.
+
+Implementación:
+· `ProfileSheet` gana `onDiscoveryTap: ((CountryFeature) -> Void)?`.
+· Cada card en `discoverSection` se envuelve en `Button` con haptic light.
+· `ContentView` pasa closure que: `showProfile = false` →
+  `asyncAfter 0.4s` → resuelve `Country` (insertando si no existe) →
+  `handleCountryTap(_)`. El delay permite a SwiftUI completar la
+  animación de dismiss antes de presentar la sheet siguiente.
+
+### Live Activity: días, no HH:MM:SS (`6b88a7a`)
+
+Regresión introducida con `tripStartDate` + `Text(timerInterval:countsDown:)`:
+el formato nativo de `timerInterval` renderiza HH:MM:SS, no días. El usuario
+quiere ver "N días" como antes.
+
+Vuelta al countdown estático basado en `daysRemaining` (Int) en ambas
+vistas (lock screen banner + Dynamic Island expanded.trailing). El campo
+`tripStartDate` del ContentState queda en su sitio (compat con estado
+serializado existente) pero ya no se usa en el render. La app actualiza
+la Live Activity cada vez que entra en foreground, suficiente para
+granularidad de día.
 
 ---
 
