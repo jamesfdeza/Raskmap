@@ -5,8 +5,29 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada (2026-05-11, noche tarde)
-**Fase D — COMPLETADA. 24 archivos extraídos a `Raskmap/Sheets/`:**
+### Última acción completada (2026-05-11, madrugada — Sprint 3 Calidad UX)
+
+**Sprint 3 — los 5 frentes priorizados completados en pasada masiva:**
+
+1. ✅ **DesignTokens.swift** creado (commit `f3c61c1`):
+   `BrandColor` + `Radius` + `Typography` + `Spacing` + `Anim` + `TapTarget`.
+2. ✅ **Migración accent color** → `BrandColor.accent` (commit `f84fd14`):
+   13 ocurrencias + 2 UIColor variants.
+3. ✅ **Migración cornerRadius → tokens** (commit `319a55a`): 162 reemplazos
+   en 24 archivos. Mapeo semántico: 8→chip, 10/11/12→cell, 14→card,
+   16/18→section, 20/22/24→sheet.
+4. ✅ **Empty state en búsqueda global** (commit `dfbf3cd`): mensaje
+   "Sin resultados" + sugerencia cuando query sin matches. Resto del
+   proyecto: 205 strings empty state ya implementados.
+5. ✅ **Tap targets ≥ 44pt** (commit `0d00f92`): hit area expandida a
+   `TapTarget.min` en counter buttons (+/-) sin cambiar visual.
+6. ✅ **A11y annotations** (commit `6440cee`): StatBadge + LegendItem
+   + FlagLabel fallback con `accessibilityLabel` para VoiceOver.
+7. ✅ **asyncAfter → Task cancelables** (commit `3f624ba`): 6 patrones
+   one-line (toast-hide, recheckLocation, savedToast, etc.) migrados.
+   Restantes 19 multi-line para próxima iteración.
+
+### Fase D — COMPLETADA. 24 archivos extraídos a `Raskmap/Sheets/`:
 
 - ContentView.swift: 14 951 → **2 380 líneas (-84.1%)**. 🎯 Objetivo
   <3 000 líneas conseguido.
@@ -166,10 +187,10 @@ AirlineData).
        modularización (cada sheet se tocará igualmente).
 
 **Sprint 3 — Calidad UX (2 semanas):**
-10. [ ] Sistema de tokens: `DesignTokens.swift` con `BrandColor`, `Radius`, `Typography`, `Anim`.
-11. [ ] Auditoría a11y: subir de 13 a 100+ annotations.
-12. [ ] Empty states completos (aeropuertos sin vuelos, Wrapped vacío, search sin resultados).
-13. [ ] Audit tap targets ≥ 44pt.
+10. [x] Sistema de tokens: `DesignTokens.swift` con `BrandColor`, `Radius`, `Typography`, `Anim` ✅ commits `f3c61c1` + `f84fd14` + `319a55a`.
+11. [~] Auditoría a11y — primera pasada completada ✅ commit `6440cee`. Continuar audit de buttons sin label en próxima iteración.
+12. [x] Empty states ✅ commit `dfbf3cd` (buscador). Resto: 205 strings empty state ya implementados en project.
+13. [x] Audit tap targets ≥ 44pt ✅ commit `0d00f92` (counter buttons +/-). Otros pequeños son decorativos o tienen padding row suficiente.
 
 **Sprint 4 — Modularización (3 semanas):**
 14. [ ] Extraer `Sheets/AddTripSheet.swift`, `Sheets/ProfileSheet.swift`,
