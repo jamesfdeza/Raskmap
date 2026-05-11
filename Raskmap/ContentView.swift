@@ -1889,10 +1889,10 @@ struct ContentView: View {
     private func detectCountry(for location: CLLocation) {
         let point = MKMapPoint(location.coordinate)
         // Find matching country via point-in-polygon. Solo actualiza el
-        // highlight visual (`locationIsoCode`). La política de marcar
-        // automáticamente como visitado se eliminó a petición del usuario:
-        // ubicación detectada NO modifica `Country.status`. El usuario
-        // decide manualmente cuándo marcar un país como visitado.
+        // highlight visual (`locationIsoCode`) — y SOLO si el país detectado
+        // está marcado como `.visited`. Para cualquier otro estado (.none,
+        // .wantToVisit, .bucketList, .lived) no se aplica el aro de
+        // "estás aquí". La detección no muta nunca `Country.status`.
         for feature in features {
             guard feature.boundingMapRect.contains(point) else { continue }
             for polygon in feature.polygons {
@@ -1900,6 +1900,11 @@ struct ContentView: View {
                 renderer.invalidatePath()
                 if renderer.path?.contains(renderer.point(for: point)) == true {
                     let iso = feature.isoCode
+                    let status = countries.first(where: { $0.isoCode == iso })?.status ?? .none
+                    guard status == .visited else {
+                        locationIsoCode = nil
+                        return
+                    }
                     // Force visual refresh: clear then set so RaskMapView re-applies isUserHere style
                     locationIsoCode = nil
                     DispatchQueue.main.async {
