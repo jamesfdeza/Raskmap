@@ -955,9 +955,10 @@ struct ContentView: View {
                                     c.plannedTitle = nil
                                 }
                             }
-                            if locationIsoCode == country.isoCode {
-                                autoMarkIfNeeded(isoCode: country.isoCode)
-                            }
+                            // Antes: si el país coincidía con la ubicación actual,
+                            // se re-marcaba automáticamente como visitado vía
+                            // autoMarkIfNeeded. Esa lógica se eliminó — la
+                            // detección de ubicación ya no muta el status.
                         case .wantToVisit:
                             // Delete all future trips and remove from Próximos list
                             for trip in trips where trip.isoCode == country.isoCode {
@@ -1887,7 +1888,11 @@ struct ContentView: View {
 
     private func detectCountry(for location: CLLocation) {
         let point = MKMapPoint(location.coordinate)
-        // Find matching country via point-in-polygon
+        // Find matching country via point-in-polygon. Solo actualiza el
+        // highlight visual (`locationIsoCode`). La política de marcar
+        // automáticamente como visitado se eliminó a petición del usuario:
+        // ubicación detectada NO modifica `Country.status`. El usuario
+        // decide manualmente cuándo marcar un país como visitado.
         for feature in features {
             guard feature.boundingMapRect.contains(point) else { continue }
             for polygon in feature.polygons {
@@ -1895,7 +1900,6 @@ struct ContentView: View {
                 renderer.invalidatePath()
                 if renderer.path?.contains(renderer.point(for: point)) == true {
                     let iso = feature.isoCode
-                    autoMarkIfNeeded(isoCode: iso)
                     // Force visual refresh: clear then set so RaskMapView re-applies isUserHere style
                     locationIsoCode = nil
                     DispatchQueue.main.async {
@@ -1910,51 +1914,8 @@ struct ContentView: View {
 
     private func recheckLocationIfNeeded() {
         guard let location = locationManager.currentLocation else { return }
-        // Re-detect from scratch to update visual and auto-mark
+        // Re-detect solo para refrescar `locationIsoCode` (highlight visual).
         checkLocationCountry(location, immediate: true)
-    }
-
-    private func autoMarkIfNeeded(isoCode: String) {
-        guard let country = countries.first(where: { $0.isoCode == isoCode }) else { return }
-        let today = Calendar.current.startOfDay(for: Date())
-        // If visited and has future trip, no location action needed
-        if country.status == .visited {
-            let hasFutureTrip = trips.contains { $0.isoCode == isoCode && Calendar.current.startOfDay(for: $0.dateFrom) > today }
-            if hasFutureTrip { return }
-            return
-        }
-        var didMark = false
-        switch country.status {
-        case .none, .wantToVisit:
-            country.status = .visited
-            country.plannedDate = nil
-            country.plannedDateTo = nil
-            country.transport = nil
-            try? modelContext.save()
-            didMark = true
-        case .bucketList:
-            let hasFutureTrip = trips.contains { $0.isoCode == isoCode && Calendar.current.startOfDay(for: $0.dateFrom) > today }
-            if hasFutureTrip {
-                country.status = .wantToVisit
-            } else {
-                // Mark as visited without date or transport (user can edit later)
-                country.status = .visited
-            }
-            country.plannedDate = nil
-            country.plannedDateTo = nil
-            country.transport = nil
-            try? modelContext.save()
-            didMark = true
-        case .lived, .visited:
-            break
-        }
-        // Show first-time location toast once after username is set
-        if didMark && !didShowLocationToast && !username.isEmpty {
-            didShowLocationToast = true
-            withAnimation { showLocationToast = true }
-        }
-        // Fire achievement toasts for location-based auto-marks (no trip created, so trips.count won't change)
-        if didMark { checkAndShowAchievementToasts() }
     }
 
     private func handleCountryTap(_ tapped: Country) {
