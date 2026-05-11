@@ -450,10 +450,11 @@
 				};
 			};
 			buildConfigurationList = 02A198702F5F383C0057AA98 /* Build configuration list for PBXProject "Raskmap" */;
-			developmentRegion = en;
+			developmentRegion = es;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				es,
 				Base,
 			);
 			mainGroup = 02A1986C2F5F383C0057AA98;
