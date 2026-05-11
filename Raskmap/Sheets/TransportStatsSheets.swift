@@ -19,6 +19,8 @@
 
 import SwiftUI
 import SwiftData
+import CoreLocation
+import MapKit
 
 // MARK: - Estadísticas de transporte
 struct TransportStatsSheet: View {
