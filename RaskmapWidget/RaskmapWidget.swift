@@ -265,7 +265,7 @@ private struct MediumView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Spacer(minLength: 0)
+                // Header pegado arriba: literal + transport + booking ref.
                 HStack(spacing: 5) {
                     Text("PRÓXIMO VIAJE")
                         .font(.custom("Satoshi-Bold", size: 9))
@@ -284,6 +284,9 @@ private struct MediumView: View {
                             .lineLimit(1)
                     }
                 }
+
+                // Spacer flexible para centrar verticalmente la bandera + destino.
+                Spacer(minLength: 0)
 
                 if entry.nextDays >= 0 {
                     let displayName: String = {
