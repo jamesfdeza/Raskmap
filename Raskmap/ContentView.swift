@@ -307,7 +307,7 @@ struct ContentView: View {
             return first.isEmpty ? "#" : first
         }
         return grouped.keys.sorted { $0.localizedCompare($1) == .orderedAscending }.map { letter in
-            (letter: letter, features: grouped[letter]!.sorted { $0.localizedName.localizedCompare($1.localizedName) == .orderedAscending })
+            (letter: letter, features: (grouped[letter] ?? []).sorted { $0.localizedName.localizedCompare($1.localizedName) == .orderedAscending })
         }
     }
 
@@ -449,9 +449,11 @@ struct ContentView: View {
             if let seg = trip.tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
                             .first(where: { $0.transport == "✈️" && ($0.airports?.count ?? 0) >= 2 }),
                let aps = seg.airports,
-               let depCoord = AirportCoordinates.coordinate(for: aps.first!.iata),
-               let arrCoord = AirportCoordinates.coordinate(for: aps.last!.iata) {
-                return (aps.first!.iata, aps.last!.iata, depCoord, arrCoord)
+               let firstAp = aps.first,
+               let lastAp = aps.last,
+               let depCoord = AirportCoordinates.coordinate(for: firstAp.iata),
+               let arrCoord = AirportCoordinates.coordinate(for: lastAp.iata) {
+                return (firstAp.iata, lastAp.iata, depCoord, arrCoord)
             }
             if trip.tripSegments.isEmpty, trip.transport == "✈️", trip.tripAirports.count >= 2,
                let depCoord = AirportCoordinates.coordinate(for: trip.tripAirports[0].iata),
@@ -1337,7 +1339,10 @@ struct ContentView: View {
                                     let feat = featuresByIso[trip.isoCode]
                                     FlagLabel(emoji: feat?.flagEmoji ?? "🌐", size: 17)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(trip.title?.isEmpty == false ? trip.title! : (feat?.localizedName ?? trip.isoCode))
+                                        Text({
+                                            let t = trip.title ?? ""
+                                            return t.isEmpty ? (feat?.localizedName ?? trip.isoCode) : t
+                                        }())
                                             .font(.palatino(.body, weight: .bold))
                                             .foregroundStyle(.primary)
                                         Text(searchTripSubtitle(trip))
@@ -1709,7 +1714,7 @@ struct ContentView: View {
             onSave: { trip, _ in
                 modelContext.insert(trip)
                 country.status = .wantToVisit
-                if country.plannedDate == nil || trip.dateFrom < country.plannedDate! {
+                if country.plannedDate.map({ trip.dateFrom < $0 }) ?? true {
                     country.plannedDate = trip.dateFrom
                     country.plannedDateTo = trip.dateTo
                     country.transport = trip.transport
@@ -4662,7 +4667,7 @@ struct ProfileSheet: View {
                 onSave: { trip, _ in
                     modelContext.insert(trip)
                     country.status = .wantToVisit
-                    if country.plannedDate == nil || trip.dateFrom < country.plannedDate! {
+                    if country.plannedDate.map({ trip.dateFrom < $0 }) ?? true {
                         country.plannedDate = trip.dateFrom
                         country.plannedDateTo = trip.dateTo
                         country.transport = trip.transport
@@ -4779,7 +4784,7 @@ struct ProfileSheet: View {
                         if let country = modelContext.fetchFirstOrWarn(cd),
                            country.status != .visited && country.status != .lived {
                             country.status = .wantToVisit
-                            if country.plannedDate == nil || newFrom < country.plannedDate! {
+                            if country.plannedDate.map({ newFrom < $0 }) ?? true {
                                 country.plannedDate = newFrom
                                 country.plannedDateTo = newTo
                                 country.transport = src.transport
@@ -5851,8 +5856,9 @@ struct SettingsSheet: View {
                             settingsRow(label: "Novedades", icon: "sparkles") { showNovedades = true }
                             Divider().padding(.leading, 16)
                             Button {
-                                let appURL = URL(string: "instagram://user?username=jaimeviajando")!
-                                let webURL = URL(string: "https://instagram.com/jaimeviajando")!
+                                // URLs literales pero protegidas con if-let por estilo.
+                                guard let appURL = URL(string: "instagram://user?username=jaimeviajando"),
+                                      let webURL = URL(string: "https://instagram.com/jaimeviajando") else { return }
                                 if UIApplication.shared.canOpenURL(appURL) {
                                     UIApplication.shared.open(appURL)
                                 } else {
@@ -8324,7 +8330,7 @@ struct AddTripSheet: View {
                     if let countryRecord = modelContext.fetchFirstOrWarn(desc) {
                         if countryRecord.status != .visited && countryRecord.status != .lived {
                             countryRecord.status = .wantToVisit
-                            if countryRecord.plannedDate == nil || firstDate < countryRecord.plannedDate! {
+                            if countryRecord.plannedDate.map({ firstDate < $0 }) ?? true {
                                 countryRecord.plannedDate = firstDate
                                 countryRecord.plannedDateTo = segDateTo
                                 countryRecord.transport = segTransport
@@ -11093,7 +11099,7 @@ struct EditTripSheet: View {
                             if let country = modelContext.fetchFirstOrWarn(dd) {
                                 if country.status != .visited && country.status != .lived {
                                     country.status = .wantToVisit
-                                    if country.plannedDate == nil || d < country.plannedDate! {
+                                    if country.plannedDate.map({ d < $0 }) ?? true {
                                         country.plannedDate = d
                                         country.plannedDateTo = dTo
                                         country.transport = t
@@ -13156,7 +13162,9 @@ struct FlagAlphabetSheet: View {
         var visitedDict: [String: [(String, String, String)]] = [:]
         for f in visited {
             let letter = String(f.localizedName.uppercased().first ?? "?")
-            visitedDict[letter, default: []].append((f.isoCode, f.flagEmoji!, f.localizedName))
+            // f.flagEmoji está garantizado != nil por filter previo, pero
+            // usamos ?? "🌐" defensivamente por si el filter cambia.
+            visitedDict[letter, default: []].append((f.isoCode, f.flagEmoji ?? "🌐", f.localizedName))
         }
         var existsSet: Set<String> = []
         for f in allCountable {
