@@ -344,7 +344,7 @@ private struct MediumView: View {
 
                 if !upcomingFlagsSkippingFirst.isEmpty {
                     HStack(alignment: .center, spacing: 8) {
-                        Text("PRÓXIMOS")
+                        Text("SIGUIENTES")
                             .font(.custom("Satoshi-Bold", size: 8))
                             .tracking(1.2)
                             .foregroundStyle(.white.opacity(0.55))
