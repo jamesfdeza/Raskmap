@@ -295,7 +295,10 @@ struct PlannedDatePickerSheet: View {
     }
 }
 
-private struct confirmCardContent: View {
+// `internal` (default) para que ContentView pueda usarlo desde AddTripSheet
+// y EditTripSheet (ambos hasta que se extraigan) — antes era `private` al
+// archivo cuando estaba en ContentView.swift, ahora cross-file.
+struct confirmCardContent: View {
     @Binding var confirmVisits: [VisitEntry]
     @Binding var confirmAirports: [AirportConfirmEntry]
     @Binding var confirmAirlines: [AirlineConfirmEntry]

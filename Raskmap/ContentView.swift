@@ -5221,9 +5221,14 @@ struct ExportDataSheet: View {
         errorMessage = nil
         let countries = countriesProvider()
         let trips = tripsProvider()
+        // Capturamos `format` en contexto MainActor (ExportFormat es Sendable +
+        // nonisolated) antes de Task.detached. Acceder a `self.format` desde
+        // el Task no compilaría: la View es @MainActor por default del
+        // proyecto y el Task corre fuera del actor.
+        let capturedFormat = format
         Task.detached(priority: .userInitiated) {
             do {
-                let url = try Self.writeExport(format: format, countries: countries, trips: trips)
+                let url = try Self.writeExport(format: capturedFormat, countries: countries, trips: trips)
                 await MainActor.run {
                     isGenerating = false
                     generatedURL = url
