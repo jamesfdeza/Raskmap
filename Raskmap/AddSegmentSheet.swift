@@ -60,13 +60,7 @@ struct AddSegmentSheet: View {
 
     // When editing an existing segment
     @State private var didSetupInitial = false
-    /// True mientras esperamos que el usuario complete el RoutePicker tras
-    /// haber abierto AddSegmentSheet con plantilla ✈️. Si cancela sin elegir
-    /// aeropuertos, dismiss-eamos la hoja entera para evitar dejarle en un
-    /// step intermedio incongruente.
-    @State private var awaitingTemplateRoute = false
     private let initialSegment: TripSegment?
-    private let initialTransportRaw: String?
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
     private var tomorrow: Date {
@@ -79,12 +73,11 @@ struct AddSegmentSheet: View {
     }()
 
     init(features: [CountryFeature], isForFuture: Bool, initialSegment: TripSegment? = nil,
-         existingSegments: [TripSegment] = [], initialTransport: String? = nil,
+         existingSegments: [TripSegment] = [],
          onAdd: @escaping (TripSegment) -> Void) {
         self.features = features
         self.isForFuture = isForFuture
         self.initialSegment = initialSegment
-        self.initialTransportRaw = initialTransport
         self.onAdd = onAdd
         let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
         let sorted = features.sorted { $0.localizedName.compare($1.localizedName, options: opts) == .orderedAscending }
@@ -112,26 +105,6 @@ struct AddSegmentSheet: View {
             } else {
                 _selectedIsoCodes = State(initialValue: Set(seg.isoCodes))
             }
-        } else if let pre = initialTransport, !pre.isEmpty {
-            _selectedTransport = State(initialValue: pre)
-            // Plantilla rápida: saltamos directo a step 2 (countries para
-            // no-✈️, placeholder para ✈️). NUNCA renderizamos step 1 — el
-            // usuario ya eligió el transporte vía plantilla y no queremos
-            // que vea el selector de transporte de nuevo.
-            // Para ✈️ el step 2 muestra un placeholder mientras RoutePicker
-            // se abre automáticamente en onAppear.
-            _step = State(initialValue: 2)
-            if !existingSegments.isEmpty {
-                let sortedSegs = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
-                let last = sortedSegs.last!
-                let lastEnd = cal.startOfDay(for: last.dateTo ?? last.dateFrom)
-                let nextDay = cal.date(byAdding: .day, value: 1, to: lastEnd) ?? lastEnd
-                let suggested = (last.dateTo != nil) ? lastEnd : nextDay
-                _dateFrom = State(initialValue: suggested)
-            } else {
-                _dateFrom = State(initialValue: isForFuture ? tomorrow : today)
-            }
-            _dateTo = State(initialValue: nil)
         } else if !existingSegments.isEmpty {
             // Smart default: el nuevo tramo arranca justo después del último
             // tramo existente (by chronology). Si el último seg tiene `dateTo`,
@@ -198,11 +171,6 @@ struct AddSegmentSheet: View {
                     if isEditing {
                         // En modo edición no hay flujo creación al que volver.
                         Button("Cancelar") { dismiss() }.font(.palatino(.body))
-                    } else if initialTransportRaw != nil && step <= 2 {
-                        // Plantilla rápida: no permitimos volver a step 1
-                        // (selector de transporte) porque el usuario ya
-                        // eligió el medio vía plantilla.
-                        Button("Cancelar") { dismiss() }.font(.palatino(.body))
                     } else if step > 1 {
                         Button("Atrás") { step -= 1 }.font(.palatino(.body))
                     } else {
@@ -220,43 +188,17 @@ struct AddSegmentSheet: View {
         }
         .presentationDetents([.large])
         .onAppear {
-            guard !didSetupInitial else { return }
+            guard !didSetupInitial, initialSegment?.transport == "✈️", !segmentAirports.isEmpty else {
+                didSetupInitial = true; return
+            }
             didSetupInitial = true
-            // Edición de un segmento ✈️ existente: derivar countries del routing.
-            if initialSegment?.transport == "✈️", !segmentAirports.isEmpty {
-                deriveFlightCountries()
-                return
-            }
-            // Plantilla rápida: belt-and-suspenders frente a posible identity
-            // reuse del @State entre presentaciones del sheet.
-            if initialSegment == nil, let pre = initialTransportRaw, !pre.isEmpty {
-                if selectedTransport != pre { selectedTransport = pre }
-                if step != 2 { step = 2 }
-                if pre == "✈️", segmentAirports.isEmpty {
-                    // Marcamos el flag ANTES de presentar para que el onDismiss
-                    // del RoutePicker pueda discriminar cancel vs complete.
-                    awaitingTemplateRoute = true
-                    showRoutePicker = true
-                }
-            }
+            deriveFlightCountries()
         }
-        .sheet(isPresented: $showRoutePicker, onDismiss: {
-            // Si veníamos de plantilla ✈️ y el usuario canceló sin elegir
-            // aeropuertos, no tiene sentido quedarse en la hoja (step 2 sin
-            // countries posibles, step 3 sin ruta). Cerramos toda la hoja.
-            if awaitingTemplateRoute, segmentAirports.isEmpty {
-                awaitingTemplateRoute = false
-                dismiss()
-            } else {
-                awaitingTemplateRoute = false
-            }
-        }) {
+        .sheet(isPresented: $showRoutePicker) {
             RouteWizardSheet(airports: $segmentAirports, returnAirports: $segmentReturnAirports,
                              airlines: $segmentAirlines, hasLayover: $segmentHasLayover) {
                 deriveFlightCountries()
                 step = 3
-                // Completó la ruta — ya no estamos "esperando".
-                awaitingTemplateRoute = false
             }
         }
         .appColorScheme()
@@ -399,25 +341,6 @@ struct AddSegmentSheet: View {
     // MARK: - Step 2: Countries
     @ViewBuilder
     private func countriesStep() -> some View {
-        // Para ✈️ desde plantilla: el step 2 (country list) no aplica — el
-        // tramo se define por aeropuertos vía RoutePicker, que se abre solo.
-        // Mostramos un placeholder mientras el RoutePicker se presenta encima
-        // y/o el usuario lo cancela (en cuyo caso dismiss-eamos toda la hoja).
-        if selectedTransport == "✈️" && segmentAirports.isEmpty {
-            VStack(spacing: 14) {
-                ProgressView().scaleEffect(1.1)
-                Text("Abriendo selector de ruta…")
-                    .font(.palatino(.caption))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            countriesStepBody()
-        }
-    }
-
-    @ViewBuilder
-    private func countriesStepBody() -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(selectedTransport ?? "🌍").font(.system(size: 22))

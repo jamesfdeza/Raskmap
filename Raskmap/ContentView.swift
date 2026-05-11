@@ -8100,7 +8100,6 @@ struct AddTripSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var tripTitle: String = ""
-    @State private var selectedTransport: String? = nil
     @State private var tripSegments: [TripSegment] = []
     @State private var showAddSegment = false
     @State private var showSaveConfirmation = false
@@ -8124,32 +8123,6 @@ struct AddTripSheet: View {
         let latestFrom = tripSegments.map(\.dateFrom).max()
         guard let latest = latestFrom, latest > calculatedDateFrom else { return nil }
         return latest
-    }
-
-    /// Quick-template: pre-carga el transporte y abre AddSegmentSheet
-    /// directamente, evitando que el usuario navegue por step 1 (transport)
-    /// del wizard.
-    @ViewBuilder
-    private func quickTemplate(emoji: String, label: String) -> some View {
-        Button {
-            selectedTransport = emoji
-            showAddSegment = true
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        } label: {
-            HStack(spacing: 8) {
-                Text(emoji).font(.system(size: 20))
-                Text(label)
-                    .font(.custom("Satoshi-Bold", size: 14))
-                    .foregroundStyle(.primary)
-                Spacer()
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.blue)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 12)
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
     }
 
     private func segmentCountryNames(_ seg: TripSegment) -> String {
@@ -8395,28 +8368,6 @@ struct AddTripSheet: View {
 
                 Divider().padding(.horizontal, 16).padding(.vertical, 4)
 
-                // Templates rápidos: solo si aún no hay tramos. Pre-cargan
-                // un transporte y abren el wizard en el step 2 (países) o 3
-                // (fechas) según el caso. UX: 80% de viajes son uno de estos
-                // 4 patrones, el usuario evita 2-3 taps por viaje típico.
-                if tripSegments.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("PLANTILLAS RÁPIDAS")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .tracking(0.8)
-                            .padding(.horizontal, 16)
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                            quickTemplate(emoji: "✈️", label: "Vuelo")
-                            quickTemplate(emoji: "🚗", label: "Coche")
-                            quickTemplate(emoji: "🚂", label: "Tren")
-                            quickTemplate(emoji: "🚌", label: "Bus")
-                        }
-                        .padding(.horizontal, 16)
-                    }
-                    .padding(.bottom, 4)
-                }
-
                 // MARK: Tramos adicionales
                 VStack(alignment: .leading, spacing: 6) {
                     if !tripSegments.isEmpty {
@@ -8513,8 +8464,8 @@ struct AddTripSheet: View {
         .onDisappear {
             if !didSave { onCancel?() }
         }
-        .sheet(isPresented: $showAddSegment, onDismiss: { selectedTransport = nil }) {
-            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments, initialTransport: selectedTransport) { seg in
+        .sheet(isPresented: $showAddSegment) {
+            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments) { seg in
                 tripSegments.append(seg)
                 // Mantener el array siempre ordenado por fecha de vuelo,
                 // no por orden de inserción — el del 29 aparece antes del 30
