@@ -45,30 +45,36 @@
 Cobertura por área tras C3: alerts 100%, onboarding 100%, settings 100%,
 logros 100%, wrapped 100%, widget 100%, empty states 100%, stats 100%.
 
-**Fase D (Modularización ContentView) — en progreso, primer chunk:**
-ContentView: 14 951 → 14 098 líneas (-853, -5.7%) tras 4 extracciones:
+**Fase D (Modularización ContentView) — en progreso, segundo chunk:**
+ContentView: 14 951 → 11 109 líneas (-3 842, **-25.7%**) tras 7 extracciones:
 
-- ✅ `Sheets/StatsBreakdownSheets.swift` (-169 líneas, commit `e55452e`):
+- ✅ `Sheets/StatsBreakdownSheets.swift` (-169 líneas, `e55452e`):
   AirportStatsSheet, AirlineStatsSheet, SeatStatsSheet, SeatPositionStatsSheet.
-- ✅ `Sheets/SettingsSubSheets.swift` (-227 líneas, commit `42e116b`):
+- ✅ `Sheets/SettingsSubSheets.swift` (-227 líneas, `42e116b`):
   SettingsInfoSheet, LegalInfoSheet, WidgetLockScreenSheet, WidgetWatchSheet.
-- ✅ `Sheets/ContactSheet.swift` (-206 líneas, commit `5c1afc0`):
-  ContactSheet + MailComposerView (UIViewControllerRepresentable de
-  MFMailComposeViewController).
-- ✅ `Sheets/SubscriptionSheet.swift` (-251 líneas, commit `501a3a5`):
-  SubscriptionSheet + constantes Raskmap Pro (StoreKit 2 + Restore).
+- ✅ `Sheets/ContactSheet.swift` (-206 líneas, `5c1afc0`):
+  ContactSheet + MailComposerView.
+- ✅ `Sheets/SubscriptionSheet.swift` (-251 líneas, `501a3a5`):
+  SubscriptionSheet + constantes Raskmap Pro.
+- ✅ `Sheets/RouteWizardSheet.swift` (-904 líneas, `ef7b284`):
+  RouteWizardSheet + RoutePickerSheet + AirlinePickerSheet.
+- ✅ `Sheets/TransportStatsSheets.swift` (-1 161 líneas, `cd5d15a`):
+  TransportStatsSheet + 5 sub-sheets relacionados.
+- ✅ `Sheets/ListSheets.swift` (-924 líneas, `0889454`):
+  StatusListSheet + FinalizadosListSheet + FinalizadoTripDetailSheet.
 
-**Próxima sesión:** continuar **Fase D** con los sheets más grandes:
-1. `Sheets/ProfileSheet.swift` (~2000 líneas — el más grande, con
-   sub-structs MedalSlot/TopRegion).
-2. `Sheets/SettingsSheet.swift` (~1500 líneas).
+Fix intermedio (`04d96e6`): `raskmapProLifetimeID/raskmapProAllIDs`
+cambiados de `private` a `internal` para cross-file + reemplazo de
+`%lld%%` por `%@` en una key del catalog (warning Xcode 16).
+
+**Próxima sesión:** continuar **Fase D** con los sheets restantes:
+1. `Sheets/ProfileSheet.swift` (~2000 líneas — el más grande).
+2. `Sheets/SettingsSheet.swift` (~900 líneas tras quitar los sub-sheets).
 3. `Sheets/AddEditTripSheets.swift` (AddTripSheet + EditTripSheet, ~3000).
-4. `Sheets/ListSheets.swift` (StatusListSheet + FinalizadosListSheet +
-   AllCountriesSheet, ~2000).
-5. `Sheets/RouteWizardSheet.swift` (RouteWizardSheet + RoutePickerSheet +
-   AirlinePickerSheet, ~1500).
-6. `Sheets/TransportStatsSheet.swift` (TransportStatsSheet +
-   FlightLegsListSheet + TransportTripsListSheet, ~1500).
+4. `Sheets/AllCountriesSheet.swift` (~700 líneas).
+5. `Sheets/LogrosSheet.swift` (~300 líneas).
+6. `Sheets/PlannedDatePickerSheet.swift` (~400 líneas).
+7. Otros sheets pequeños (Quadrant, Medallero, Multi*, Subjective*).
 
 Objetivo final: ContentView ~3000 líneas (root + mapCore + handlers).
 
