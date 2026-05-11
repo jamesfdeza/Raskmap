@@ -1,101 +1,142 @@
-# 🌍 Raskmap — Guía de Configuración
+# 🌍 Raskmap
 
-## Archivos del proyecto
+App de iOS para registrar tus viajes, llevar el conteo de países visitados y planear los próximos.
+Mapa interactivo, segmentos de vuelo con escalas, widgets de Home Screen, Live Activities y
+estadísticas de transporte (km volados, aerolíneas, asientos, etc.).
+
+---
+
+## ✨ Features principales
+
+### Mapa
+- Polígonos de los ~250 países / territorios coloreados según estado:
+  visitado, vivido, próximo viaje, bucket-list.
+- Detección de ubicación: marca automáticamente como visitado el país donde estás.
+- **Modo vuelo**: oculta los rellenos de país y dibuja líneas geodésicas entre
+  aeropuertos. Filtro pasado / próximo.
+- Pre-warm de renderers + caching de paths → sin flicker al hacer pan.
+
+### Viajes (`Trip`) y segmentos (`TripSegment`)
+- Cada viaje pertenece a un país base, con título opcional, fechas y transporte.
+- Multi-segmento: un viaje puede tener varios tramos (MAD→DXB en avión, DXB→NRT en avión, etc.).
+- Para ✈️: aeropuertos por tramo (ida + vuelta), aerolíneas, escalas, asiento, clase de cabina.
+- Algoritmo `daysPerCountry` que reparte días entre escalas y destinos según prioridades.
+
+### Estadísticas
+- Heatmap anual + comparativa vs año anterior.
+- Conteo de tramos por transporte (✈️ cuenta legs por aeropuertos, no viajes).
+- Km volados (haversine entre coords de aeropuertos).
+- Aeropuertos / aerolíneas / asientos top.
+- "Lugares por descubrir": una sugerencia por región (Europa, Asia, África, etc.)
+  priorizada por proximidad geográfica a tu cluster de visitados.
+
+### Year Wrapped (style Spotify Wrapped)
+- Reel animado con países, días viajados, vuelos, aeropuertos top, etc.
+- Compartible como imagen / texto con hashtags.
+
+### Widgets & Live Activities
+- Widget Small / Medium / Large + accessoryCircular (Lock Screen).
+- Live Activity con countdown real-time al próximo viaje (`Text(timerInterval:)`).
+- Sincronización iCloud (CloudKit) entre dispositivos.
+
+### Compliance
+- GDPR Art. 17 (right to erasure): "Borrar todos mis datos" con doble confirmación.
+- GDPR Art. 20 (portability): exportar todos los datos en JSON o CSV.
+- Sin tracking, sin analytics, sin SDKs externos.
+- StoreKit "Restore Purchases" obligatorio para Non-Consumable IAP.
+
+---
+
+## 🛠 Stack técnico
+
+| Capa                    | Tecnología                                         |
+| ----------------------- | -------------------------------------------------- |
+| UI                      | SwiftUI (iOS 17+, Swift 6 strict concurrency)      |
+| Persistencia            | SwiftData + CloudKit (sync iCloud privado)         |
+| Mapa                    | MapKit (MKMapView + MKPolygonRenderer, vector)     |
+| Widgets                 | WidgetKit + ActivityKit (Live Activities)          |
+| Notificaciones          | UserNotifications (recordatorios de viaje)         |
+| Compras                 | StoreKit 2 (suscripción Raskmap Pro)               |
+| Tests                   | Swift Testing (`@Test`) — unit + render smoke      |
+| Aislamiento por default | `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`        |
+
+---
+
+## 📁 Estructura
 
 ```
 Raskmap/
-├── RaskmapApp.swift       ← Punto de entrada (reemplaza el tuyo)
-├── Country.swift          ← Modelo de datos (reemplaza Item.swift)
-├── GeoJSONLoader.swift    ← Parser del mapa mundial
-├── RaskMapView.swift      ← Vista del mapa con overlays
-├── ContentView.swift      ← Vista principal con UI
-└── countries.geojson      ← ⭐ DEBES AÑADIR ESTE ARCHIVO (ver paso 2)
+├── RaskmapApp.swift              ← entry point, schema SwiftData
+├── ContentView.swift             ← root view (~13k líneas — pendiente modularizar)
+├── Country.swift                 ← @Model Country + CountryStatus
+├── Trip.swift                    ← @Model Trip + TripSegment + daysPerCountry
+├── FlightInfo.swift              ← struct FlightInfo (Codable nonisolated)
+├── AddSegmentSheet.swift         ← wizard 3 pasos para añadir tramo
+├── GeoJSONLoader.swift           ← parser de countries.geojson
+├── RaskMapView.swift             ← UIViewRepresentable wrapping MKMapView
+├── FlightMap.swift               ← overlays de rutas de vuelo
+├── YearWrappedSheet.swift        ← reel de wrapped anual
+├── TwemojiFlag.swift             ← banderas con fallback Twemoji
+├── ColorThemeManager.swift       ← tema de colores configurable
+├── LocationManager.swift         ← CoreLocation
+├── WidgetDataWriter.swift        ← shared defaults para widgets
+├── countries.geojson             ← polígonos de ~250 países
+
+RaskmapWidget/
+├── RaskmapWidget.swift           ← Small / Medium / Large views
+├── RaskmapLiveActivity.swift     ← Lock screen + Dynamic Island
+├── RaskmapActivityAttributes.swift ← shared con la app
+
+RaskmapTests/
+├── DaysPerCountryTests.swift     ← 9 casos del algoritmo de días
+├── RenderSmokeTests.swift        ← 7 tests "no crash" de vistas críticas
+
+docs/                              ← textos legales (GitHub Pages)
+├── privacy.md, terms.md, gdpr.md, imprint.md, credits.md
 ```
 
 ---
 
-## Paso 1 — Añadir los archivos Swift al proyecto
+## 🌿 Estado del desarrollo
 
-1. En Xcode, haz clic derecho sobre tu carpeta `Raskmap` en el panel izquierdo
-2. Selecciona **"Add Files to Raskmap..."**
-3. Añade los 5 archivos `.swift`
-4. **Importante**: Borra `Item.swift` — ya no lo necesitas (lo reemplaza `Country.swift`)
+Rama activa: **`remodelacion_integral_v2`** — iteración 2026-05 con commits
+incrementales sobre App Store readiness, performance, UX y nice-to-have.
 
----
-
-## Paso 2 — Descargar el GeoJSON de países ⭐
-
-Este archivo contiene los polígonos de todos los países del mundo (~4 MB).
-
-### Descarga directa:
-👉 https://datahub.io/core/geo-countries/r/countries.geojson
-
-O desde Natural Earth (más preciso):
-👉 https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_admin_0_countries.geojson
-
-### Añadirlo a Xcode:
-1. Descarga el archivo y renómbralo exactamente: **`countries.geojson`**
-2. En Xcode, arrastra el archivo a la carpeta de tu proyecto
-3. En el diálogo que aparece:
-   - ✅ Marca **"Copy items if needed"**
-   - ✅ Asegúrate de que tu target **"Raskmap"** esté seleccionado
-4. Haz clic en **Add**
-
-### Verificar que está en el bundle:
-- Selecciona tu target en Xcode → **Build Phases** → **Copy Bundle Resources**
-- `countries.geojson` debe aparecer en la lista
+Historial detallado en [`Raskmap/CONTEXT.md`](Raskmap/CONTEXT.md) (changelog
+chronological con cada commit, problema resuelto y rationale).
 
 ---
 
-## Paso 3 — Eliminar referencias a Item.swift
+## 🚀 Setup (desarrollo)
 
-Si Xcode da errores por `Item`, simplemente:
-1. Busca y borra `Item.swift` del proyecto
-2. El nuevo `Country.swift` lo reemplaza completamente
+```bash
+git clone https://github.com/jamesfdeza/Raskmap.git
+cd Raskmap
+open Raskmap.xcodeproj
+```
 
----
+Requiere Xcode 16+ y un Apple Developer Account para signing.
+Targets: **Raskmap** (app), **RaskmapWidget** (extensión).
 
-## Paso 4 — Ejecutar
+CloudKit container: `iCloud.RealDev.Raskmap` (cambiar al fork-ear).
 
-Presiona **▶** o `Cmd+R`. La primera vez tardará un poco en cargar el GeoJSON.
-
----
-
-## Cómo funciona la app
-
-| Acción | Resultado |
-|--------|-----------|
-| Tocar un país | Abre panel de opciones |
-| Seleccionar "Visitados" | País se pinta de 🟢 verde |
-| Seleccionar "Quiero ir" | País se pinta de 🔴 rojo |
-| Seleccionar "Desmarcar" | País vuelve a transparente |
-
-Los datos se guardan automáticamente en el dispositivo (SQLite gestionado por SwiftData).
+Para correr tests:
+```bash
+xcodebuild test -scheme Raskmap -destination 'platform=iOS Simulator,name=iPhone 15'
+```
 
 ---
 
-## Paralelos Java → Swift para entender el código
+## 📜 Legal
 
-| Java/Spring | Swift/SwiftData |
-|-------------|-----------------|
-| `@Entity` | `@Model` |
-| `EntityManager` | `ModelContext` |
-| `@Autowired` | `@Environment` |
-| `JpaRepository.findAll()` | `@Query` |
-| `entityManager.persist()` | `modelContext.insert()` |
-| `@Transactional` | Automático en SwiftData |
-| `CompletableFuture.supplyAsync()` | `Task.detached` |
-| Interfaz/Listener | Coordinator (delegate) |
+- App: 100% offline (datos en SwiftData + tu iCloud).
+- Sin recopilación de datos personales.
+- Política completa: [`docs/privacy.md`](docs/privacy.md) (también dentro de
+  la app: Ajustes → Política de Privacidad).
+- Twemoji bajo CC-BY 4.0 (jdecked/twemoji) — atribución en Ajustes → Créditos.
 
 ---
 
-## Posibles errores
+## ✍️ Autor
 
-**"countries.geojson not found"**
-→ El archivo no está en el bundle. Repite el Paso 2.
-
-**Los países no se colorean al tocar**
-→ Asegúrate de que `Country.self` está en el Schema de `RaskmapApp.swift`.
-
-**Xcode dice "Cannot find Item in scope"**
-→ Borra `Item.swift` del proyecto.
+Jaime Fernández Arenas · raskmap_soporte@icloud.com
