@@ -5,28 +5,31 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada (2026-05-11, tarde)
-**Fase D — 7 sheets extraídos a `Raskmap/Sheets/` + 2 hotfixes de import:**
+### Última acción completada (2026-05-11, noche)
+**Fase D — 15 sheets extraídos a `Raskmap/Sheets/`:**
 
-- 7 archivos nuevos bajo `Raskmap/Sheets/` (ver tabla más abajo).
-- ContentView.swift: 14 951 → **11 109 líneas (-25.7%)**.
-- Hotfix `9e4e7bc`: `import CoreLocation` + `import MapKit` en
-  `TransportStatsSheets.swift` (haversine usa CLLocationCoordinate2D).
-- Hotfix `6bbcae3`: `import UIKit` en `ListSheets.swift`
-  (UIActivityViewController para compartir trips).
-- Build OK tras los hotfixes.
+- ContentView.swift: 14 951 → **7 827 líneas (-47.7%)**.
+- Build OK tras los 2 hotfixes de import (CoreLocation/MapKit, UIKit).
 
 **Archivos en `Raskmap/Sheets/` (orden de creación):**
 
-| Archivo | Líneas | Commit |
-|---|---|---|
-| `StatsBreakdownSheets.swift` | 183 | `e55452e` |
-| `SettingsSubSheets.swift` | 243 | `42e116b` |
-| `ContactSheet.swift` | 220 | `5c1afc0` |
-| `SubscriptionSheet.swift` | 266 | `501a3a5` |
-| `RouteWizardSheet.swift` | 922 | `ef7b284` |
-| `TransportStatsSheets.swift` | 1 185 | `cd5d15a` + `9e4e7bc` |
-| `ListSheets.swift` | 945 | `0889454` + `6bbcae3` |
+| Archivo | Líneas | Commit | Total ContentView |
+|---|---|---|---|
+| `StatsBreakdownSheets.swift` | 183 | `e55452e` | 14 782 |
+| `SettingsSubSheets.swift` | 243 | `42e116b` | 14 555 |
+| `ContactSheet.swift` | 220 | `5c1afc0` | 14 349 |
+| `SubscriptionSheet.swift` | 266 | `501a3a5` | 14 098 |
+| `RouteWizardSheet.swift` | 922 | `ef7b284` | 13 194 |
+| `TransportStatsSheets.swift` | 1 185 | `cd5d15a` + `9e4e7bc` | 12 033 |
+| `ListSheets.swift` | 945 | `0889454` + `6bbcae3` | 11 109 |
+| `AllCountriesSheet.swift` | 302 | `0820dc1` | 10 823 |
+| `LogrosSheet.swift` | 317 | `185adc1` | 10 519 |
+| `PlannedDatePickerSheet.swift` | 437 | `ffd0927` | 10 096 |
+| `SmallWidgets.swift` | 180 | `d90aa53` | 9 935 |
+| `MultiContinentHemisphereSheets.swift` | 342 | `7d2c2ae` | 9 614 |
+| `SubjectiveSheets.swift` | 479 | `ca9e605` | 9 153 |
+| `AwardsSheets.swift` | 433 | `9ce3632` | 8 736 |
+| `MapQuadrantsSheets.swift` | 925 | `951e6ab` | 7 827 |
 
 ### Acción completada anterior (2026-05-11, mañana)
 **Fase A (App Store readiness) — parcial:**
@@ -90,40 +93,34 @@ Fix intermedio (`04d96e6`): `raskmapProLifetimeID/raskmapProAllIDs`
 cambiados de `private` a `internal` para cross-file + reemplazo de
 `%lld%%` por `%@` en una key del catalog (warning Xcode 16).
 
-**Próxima sesión:** continuar **Fase D** con los sheets más grandes que
-restan en ContentView.swift (11 109 → objetivo ~3 000 líneas).
+**Próxima sesión:** continuar **Fase D** con los sheets restantes
+(ContentView 7 827 → objetivo ~3 000 líneas, falta ~50%).
 
-Candidatos en orden recomendado (de menor a mayor riesgo):
+Sheets pendientes en ContentView (líneas aprox tras última extracción):
+- ProfileSheet — el más grande, ~970 líneas.
+- SettingsSheet — ~942 líneas.
+- ExportDataSheet — ~270 líneas.
+- WidgetHomeColorSheet — ~175 líneas.
+- FlightInfoSection — ~310 líneas.
+- TableFlagPickerSheet — ~120 líneas.
+- UsernameEditView — ~90 líneas.
+- YearTravelView — ~370 líneas.
+- AddTripSheet — ~410 líneas.
+- EditTripSheet — ~820 líneas.
+- PassportAvatarView + PassportPickerSheet — ~100 líneas.
+- FlightFilterSlider — ~110 líneas.
+- AchievementKind enum — ~400 líneas.
+- StatBadge, LegendItem, CountryBottomSheet, ActionButton — ~250 líneas.
+- TripNotifications (enum) — ~75 líneas.
 
-1. **AllCountriesSheet** (~7202 actualmente, ~700 líneas) — autocontenida.
-2. **LogrosSheet** (~5007 actualmente, ~300 líneas) — autocontenida.
-3. **PlannedDatePickerSheet** (~9050 actualmente, ~400 líneas).
-4. **CountryBottomSheet + ActionButton + StatBadge + LegendItem**
-   (≤ línea 2500, ~250 líneas) — pequeños widgets reutilizables.
-5. **PassportPickerSheet + PassportAvatarView** (~3416, ~100 líneas).
-6. **MedalleroSheet + PersonalListSheet + PersonalAwardSheet**
-   (sheets de premios personales, ~600 líneas).
-7. **MultiContinentSheet + MultiHemisphereSheet + SubjectiveCategoriesSheet
-   + SubjectiveFlagPickerSheet** (~1200 líneas en bloque).
-8. **MapExportSheet + AddQuadrantSheet + QuadrantDetailSheet**
-   (~700 líneas).
-9. **TransportTripsListSheet, VisitCountPickerSheet, RangeDatePicker,
-   FlightInfoSection, FlagAlphabetSheet, FavoriteAirportPickerSheet,
-   TableFlagPickerSheet, FlightFilterSlider** (sheets/widgets sueltos).
-10. **YearTravelView + FlowLayoutCentered + UsernameEditView** (helpers UI).
-11. **Por último (mayor riesgo)**:
-    - `Sheets/ProfileSheet.swift` (~970 líneas en bloque desde L4036).
-    - `Sheets/SettingsSheet.swift` (~942 líneas desde L5312).
-    - `Sheets/AddTripSheet.swift` (~410 líneas desde L8099).
-    - `Sheets/EditTripSheet.swift` (~820 líneas desde L10638).
+**Convención de la fase:** 1 commit por extracción, máx ~1 500 líneas por
+commit, verificar imports tras cada uno (los faltantes típicos:
+CoreLocation, MapKit, UIKit, MessageUI, StoreKit, SwiftData).
 
-Estos 4 últimos acceden más a state inline y comparten lógica con
-ContentView (saveTrip handlers, refreshes), así que conviene tenerlos
-para el final cuando el resto esté estable.
-
-Convención: 1 commit por extracción, máx 1500 líneas movidas por
-commit, verificar imports tras cada extracción (CoreLocation, MapKit,
-UIKit, MessageUI, StoreKit son los típicos faltantes).
+Los 4 últimos grandes (ProfileSheet, SettingsSheet, AddTripSheet,
+EditTripSheet) tienen más acoplamiento con ContentView (acceso a
+@State, handlers, refresh helpers) — dejarlos para el final cuando
+el resto esté estable.
 
 ### Lo último que se entregó (sesión 2026-05-11)
 - Hotfixes UX: countdown solo en modo mapa, eliminación de plantillas rápidas,
