@@ -2359,6 +2359,17 @@ struct ContentView: View {
 }
 
 // MARK: - Extensión de fuente (Satoshi)
+//
+// Helper para usar la fuente Satoshi con escalas semánticas + soporte
+// Dynamic Type. La clave es `Font.custom(_:size:relativeTo:)`: al pasar
+// un TextStyle como `relativeTo`, SwiftUI escala el tamaño base según
+// la preferencia de "Larger Text" del usuario en Settings → Accessibility.
+//
+// Antes esta función devolvía `Font.custom(_:size:)` sin `relativeTo`,
+// por lo que el texto NO escalaba — todos los `.font(.palatino(.body))`
+// de la app quedaban fijos a 17pt aunque el usuario hubiera elegido
+// "Larger Text". Cambio in-place: todos los call sites heredan el fix
+// sin tocar nada más.
 extension Font {
     static func palatino(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
         let size: CGFloat
@@ -2377,10 +2388,10 @@ extension Font {
         @unknown default:  size = 17
         }
         switch weight {
-        case .bold, .semibold: return .custom("Satoshi-Bold", size: size)
-        case .medium:          return .custom("Satoshi-Medium", size: size)
-        case .light:           return .custom("Satoshi-Light", size: size)
-        default:               return .custom("Satoshi-Regular", size: size)
+        case .bold, .semibold: return .custom("Satoshi-Bold",    size: size, relativeTo: style)
+        case .medium:          return .custom("Satoshi-Medium",  size: size, relativeTo: style)
+        case .light:           return .custom("Satoshi-Light",   size: size, relativeTo: style)
+        default:               return .custom("Satoshi-Regular", size: size, relativeTo: style)
         }
     }
 }
