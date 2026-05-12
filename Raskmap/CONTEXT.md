@@ -1,5 +1,44 @@
 # CONTEXT.md — Raskmap
 
+## 👁 Resumen visual de cambios para el usuario final
+
+Tras la iteración completa (Sprints 1-4 + nice-to-haves 🟡 + 🟢), un
+usuario notará al abrir la app:
+
+1. **Paleta refinada** — el cambio MÁS visible. Vivido pasa de verde
+   salvia (confundible con próximos) a **violeta apagado**. Visited
+   más cálido (siena), próximos menos saturado (verde mar), bucket
+   más suave (miel).
+2. **Mapa fluido sin flicker** al hacer pan + zoom-out sin tope.
+3. **Ripple celebratorio + haptic** al marcar país como visitado
+   por primera vez.
+4. **Live Activity dorada** al desbloquear logros (10s, auto-dismiss).
+5. **Share trip rich** — preview imagen 1080×1080 con gradient + flags
+   además del texto.
+6. **Widget medium reorganizado** — header arriba, bandera centrada,
+   muestra título de viaje si tiene (sino país).
+7. **"Lugares por descubrir" rediseñado** — 1 por región (no varias
+   de África, sí Oceanía), banderas tappables (abren país en mapa),
+   ISR excluido.
+8. **Búsqueda con empty state visual** (SF Symbol grande + emoji).
+9. **App en inglés** disponible (93.4% de strings traducidas).
+10. **Dynamic Type funciona** — "Larger Text" en Settings escala
+    todo el texto de la app.
+11. **VoiceOver mejorado** — buttons icon-only describen acciones.
+12. **Tap area mejorada** — counter buttons cumplen Apple HIG 44pt.
+13. **Auto-marcado por ubicación eliminado** — ya no marca países
+    sin que el usuario lo pida explícitamente.
+14. **Eliminar de próximos funciona** — antes el trip futuro
+    resucitaba la marca, ahora se purga correctamente.
+
+Cambios invisibles pero impactantes:
+- Compilación Xcode 3× más rápida (ContentView -84.1%).
+- Errores SwiftData visibles en Console.app (antes silenciados).
+- Cache de renderers acotado (sin memory bloat).
+- Tasks cancelables → sin race conditions al navegar rápido.
+
+---
+
 ## 🧭 ESTADO ACTUAL · Punto de continuación (2026-05-11)
 
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
