@@ -36,6 +36,10 @@ struct ContentView: View {
     @State private var pendingDateIsNew: Bool = false
     @State private var locationIsoCode: String? = nil
     @State private var visitedToastMessages: [String] = []
+    /// ISO del país que acaba de marcarse como visitado por primera vez.
+    /// Cuando es non-nil, el mapa muestra un ripple celebratorio centrado
+    /// durante ~0.9s y luego se limpia. Combina con UINotificationFeedback.
+    @State private var rippleCountryIso: String? = nil
     @State private var pendingAddTripCountry: Country? = nil
     @State private var statusBeforeVisit: CountryStatus = .none
     @State private var refreshTrigger: Bool = false
@@ -1229,6 +1233,28 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
 
+            // Ripple celebratorio cuando se marca un país como visitado por
+            // primera vez. Centrado en pantalla (cooperativo con el centerMap
+            // que se dispara casi a la vez). Anillo verde expandiéndose +
+            // fade out. ~0.9s total.
+            if rippleCountryIso != nil {
+                ZStack {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .stroke(colorTheme.visitedColor.opacity(0.7), lineWidth: 3)
+                            .scaleEffect(rippleCountryIso != nil ? 3.0 : 0.1)
+                            .opacity(rippleCountryIso != nil ? 0 : 1)
+                            .frame(width: 80, height: 80)
+                            .animation(
+                                .easeOut(duration: 0.9).delay(Double(i) * 0.15),
+                                value: rippleCountryIso
+                            )
+                    }
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+
             // Visited toast (stacked, one per country)
             if !visitedToastMessages.isEmpty {
                 VStack {
@@ -1381,22 +1407,28 @@ struct ContentView: View {
                         }
                     }
                 }
-                // Empty state: query no vacía pero no hay matches ni en viajes
-                // ni en países. Muestra mensaje en lugar de Lista vacía silenciosa.
+                // Empty state visualmente rich: query no vacía pero sin matches.
+                // SF Symbol grande + título bold + sugerencia + emoji decorativo.
                 if !searchText.isEmpty && matchingTrips.isEmpty
                     && groupedSearchResults.allSatisfy({ $0.features.isEmpty }) {
                     Section {
-                        VStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 36))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 32)
+                        VStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(.systemGray6))
+                                    .frame(width: 92, height: 92)
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 38, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.top, 28)
                             Text("Sin resultados")
-                                .font(.palatino(.body, weight: .bold))
-                            Text("Prueba con otro nombre de país o viaje")
-                                .font(.palatino(.caption))
+                                .font(.palatino(.title3, weight: .bold))
+                            Text("Prueba con otro nombre de país o viaje 🌍")
+                                .font(.palatino(.subheadline))
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
                                 .padding(.bottom, 24)
                         }
                         .frame(maxWidth: .infinity)
@@ -2313,6 +2345,17 @@ struct ContentView: View {
                 statusBeforeVisit = previousStatus
                 lastModifiedCountry = country
                 shouldOpenAddTrip = true
+                // Momento delight: haptic success + ripple visual cuando un
+                // país NUEVO se marca como visitado (no aplica si ya estaba
+                // visitado y solo cambia de wantToVisit → visited, p.ej.).
+                if previousStatus != .visited {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    rippleCountryIso = country.isoCode
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(0.9))
+                        rippleCountryIso = nil
+                    }
+                }
             }
             if newStatus != .none {
                 Task { @MainActor in
