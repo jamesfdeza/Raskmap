@@ -302,6 +302,8 @@ struct SettingsSheet: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Cambiar pasaporte")
+                            .accessibilityHint("Abre el selector de pasaportes")
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Nombre de usuario")
@@ -320,6 +322,7 @@ struct SettingsSheet: View {
                                                 .font(.callout)
                                                 .foregroundStyle(.blue)
                                         }
+                                        .accessibilityLabel("Editar nombre de usuario")
                                         .buttonStyle(.plain)
                                     }
                                     .padding(10)

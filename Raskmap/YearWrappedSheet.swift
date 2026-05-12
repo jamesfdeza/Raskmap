@@ -1791,14 +1791,19 @@ private struct BigCountingNumber: View {
         guard target > 0 else { return }
         let steps = min(target, 40)
         let delay = 0.9 / Double(steps)
-        for i in 1...steps {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay * Double(i)) {
+        // Animación tickeada en Task — se cancela automáticamente si la vista
+        // se destruye antes de terminar (vs DispatchQueue.asyncAfter que
+        // ejecutaba sobre estado stale).
+        Task { @MainActor in
+            for i in 1...steps {
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: delay * 1.5)) {
                     display = Int(Double(target) * Double(i) / Double(steps))
                 }
             }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay * Double(steps) + 0.05) {
+            try? await Task.sleep(for: .seconds(0.05))
+            guard !Task.isCancelled else { return }
             display = target
         }
     }

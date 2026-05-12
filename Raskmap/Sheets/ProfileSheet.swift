@@ -512,6 +512,7 @@ struct ProfileSheet: View {
                         Image(systemName: "gearshape.fill")
                             .font(.body)
                     }
+                    .accessibilityLabel("Ajustes")
                 }
             }
         }
