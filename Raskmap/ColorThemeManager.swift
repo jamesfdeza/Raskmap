@@ -14,14 +14,30 @@ import Combine
 class ColorThemeManager: ObservableObject {
     static let shared = ColorThemeManager()
     
-    // Paleta por defecto (sRGB): tonos con saturación media, legibles sobre tiles de Apple Maps.
-    // Visitados → #DC6647 (terracota vivo)
-    // Próximos (wantToVisit) → #00CB7C (verde esmeralda)
-    // Quiero (bucketList) → #E5B257 (ámbar dorado)
-    static let defaultVisited: Color     = Color(.sRGB, red: 0xDC/255.0, green: 0x66/255.0, blue: 0x47/255.0, opacity: 1.0)
-    static let defaultWantToVisit: Color = Color(.sRGB, red: 0x00/255.0, green: 0xCB/255.0, blue: 0x7C/255.0, opacity: 1.0)
-    static let defaultLived: Color       = Color(.sRGB, red: 0x5D/255.0, green: 0xAD/255.0, blue: 0x6E/255.0, opacity: 1.0)
-    static let defaultBucketList: Color  = Color(.sRGB, red: 0xE5/255.0, green: 0xB2/255.0, blue: 0x57/255.0, opacity: 1.0)
+    // Paleta refinada (sRGB) — Sprint 4 item 15.
+    //
+    // Cambios respecto a la paleta anterior (motivados por auditoría UX/UI):
+    //  · Visitados: #DC6647 (terracota vivo) → #D65B3F (siena tostado)
+    //    Más cálido, evoca "tierra explorada". Diferencia más clara contra
+    //    el ámbar (bucketList).
+    //  · Próximos: #00CB7C (verde esmeralda saturado) → #5BA89B (verde mar)
+    //    Menos chillón, descansa la vista en mapas con muchos países en
+    //    próximos. Mantiene la asociación "verde = futuro/avance".
+    //  · Vivido: #5DAD6E (verde salvia) → #7B5BAB (violeta apagado)
+    //    FIX crítico: el salvia y el esmeralda anteriores eran demasiado
+    //    parecidos (semánticamente confundibles). Violeta diferencia
+    //    visualmente "echar raíces" (vivido) del "futuro" (próximos).
+    //  · Quiero (bucketList): #E5B257 (ámbar dorado) → #F2C265 (miel)
+    //    Ligeramente más suave; mantiene el tono dorado pero menos saturado
+    //    para coexistir mejor con la nueva siena del visited.
+    //
+    // Usuarios que ya personalizaron colores vía Ajustes: NO se ven afectados
+    // — sus elecciones persisten en UserDefaults. Solo los nuevos usuarios o
+    // los que pulsen "Restablecer colores" verán la nueva paleta.
+    static let defaultVisited: Color     = Color(.sRGB, red: 0xD6/255.0, green: 0x5B/255.0, blue: 0x3F/255.0, opacity: 1.0)
+    static let defaultWantToVisit: Color = Color(.sRGB, red: 0x5B/255.0, green: 0xA8/255.0, blue: 0x9B/255.0, opacity: 1.0)
+    static let defaultLived: Color       = Color(.sRGB, red: 0x7B/255.0, green: 0x5B/255.0, blue: 0xAB/255.0, opacity: 1.0)
+    static let defaultBucketList: Color  = Color(.sRGB, red: 0xF2/255.0, green: 0xC2/255.0, blue: 0x65/255.0, opacity: 1.0)
 
     @Published var visitedColor: Color {
         didSet { save(visitedColor, key: "color_visited") }
