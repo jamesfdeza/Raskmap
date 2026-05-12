@@ -5,7 +5,36 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada (2026-05-12 — Nice-to-haves 🟡 cerrados)
+### Última acción completada (2026-05-12 — Nice-to-haves 🟢 abordados)
+
+Sesión dedicada a las mejoras opcionales del roadmap. Combinación de
+implementación directa para los items realizables + documentación para
+los XL que requieren semanas:
+
+**Implementados:**
+- ✅ Items 1+3 (`204f859`): asyncAfter dinámicos del Wrapped a Task con
+  cancel check + a11y paso 2 en SettingsSheet/ProfileSheet (avatar
+  pasaporte, edit username, gearshape Ajustes).
+- ✅ Items 4+6 (`bca095d`): ripple celebratorio + haptic success al
+  marcar visitado por primera vez + empty state buscador rediseñado
+  (SF Symbol en círculo + emoji decorativo).
+- ✅ Item 5 (`ff4f5ce`): share trip con preview rich 1080×1080
+  (TripShareCard render con ImageRenderer, fondo gradient, banderas
+  + días, footer Raskmap).
+- ✅ Item 7 (`7cd4646`): Live Activity celebratoria al desbloquear
+  logros (RaskmapAchievementLiveActivity con UI dorada,
+  AchievementCelebrator helper, auto-dismiss tras 10s).
+
+**Documentados (no implementados) — en `docs/ROADMAP_OPTIONAL_FEATURES.md` (`1772fe5`):**
+- 🔵 iOS 18 Map + MapPolygon migration (L, 2-3 sem).
+- 🔵 iPad layout master-detail (L, 1-2 sem).
+- 🔵 Apple Watch app real (XL, 2-3 sem).
+- 🔵 CloudKit shared records "competición con amigos" (XL, 3-4 sem).
+
+**Decisión "no migrar":** Typography tokens — los tamaños actuales son
+intencionalmente específicos. Migración mecánica rompería jerarquía.
+
+### Última acción completada anterior (2026-05-12 — Nice-to-haves 🟡 cerrados)
 
 Tras Sprint 4, una pasada por los tres frentes 🟡 (deuda gestionable):
 
