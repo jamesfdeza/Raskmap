@@ -5,7 +5,27 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada (2026-05-12 — Sprint 4 cerrado)
+### Última acción completada (2026-05-12 — Nice-to-haves 🟡 cerrados)
+
+Tras Sprint 4, una pasada por los tres frentes 🟡 (deuda gestionable):
+
+- ✅ **B3 multi-line** (`a429205`): 21 patrones de
+  `DispatchQueue.main.asyncAfter` multi-line migrados a
+  `Task { @MainActor in try? await Task.sleep(...); ... }`. Auto-cancel
+  cuando la View desaparece. Quedan 2 ocurrencias dinámicas en
+  YearWrappedSheet (`delay * Double(i)` para animaciones secuenciales).
+
+- ✅ **A11y exhaustiva paso 1** (`2ba7410`): labels añadidos a 8 buttons
+  icon-only en AllCountriesSheet, ListSheets, MapQuadrantsSheets.
+  VoiceOver ahora describe acciones contextuales ("Editar cuadrante X",
+  "Eliminar país", "Restablecer cuadrantes", etc.).
+
+- ✅ **Dynamic Type** (`aa5c78d`): cambio quirúrgico en `Font.palatino`
+  añadiendo `relativeTo: style` al `Font.custom`. Propagación: ~todos
+  los textos de la app respetan ahora la preferencia "Larger Text" de
+  Settings → Accessibility sin tocar ningún call site.
+
+### Última acción completada anterior (2026-05-12 — Sprint 4 cerrado)
 
 **Sprint 4 — items 15 + 16 completados:**
 
