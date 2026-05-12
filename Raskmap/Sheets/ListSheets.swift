@@ -854,7 +854,16 @@ struct FinalizadoTripDetailSheet: View {
             return parts
         }()
         let text = lines.joined(separator: "\n")
-        let av = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+
+        // Render rich preview: imagen 1080×1080 (cuadrada, óptima para Instagram /
+        // WhatsApp / Mensajes) con título + fechas + banderas + días por país.
+        // Si el render falla, fallback al share solo con texto.
+        var items: [Any] = [text]
+        if let preview = renderShareImage() {
+            items.insert(preview, at: 0)
+        }
+
+        let av = UIActivityViewController(activityItems: items, applicationActivities: nil)
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let key = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
         else { return }
@@ -863,6 +872,101 @@ struct FinalizadoTripDetailSheet: View {
             top = presented
         }
         top?.present(av, animated: true)
+    }
+
+    /// Renderiza una imagen 1080×1080 con la info principal del viaje para
+    /// share enriquecido (preview en Mensajes, Instagram, WhatsApp).
+    @MainActor
+    private func renderShareImage() -> UIImage? {
+        let card = TripShareCard(
+            title: headerTitle,
+            dateRange: dateRangeText,
+            daysByCountry: daysByCountry.map { (
+                flag: flagEmoji(for: $0.iso),
+                name: displayName(for: $0.iso),
+                days: $0.days
+            )}
+        )
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 2
+        renderer.proposedSize = ProposedViewSize(width: 1080, height: 1080)
+        renderer.isOpaque = true
+        return renderer.uiImage
+    }
+}
+
+// MARK: - Trip share card (rich preview 1:1)
+//
+// Vista 1080×1080 que se renderiza a UIImage con ImageRenderer para
+// compartir junto al texto. Diseño minimalista: fondo gradient azul →
+// purpura, título grande, fechas, lista de banderas con días, footer
+// Raskmap. Adaptado del estilo del Wrapped pero simplificado.
+private struct TripShareCard: View {
+    let title: String
+    let dateRange: String?
+    let daysByCountry: [(flag: String, name: String, days: Int)]
+
+    private static let bgGradient = LinearGradient(
+        colors: [
+            Color(red: 0x04/255, green: 0x07/255, blue: 0x1F/255),
+            Color(red: 0x1C/255, green: 0x10/255, blue: 0x48/255),
+            Color(red: 0x52/255, green: 0x20/255, blue: 0x9A/255)
+        ],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+
+    var body: some View {
+        ZStack {
+            Self.bgGradient.ignoresSafeArea()
+            VStack(spacing: 28) {
+                Spacer(minLength: 60)
+                Text("✈️")
+                    .font(.system(size: 84))
+                Text(title)
+                    .font(.custom("Satoshi-Bold", size: 56))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                if let dateRange {
+                    Text(dateRange)
+                        .font(.custom("Satoshi-Medium", size: 22))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+                if !daysByCountry.isEmpty {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(daysByCountry.prefix(8), id: \.name) { entry in
+                            HStack(spacing: 14) {
+                                Text(entry.flag).font(.system(size: 36))
+                                Text(entry.name)
+                                    .font(.custom("Satoshi-Bold", size: 24))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Text("\(entry.days) \(entry.days == 1 ? "día" : "días")")
+                                    .font(.custom("Satoshi-Medium", size: 20))
+                                    .foregroundStyle(.white.opacity(0.7))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 80)
+                }
+                Spacer()
+                VStack(spacing: 4) {
+                    Rectangle().fill(Color.white.opacity(0.25))
+                        .frame(width: 140, height: 0.8)
+                    Text("Raskmap")
+                        .font(.custom("Satoshi-Bold", size: 28))
+                        .foregroundStyle(.white)
+                    Text("Tu mapa personal")
+                        .font(.custom("Satoshi-Regular", size: 16))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .padding(.bottom, 60)
+            }
+        }
+        .frame(width: 1080, height: 1080)
+        .environment(\.colorScheme, .dark)
     }
 }
 
