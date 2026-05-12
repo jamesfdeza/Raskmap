@@ -498,7 +498,8 @@ struct WidgetHomeColorSheet: View {
                     savedHex = selectedHex
                     WidgetDataWriter.syncColor(hex: selectedHex)
                     isApplying = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(5))
                         isApplying = false
                         dismiss()
                     }

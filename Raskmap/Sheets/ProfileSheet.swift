@@ -577,12 +577,14 @@ struct ProfileSheet: View {
                 onSetDate: { country, trip in
                     if let trip = trip {
                         proximosShown = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(0.35))
                             editingProximoTrip = trip
                         }
                     } else {
                         proximosShown = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(0.35))
                             pendingProximoCountryForDate = country
                         }
                     }

@@ -110,7 +110,8 @@ struct AddTripSheet: View {
         confirmAirports = apC.map { AirportConfirmEntry(iata: $0.key, count: $0.value) }.sorted { $0.iata < $1.iata }
         confirmAirlines = alOrder.map { AirlineConfirmEntry(name: $0, count: alC[$0] ?? 0) }
         withAnimation { sheetDetent = .large }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.25))
             withAnimation { showSaveConfirmation = true }
         }
     }

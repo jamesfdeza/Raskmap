@@ -837,13 +837,15 @@ struct ContentView: View {
         mapCore()
             .sheet(item: $selectedCountry, onDismiss: {
                 highlightedIsoCode = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.1))
                     recheckLocationIfNeeded()
                 }
                 // Open AddTripSheet after country sheet fully dismissed
                 if shouldOpenAddTrip, let lastCountry = lastModifiedCountry {
                     shouldOpenAddTrip = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(0.2))
                         pendingAddTripCountry = lastCountry
                     }
                 }
@@ -860,7 +862,8 @@ struct ContentView: View {
                     onDismiss: {
                         selectedCountry = nil
                         highlightedIsoCode = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(0.1))
                             recheckLocationIfNeeded()
                         }
                     },
@@ -985,7 +988,8 @@ struct ContentView: View {
                     onSetDate: filter == .wantToVisit ? { country, trip in
                         if let trip = trip {
                             statusListFilter = nil
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(0.35))
                                 editingFutureTrip = trip
                             }
                         } else {
@@ -1117,7 +1121,8 @@ struct ContentView: View {
                     onSave: { trip, childNames in
                         modelContext.insert(trip)
                         modelContext.saveOrWarn()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(0.1))
                             refreshTrigger.toggle()
                         }
                         // Show stacked toasts for main country + newly visited segment countries
@@ -1146,7 +1151,8 @@ struct ContentView: View {
             .onChange(of: statusListFilter) { _, newValue in
                 if newValue == nil, let deferred = deferredDateCountry {
                     deferredDateCountry = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(0.35))
                         pendingDateCountry = deferred
                     }
                 }
@@ -1843,13 +1849,15 @@ struct ContentView: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         withAnimation(.easeIn(duration: 0.22)) { flightTransitionTarget = target }
         // Cambiar el modo bajo el overlay (invisible para el usuario).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.32))
             flightMode = target
             // Al entrar en modo vuelos siempre arrancamos en "Visitados".
             if target { flightRouteFilter = .past }
         }
         // Retirar el overlay al final de la animación (~2s).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.0))
             withAnimation(.easeOut(duration: 0.28)) { flightTransitionTarget = nil }
         }
     }
@@ -1884,7 +1892,8 @@ struct ContentView: View {
                 // centerMap + highlight + sheet del país. Pequeño delay para
                 // dejar a SwiftUI completar la animación de dismiss del sheet.
                 showProfile = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.4))
                     let country = countries.first(where: { $0.isoCode == feature.isoCode })
                         ?? Country(name: feature.localizedName, isoCode: feature.isoCode)
                     handleCountryTap(country)
@@ -2306,12 +2315,14 @@ struct ContentView: View {
                 shouldOpenAddTrip = true
             }
             if newStatus != .none {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.4))
                     centerMap(on: country.isoCode)
                 }
             }
             if country.isoCode == locationIsoCode {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.2))
                     recheckLocationIfNeeded()
                 }
             }

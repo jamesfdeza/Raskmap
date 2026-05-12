@@ -375,7 +375,8 @@ struct confirmCardContent: View {
                     Button {
                         guard !isSaving else { return }
                         isSaving = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(3.0))
                             onSave()
                         }
                     } label: {

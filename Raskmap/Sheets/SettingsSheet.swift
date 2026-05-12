@@ -227,7 +227,8 @@ struct SettingsSheet: View {
                         colorTheme.wantToVisitColor = pendingWantToVisitColor
                         colorTheme.bucketListColor = pendingBucketListColor
                         isApplyingColors = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(5))
                             isApplyingColors = false
                         }
                     } label: {
@@ -246,7 +247,8 @@ struct SettingsSheet: View {
                         pendingBucketListColor = ColorThemeManager.defaultBucketList
                         colorTheme.resetToDefaults()
                         isApplyingColors = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(5))
                             isApplyingColors = false
                         }
                     } label: {
@@ -389,7 +391,8 @@ struct SettingsSheet: View {
                                 Button {
                                     countingModeRaw = mode.rawValue
                                     showCountingToast = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    Task { @MainActor in
+                                        try? await Task.sleep(for: .seconds(1.5))
                                         showCountingToast = false
                                     }
                                 } label: {
