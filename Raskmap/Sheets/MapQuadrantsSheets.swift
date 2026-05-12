@@ -415,9 +415,11 @@ struct MapExportSheet: View {
                         Button { showResetConfirm = true } label: {
                             Image(systemName: "arrow.counterclockwise")
                         }
+                        .accessibilityLabel("Restablecer cuadrantes")
                         Button { isEditingQuadrants.toggle() } label: {
                             Image(systemName: isEditingQuadrants ? "checkmark" : "pencil")
                         }
+                        .accessibilityLabel(isEditingQuadrants ? "Terminar edición" : "Editar cuadrantes")
                     }
                 }
             }
@@ -496,12 +498,14 @@ struct MapExportSheet: View {
                                 .font(.title3)
                                 .background(Circle().fill(Color(.systemBackground)))
                         }
+                        .accessibilityLabel("Editar cuadrante \(q.title)")
                         Button { quadrantToDelete = q } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundStyle(.red)
                                 .font(.title3)
                                 .background(Circle().fill(Color(.systemBackground)))
                         }
+                        .accessibilityLabel("Eliminar cuadrante \(q.title)")
                     }
                     .offset(x: 6, y: -6)
                 }

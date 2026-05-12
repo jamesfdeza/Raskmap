@@ -247,6 +247,7 @@ struct StatusListSheet: View {
                         Button { showDeleteAllConfirm = true } label: {
                             Image(systemName: "trash").foregroundStyle(.red)
                         }
+                        .accessibilityLabel("Borrar lista completa")
                     }
                 }
             }

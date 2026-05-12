@@ -71,6 +71,7 @@ struct AllCountriesSheet: View {
                                         Button { withAnimation { showInfoToast = true } } label: {
                                             Image(systemName: "info.circle")
                                         }
+                                        .accessibilityLabel("Información sobre la lista")
                                     }
                                 }
                         )
@@ -290,12 +291,14 @@ private struct AllCountriesRowView: View {
                     .foregroundStyle(Color(.systemGray3))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Añadir viaje")
             Button(action: onDelete) {
                 Image(systemName: "trash")
                     .font(.callout)
                     .foregroundStyle(.red.opacity(0.5))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Eliminar país")
         }
         .padding(.vertical, 3)
     }
