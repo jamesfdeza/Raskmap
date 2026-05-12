@@ -18,3 +18,15 @@ struct RaskmapTripAttributes: ActivityAttributes {
         var tripStartDate: Date?
     }
 }
+
+/// Live Activity celebratoria efímera para el desbloqueo de un logro.
+/// Dura ~10s y se auto-dismissa. UI: emoji grande + título + descripción.
+/// El target del widget también necesita una copia de este struct (sync
+/// folder de RaskmapWidget/).
+struct RaskmapAchievementAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+        var emoji: String      // 🏆 🌍 ⭐️ etc.
+        var title: String      // "¡Has visitado el mundo entero!"
+        var subtitle: String   // "100 países visitados"
+    }
+}

@@ -21,5 +21,6 @@ struct RaskmapWidgetBundle: WidgetBundle {
         // bajo @available(iOS 18.0, *) por si en el futuro queremos
         // implementar un control de Centro de Control real.
         RaskmapLiveActivity()
+        RaskmapAchievementLiveActivity()
     }
 }

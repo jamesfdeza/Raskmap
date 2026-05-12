@@ -131,3 +131,86 @@ struct RaskmapLiveActivity: Widget {
         }
     }
 }
+
+// MARK: - Live Activity celebratoria para logros desbloqueados
+
+private let achievementGoldBg = LinearGradient(
+    colors: [
+        Color(red: 0.95, green: 0.75, blue: 0.30),  // dorado
+        Color(red: 0.85, green: 0.55, blue: 0.18)   // ámbar oscuro
+    ],
+    startPoint: .topLeading,
+    endPoint: .bottomTrailing
+)
+
+struct RaskmapAchievementLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: RaskmapAchievementAttributes.self) { context in
+            // Lock screen / notification banner — premio centrado
+            HStack(spacing: 14) {
+                Text(context.state.emoji)
+                    .font(.system(size: 44))
+                    .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("LOGRO DESBLOQUEADO")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .tracking(1.6)
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text(context.state.title)
+                        .font(.custom("Satoshi-Bold", size: 18))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    if !context.state.subtitle.isEmpty {
+                        Text(context.state.subtitle)
+                            .font(.custom("Satoshi-Regular", size: 13))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .containerBackground(achievementGoldBg, for: .widget)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Text(context.state.emoji)
+                        .font(.system(size: 36))
+                        .padding(.leading, 4)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    Text("LOGRO")
+                        .font(.custom("Satoshi-Bold", size: 9))
+                        .tracking(1.4)
+                        .foregroundStyle(.orange)
+                        .padding(.trailing, 6)
+                }
+                DynamicIslandExpandedRegion(.center) {
+                    VStack(spacing: 2) {
+                        Text(context.state.title)
+                            .font(.custom("Satoshi-Bold", size: 14))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        if !context.state.subtitle.isEmpty {
+                            Text(context.state.subtitle)
+                                .font(.custom("Satoshi-Regular", size: 11))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            } compactLeading: {
+                Text(context.state.emoji).font(.system(size: 16))
+            } compactTrailing: {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+            } minimal: {
+                Text(context.state.emoji).font(.system(size: 14))
+            }
+        }
+    }
+}
