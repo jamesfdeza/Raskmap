@@ -5,6 +5,21 @@
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
+### Última acción completada (2026-05-12 — Sprint 4 cerrado)
+
+**Sprint 4 — items 15 + 16 completados:**
+
+- ✅ **Paleta refinada** (`9077a8a`): defaults `ColorThemeManager`
+  actualizados. Visited siena (#D65B3F), wantToVisit verde mar (#5BA89B),
+  lived violeta (#7B5BAB), bucket miel (#F2C265). Soluciona el problema
+  crítico de "verde salvia vs verde esmeralda" confundibles. Usuarios
+  que personalizaron colores en Ajustes los conservan.
+- 🟡 **Snapshot tests scaffold** (`04c7702`): 6 tests preparados con
+  `#if canImport(SnapshotTesting)`. Activación pendiente de añadir
+  manualmente el SPM package `swift-snapshot-testing` desde Xcode.
+
+(Item 14 — modularización — ya completado durante Fase D, anticipado).
+
 ### Última acción completada (2026-05-11, madrugada — Sprint 3 Calidad UX)
 
 **Sprint 3 — los 5 frentes priorizados completados en pasada masiva:**
@@ -193,13 +208,17 @@ AirlineData).
 13. [x] Audit tap targets ≥ 44pt ✅ commit `0d00f92` (counter buttons +/-). Otros pequeños son decorativos o tienen padding row suficiente.
 
 **Sprint 4 — Modularización (3 semanas):**
-14. [ ] Extraer `Sheets/AddTripSheet.swift`, `Sheets/ProfileSheet.swift`,
-       `Sheets/SettingsSheet.swift`, `Sheets/StatsSheet.swift`,
-       `Sheets/ListSheets.swift`, `Sheets/RouteWizardSheet.swift` de ContentView.swift
-       (ContentView pasa de 14 943 → ~3 000 líneas).
-15. [ ] Aplicar paleta refinada (visited=siena, wantToVisit=verde mar, lived=violeta,
-       bucket=miel) — eliminar la cercanía visual entre visited y lived.
-16. [ ] Snapshot tests reales con `swift-snapshot-testing` (SPM dep).
+14. [x] ✅ Extraer sheets de ContentView (completado en Fase D, 24 archivos,
+       ContentView 14 951 → 2 380 líneas, -84.1%).
+15. [x] ✅ Paleta refinada aplicada — commit `9077a8a`. visited siena +
+       wantToVisit verde mar + lived violeta + bucket miel. Solo defaults,
+       no afecta a usuarios que ya personalizaron colores.
+16. [~] 🟡 Snapshot tests reales — scaffold creado (commit `04c7702`).
+       6 tests preparados con `#if canImport(SnapshotTesting)`. Para
+       activarlos requiere acción manual del usuario:
+       Xcode → File → Add Package Dependencies… →
+       `https://github.com/pointfreeco/swift-snapshot-testing` →
+       target RaskmapTests.
 
 **Sprint 5 — Submission:**
 17. [ ] Screenshots EN + ES.
