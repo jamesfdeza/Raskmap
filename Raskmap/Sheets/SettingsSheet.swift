@@ -81,6 +81,10 @@ struct SettingsSheet: View {
     @State private var pendingWantToVisitColor: Color = ColorThemeManager.defaultWantToVisit
     @State private var pendingBucketListColor: Color = ColorThemeManager.defaultBucketList
     @State private var isApplyingColors: Bool = false
+    /// Alert de confirmación antes de resetear los colores. Igual que el flujo
+    /// de "Cambiar colores", el reset es destructivo (sobreescribe lo que el
+    /// usuario tenía) y por eso ahora pasa por un paso explícito de confirmación.
+    @State private var showResetColorsAlert: Bool = false
 
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
@@ -242,15 +246,7 @@ struct SettingsSheet: View {
                     .padding(.horizontal, 24)
                     .disabled(isApplyingColors)
                     Button {
-                        pendingVisitedColor = ColorThemeManager.defaultVisited
-                        pendingWantToVisitColor = ColorThemeManager.defaultWantToVisit
-                        pendingBucketListColor = ColorThemeManager.defaultBucketList
-                        colorTheme.resetToDefaults()
-                        isApplyingColors = true
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .seconds(5))
-                            isApplyingColors = false
-                        }
+                        showResetColorsAlert = true
                     } label: {
                         Text("Restablecer colores predeterminados")
                             .font(.palatino(.footnote, weight: .bold))
@@ -261,6 +257,22 @@ struct SettingsSheet: View {
                     }
                     .padding(.horizontal, 24)
                     .disabled(isApplyingColors)
+                    .alert("¿Restablecer colores predeterminados?", isPresented: $showResetColorsAlert) {
+                        Button("Cancelar", role: .cancel) { }
+                        Button("Restablecer", role: .destructive) {
+                            pendingVisitedColor = ColorThemeManager.defaultVisited
+                            pendingWantToVisitColor = ColorThemeManager.defaultWantToVisit
+                            pendingBucketListColor = ColorThemeManager.defaultBucketList
+                            colorTheme.resetToDefaults()
+                            isApplyingColors = true
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(5))
+                                isApplyingColors = false
+                            }
+                        }
+                    } message: {
+                        Text("Se descartará tu paleta personalizada y volverán los colores originales del mapa.")
+                    }
                 }
                 .blur(radius: isRaskmapPro ? 0 : 6)
                 .allowsHitTesting(isRaskmapPro)

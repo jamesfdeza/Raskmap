@@ -50,7 +50,10 @@ struct TransportStatsSheet: View {
         //  - Ida con escala MAD→DXB→NRT = 2 vuelos.
         //  - Ida y vuelta directa = 2 vuelos.
         //  - Ida y vuelta ambas con escala = 4 vuelos.
-        // Para otros transportes cada `TripSegment` cuenta como 1 uso.
+        // Para transportes NO-✈️ usamos la misma regla que la card de
+        // confirmación pre-save: `dateTo == nil` → 1 (sólo ida), `dateTo != nil`
+        // → 2 (ida + vuelta, incluso mismo día). Esto mantiene el conteo
+        // mostrado al usuario coherente con el de las stats.
         let today = Calendar.current.startOfDay(for: Date())
         var byKey: [String: Int] = [:]
 
@@ -77,7 +80,9 @@ struct TransportStatsSheet: View {
                     let legs = max(1, totalTouches / 2)
                     bump(tr, legs)
                 } else if !tr.isEmpty {
-                    bump(tr, 1)
+                    // Misma regla que el confirm card: dateTo != nil → 2 (ida +
+                    // vuelta), dateTo == nil → 1 (solo ida).
+                    bump(tr, trip.dateTo != nil ? 2 : 1)
                 }
             } else {
                 for seg in segs {
@@ -87,7 +92,10 @@ struct TransportStatsSheet: View {
                         let retLegs = max(0, (seg.returnAirports?.count ?? 0) - 1)
                         bump(tr, max(1, outLegs + retLegs))
                     } else if !tr.isEmpty {
-                        bump(tr, 1)
+                        // Misma regla que en el confirm card pre-save:
+                        // dateTo != nil → 2 (ida + vuelta, incluso mismo día);
+                        // dateTo == nil → 1 (sólo ida).
+                        bump(tr, seg.dateTo != nil ? 2 : 1)
                     }
                 }
             }
@@ -100,7 +108,9 @@ struct TransportStatsSheet: View {
             let endDate = country.plannedDateTo ?? country.plannedDate
             if let end = endDate, Calendar.current.startOfDay(for: end) > today { continue }
             if let tr = country.transport, !tr.isEmpty {
-                bump(tr, 1)
+                // País marcado a mano: si tiene rango de fechas (plannedDateTo)
+                // asumimos ida + vuelta, igual que en el confirm card.
+                bump(tr, country.plannedDateTo != nil ? 2 : 1)
             }
         }
 
