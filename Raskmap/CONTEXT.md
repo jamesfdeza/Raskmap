@@ -44,7 +44,53 @@ Cambios invisibles pero impactantes:
 > **Para Claude / cualquier dev que retome el proyecto:** lee esta sección antes
 > que nada. Aquí está exactamente por dónde íbamos y qué falta.
 
-### Última acción completada (2026-05-12 — Nice-to-haves 🟢 abordados)
+### Última acción completada (2026-05-12 — XL scaffolds 🔵 cerrados)
+
+Los 4 items XL del roadmap completados como **scaffolds funcionales** —
+archivos paralelos a la app existente, opt-in por el dev cuando se quieran
+activar. No invasivos sobre el código en producción.
+
+**XL 1 — iOS 18 Map nativo** (`db9ad0d`):
+- `Raskmap/RaskMapViewV2.swift`: SwiftUI `Map { MapPolygon }` con
+  `@available(iOS 18.0, *)`, cámara controlable, `coloredFeatures`
+  filtrado, helper `polygonCoords(_:)`.
+- Pendiente: tap-detection con `MapReader.proxy.convert`, flight mode
+  con `MapPolyline`, wire-up en ContentView con feature flag
+  `@AppStorage("useMapV2")`.
+
+**XL 2 — iPad layout master-detail** (`ac47050`):
+- `Raskmap/IPadRootView.swift`: NavigationSplitView 2 columnas
+  (sidebar 280-400pt con Picker segmented Visitados/Próximos/Quiero/
+  Vivido + search + lista filtrable + empty state · detail con hero
+  flag 64pt, stats tiles, lista de viajes, placeholder).
+- View extension `.adaptiveRoot(...)` envuelve el root del iPhone:
+  si `horizontalSizeClass == .regular` → IPadRootView; si no →
+  vista original sin cambios.
+- Pendiente: añadir `.adaptiveRoot(...)` al body de ContentView.
+
+**XL 3 — Apple Watch app real** (`8d9355c`):
+- `RaskmapWatch Watch App/ContentView.swift`: sustituye el placeholder
+  "Hello, world!" por TabView con 3 tabs:
+  · Próximo viaje (flag + countdown + nombre).
+  · Gauge `.accessoryCircular` 1.6× del % del mundo visitado.
+  · Stats numéricos (visited + mode label).
+- Datos vía App Group `group.com.jaime.raskmap` (mismo que widget iOS).
+- Pendiente: refresh en tiempo real vía `NotificationCenter` /
+  `WatchConnectivity`.
+
+**XL 4 — CloudKit shared records** (`8e6b7ab`):
+- `Raskmap/CloudKitSharing.swift`: helper para compartir snapshot del
+  mapa vía CKShare.
+- `RaskmapSnapshot` struct Codable con username + visited/planned isos
+  + stats + createdAt.
+- `CloudKitSharing.shareSnapshot(_:from:completion:)` crea CKRecord +
+  CKShare + presenta UICloudSharingController.
+- `RaskmapSnapshot.build(...)` factory desde SwiftData @Query.
+- Pendiente: persistencia real con `CKModifyRecordsOperation`,
+  background handler de invitations, vista "Mapa de un amigo",
+  leaderboard. Bloqueado por Apple Developer Account.
+
+### Última acción completada anterior (2026-05-12 — Nice-to-haves 🟢 abordados)
 
 Sesión dedicada a las mejoras opcionales del roadmap. Combinación de
 implementación directa para los items realizables + documentación para
