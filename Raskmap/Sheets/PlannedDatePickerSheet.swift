@@ -115,9 +115,30 @@ struct PlannedDatePickerSheet: View {
     private func dateTabsRow() -> some View {
         let fromLabel = Self.fmt.string(from: dateFrom)
         let toLabel = dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta"
-        HStack(spacing: 12) {
-            dateTab(isFrom: true, label: "DESDE", value: fromLabel)
-            dateTab(isFrom: false, label: "HASTA", value: toLabel)
+        VStack(spacing: 6) {
+            HStack(spacing: 12) {
+                dateTab(isFrom: true, label: "DESDE", value: fromLabel)
+                dateTab(isFrom: false, label: "HASTA", value: toLabel)
+            }
+            // Link "Quitar fecha de vuelta" — explícito para el caso "viaje
+            // sin vuelta". Antes este caso se hacía tappeando la misma fecha
+            // que DESDE en el calendario; ahora ese gesto es "ida y vuelta
+            // mismo día" y necesitamos un mecanismo distinto.
+            if dateTo != nil {
+                Button {
+                    dateTo = nil
+                    pickingFrom = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                        Text("Quitar fecha de vuelta")
+                            .font(.palatino(.caption, weight: .bold))
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 24)
     }

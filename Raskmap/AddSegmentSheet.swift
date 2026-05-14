@@ -513,7 +513,33 @@ struct AddSegmentSheet: View {
                                 value: dateTo.map { Self.fmt.string(from: $0) } ?? "Sin vuelta")
                     }
                 }
-                .padding(.horizontal, 24).padding(.bottom, 10)
+                .padding(.horizontal, 24).padding(.bottom, 6)
+
+                // Link "Sin vuelta" — solo si hay dateTo y NO es one-way flight
+                // (los vuelos one-way ya tienen su toggle automático arriba).
+                // Permite al usuario quitar explícitamente la fecha de vuelta
+                // sin tener que tappear la misma fecha que DESDE (ese gesto
+                // ahora se interpreta como "ida y vuelta mismo día").
+                if !isOneWayFlight && dateTo != nil {
+                    HStack {
+                        Spacer()
+                        Button {
+                            dateTo = nil
+                            pickingFrom = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 12))
+                                Text("Quitar fecha de vuelta")
+                                    .font(.palatino(.caption, weight: .bold))
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
+                    .padding(.bottom, 10)
+                }
 
                 // Quick chips de fecha — atajan al usuario en casos comunes.
                 quickDateChips(isOneWayFlight: isOneWayFlight)
