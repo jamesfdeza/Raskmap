@@ -77,6 +77,9 @@
         }
       }
     },
+    "¡Logro desbloqueado!" : {
+
+    },
     "¡Logro extraordinario!" : {
       "localizations" : {
         "en" : {
@@ -572,6 +575,9 @@
     "%lld" : {
 
     },
+    "%lld / 7" : {
+
+    },
     "%lld %@" : {
       "localizations" : {
         "en" : {
@@ -757,6 +763,9 @@
       }
     },
     "⭐️" : {
+
+    },
+    "🏆" : {
 
     },
     "🏠" : {
@@ -2604,6 +2613,9 @@
         }
       }
     },
+    "Las 7 maravillas modernas" : {
+
+    },
     "Legal" : {
       "localizations" : {
         "en" : {
@@ -2694,6 +2706,9 @@
         }
       }
     },
+    "Maravillas modernas" : {
+
+    },
     "Marca este país como uno en el que has vivido. Aparecerá una 🏠 junto a su contador en la lista de visitados y se contabiliza como visitado en todas las stats." : {
       "localizations" : {
         "en" : {
@@ -2703,6 +2718,9 @@
           }
         }
       }
+    },
+    "Marca las que hayas visitado" : {
+
     },
     "Más antiguos primero" : {
       "localizations" : {

@@ -25,7 +25,14 @@ struct YearTravelView: View {
     /// recuento de la card "vs <año anterior>" y al label
     /// (Países / Territorios). El resto del perfil sigue mostrando las
     /// banderas todas independientemente del modo.
-    @AppStorage("countingModeRaw") private var countingModeRaw: String = "all"
+    // ⚠️ La clave de AppStorage debe ser "countingMode" (no "countingModeRaw")
+    // — es la que usa el resto de la app (ContentView, AwardsSheets, etc.).
+    // Antes esta vista leía un key huérfano que NUNCA se escribía desde
+    // Ajustes, así que la comparativa "vs año anterior" siempre se quedaba
+    // en modo "all" (contando Hong Kong / Macao / etc.) aunque el usuario
+    // tuviese ONU o ONU+obs activo. Mantenemos el nombre de variable local
+    // `countingModeRaw` por consistencia con el resto de callers.
+    @AppStorage("countingMode") private var countingModeRaw: String = CountingMode.all.rawValue
     private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
