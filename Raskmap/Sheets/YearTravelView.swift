@@ -21,6 +21,12 @@ struct YearTravelView: View {
 
     @EnvironmentObject private var colorTheme: ColorThemeManager
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
+    /// Modo de conteo activo (ONU / ONU+OBS / Todos). Afecta SOLO al
+    /// recuento de la card "vs <año anterior>" y al label
+    /// (Países / Territorios). El resto del perfil sigue mostrando las
+    /// banderas todas independientemente del modo.
+    @AppStorage("countingModeRaw") private var countingModeRaw: String = "all"
+    private var countingMode: CountingMode { CountingMode(rawValue: countingModeRaw) ?? .all }
 
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
@@ -173,10 +179,12 @@ struct YearTravelView: View {
     ///   - ✈️: endpoints (primer/último isoCode) + escalas marcadas como
     ///     visitadas vía `visitedLayoverISOs` (checkbox en AddSegmentSheet).
     ///   - Terrestre/marítimo: TODOS los isoCodes (cruzar frontera = visita).
-    /// · Dedupe por país (Set), así que un round-trip a Japón cuenta 1.
-    /// Antes solo contaba `trip.isoCode` de los primarios → subreportaba
-    /// países visitados, sobre todo en viajes multi-modales o con escalas
-    /// terrestres.
+    /// · Dedupe por país (Set).
+    /// · **Filtrado por `countingMode`**: en modo `.un` solo cuentan los 193
+    ///   miembros ONU; en `.unPlus` los 195 (ONU + observadores); en `.all`
+    ///   cualquier territorio. Las banderas siguen mostrándose todas en el
+    ///   resto del perfil — este filtro solo afecta este recuento numérico
+    ///   de la card "vs <año anterior>".
     private func yearStats(_ year: Int) -> (trips: Int, countries: Int) {
         let cal = Calendar.current
         // Trips count: solo primarios — la convención del proyecto es que
@@ -210,7 +218,20 @@ struct YearTravelView: View {
                 }
             }
         }
-        return (primaries.count, isos.count)
+        // 3) Filtrar por countingMode. Las banderas en el resto de la UI
+        //    siguen viéndose todas (Hong Kong, Macao, etc.), pero aquí
+        //    el conteo numérico debe respetar la elección del usuario.
+        let filtered = isos.filter { countingMode.counts($0) }
+        return (primaries.count, filtered.count)
+    }
+
+    /// Label de la card "vs año anterior" para el conteo de regiones:
+    /// "Países" en modos ONU / ONU+OBS, "Territorios" en modo "Todos".
+    /// Coherente con la nomenclatura que usa el resto de la app
+    /// (`mode.visitedLabel` ya distingue "Países visitados" vs
+    /// "Territorios visitados").
+    private var regionLabel: String {
+        countingMode == .all ? "Territorios" : "Países"
     }
 
     @ViewBuilder
@@ -228,7 +249,7 @@ struct YearTravelView: View {
                     )
                     Divider().frame(height: 36)
                     comparisonStat(
-                        label: "Países",
+                        label: regionLabel,
                         current: cur.countries,
                         previous: prev.countries
                     )
