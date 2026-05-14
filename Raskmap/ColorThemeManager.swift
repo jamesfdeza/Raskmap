@@ -81,7 +81,17 @@ class ColorThemeManager: ObservableObject {
         wantToVisitColor = ColorThemeManager.load(key: "color_wantToVisit", default: Self.defaultWantToVisit)
         livedColor     = ColorThemeManager.load(key: "color_lived",       default: Self.defaultLived)
         bucketListColor = ColorThemeManager.load(key: "color_bucketList",  default: Self.defaultBucketList)
-        isDarkMode     = UserDefaults.standard.bool(forKey: "app_isDarkMode")
+        // Default to DARK en primer launch — bool(forKey:) devolvería `false`
+        // si la key no existe, lo que daría light por accidente. Detectamos
+        // explícitamente la ausencia de la key vía `object(forKey:)` y
+        // persistimos el default para mantener consistencia.
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "app_isDarkMode") == nil {
+            defaults.set(true, forKey: "app_isDarkMode")
+            isDarkMode = true
+        } else {
+            isDarkMode = defaults.bool(forKey: "app_isDarkMode")
+        }
     }
 
     func color(for status: CountryStatus) -> Color {
