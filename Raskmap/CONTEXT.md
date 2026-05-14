@@ -1,5 +1,301 @@
 # CONTEXT.md — Raskmap
 
+## 💳 Cuando actives la Apple Developer Account (99 €/año)
+
+Sigue esta lista de checks en orden. Cada paso desbloquea el siguiente.
+Cuando termines, la app estará lista para enviar a la App Store.
+
+> **TIEMPO ESTIMADO TOTAL: 4-6 horas** la primera vez (mayoría es
+> esperar propagaciones de Apple). Spread over 2-3 días si vas con calma.
+
+---
+
+### Fase 0 — Setup de la cuenta (1 vez, ~30 min)
+
+- [ ] Ir a https://developer.apple.com → "Account" → pagar la suscripción 99€/año.
+- [ ] Aceptar todos los agreements pendientes (Program License, Paid Apps Agreement
+      si vas a cobrar Raskmap Pro).
+- [ ] **Paid Apps Agreement** — clave: para vender IAP necesitas tener
+      este aceptado con datos bancarios + fiscales (NIF, IBAN). Apple
+      bloquea Restore Purchases si esto falta.
+- [ ] Verificar email asociado a la cuenta.
+
+---
+
+### Fase 1 — Apple Developer Portal (~30 min)
+
+Sitio: https://developer.apple.com/account
+
+**1.1 — App ID (Bundle Identifier)**
+- [ ] Identifiers → "+" → App IDs → App.
+- [ ] Bundle ID: `RealDev.Raskmap` (debe coincidir con `PRODUCT_BUNDLE_IDENTIFIER` en pbxproj).
+- [ ] Description: "Raskmap".
+- [ ] Capabilities a marcar:
+   - [ ] **iCloud** (con "Include CloudKit support").
+   - [ ] **App Groups**.
+   - [ ] **Push Notifications** (necesario para sync CloudKit en background y para Live Activities).
+   - [ ] **In-App Purchase**.
+   - [ ] **Sign In with Apple** (opcional, no usado por ahora).
+
+**1.2 — Containers de iCloud / App Groups**
+- [ ] Identifiers → iCloud Containers → "+" → `iCloud.RealDev.Raskmap`.
+- [ ] Identifiers → App Groups → "+" → `group.com.jaime.raskmap` (tiene que coincidir EXACTAMENTE con el código).
+- [ ] Volver al App ID, edit, asociar ambos al App ID.
+
+**1.3 — Repetir para el Widget Extension**
+- [ ] Identifiers → "+" → App IDs → `RealDev.Raskmap.RaskmapWidget`.
+- [ ] Marcar mismas capabilities (App Groups, iCloud, Push).
+- [ ] Asociar al mismo iCloud container y App Group.
+
+**1.4 — Repetir para el Watch App** (si vas a publicarlo)
+- [ ] `RealDev.Raskmap.watchkitapp`.
+- [ ] Mismas capabilities relevantes (App Groups).
+
+**1.5 — Provisioning Profiles**
+- [ ] Apple los genera automáticamente si tienes "Automatically manage signing"
+      en Xcode (recomendado). Si Xcode da error de signing, ir a Profiles →
+      regenerar para Development e App Store distribution.
+
+---
+
+### Fase 2 — CloudKit Dashboard (~30 min)
+
+Sitio: https://icloud.developer.apple.com
+
+**2.1 — Verificar container `iCloud.RealDev.Raskmap`**
+- [ ] Que aparece en la lista. Si no, esperar 5-10 min tras crear en Portal.
+- [ ] Entornos: usa **Development** primero para testear, después promover a **Production**.
+
+**2.2 — Schemas (Record Types) de SwiftData + CloudKit**
+- [ ] Apple genera los Record Types automáticamente la primera vez que la app
+      sincroniza desde SwiftData → CloudKit. Para forzar esto:
+   - [ ] Build & run en device real (no simulator) con cuenta iCloud activa.
+   - [ ] Crear un Country marcado como visited → SwiftData lo persiste localmente
+         y CloudKit Container lo sincroniza creando `CD_Country` record type.
+   - [ ] Hacer lo mismo para un Trip → genera `CD_Trip`.
+   - [ ] Volver a CloudKit Dashboard → Schema → "Indexes" → verificar que ambos
+         record types están allí.
+- [ ] Si necesitas record types adicionales (para `RaskmapSnapshot` del XL 4 de
+      sharing), crear manualmente desde Dashboard → Schema → "+".
+
+**2.3 — Indexes para queries**
+- [ ] CloudKit no indexa por defecto. Para queries cross-device añadir:
+   - [ ] `CD_Country.isoCode` como QUERYABLE.
+   - [ ] `CD_Trip.dateFrom` como QUERYABLE + SORTABLE.
+   - [ ] `CD_Trip.isoCode` como QUERYABLE.
+
+**2.4 — Promover a Production**
+- [ ] **NO hacer hasta validar que todo funciona en Development**.
+- [ ] Cuando esté validado: Dashboard → "Deploy Schema Changes" →
+      seleccionar Development como source, Production como destination.
+- [ ] **El esquema de Production es read-only**: cualquier cambio post-deploy
+      requiere una migración manual cuidadosa.
+
+---
+
+### Fase 3 — App Store Connect (~1 hora)
+
+Sitio: https://appstoreconnect.apple.com
+
+**3.1 — Crear la app**
+- [ ] My Apps → "+" → New App.
+- [ ] Platform: iOS.
+- [ ] Name: "Raskmap" (debe estar disponible; si no, probar "Raskmap - Tu mapa de viajes").
+- [ ] Primary Language: Spanish.
+- [ ] Bundle ID: `RealDev.Raskmap` (selectable del dropdown si está bien configurado en Portal).
+- [ ] SKU: cualquier identificador único interno, ej. `raskmap-001`.
+
+**3.2 — App Privacy questionnaire**
+- [ ] Pregunta 1: "Does your app collect data?" → **No**. Coherente con la
+      política y con el `PrivacyInfo.xcprivacy` (commit `c24d8f1`).
+- [ ] Save.
+
+**3.3 — In-App Purchase para Raskmap Pro**
+- [ ] Features → In-App Purchases → "+".
+- [ ] Tipo: **Non-Consumable** (pago único vitalicio).
+- [ ] Reference Name: "Raskmap Pro Lifetime".
+- [ ] Product ID: `com.raskmap.pro.lifetime` (debe coincidir EXACTO con
+      `raskmapProLifetimeID` en `Sheets/SubscriptionSheet.swift` línea 21).
+- [ ] Price Tier: **Tier 5 (4,99 €)** o el que prefieras.
+- [ ] Localization (ES + EN):
+   - ES: Display Name "Raskmap Pro", Description "Desbloquea las funciones
+         premium de Raskmap de forma permanente. Pago único, sin suscripción."
+   - EN: Display Name "Raskmap Pro", Description "Unlock all premium features
+         permanently. One-time purchase, no subscription."
+- [ ] Save → submit for review junto con el binario.
+
+**3.4 — Metadata App Information**
+- [ ] App Information → Privacy Policy URL: la URL que generes en Fase 4.
+- [ ] App Information → Support URL: misma o landing del repo legal.
+- [ ] Category: Primary "Travel" · Secondary "Lifestyle".
+- [ ] Content Rights → declarar si Twemoji genera dudas (lo cubre la atribución legal).
+
+**3.5 — App Store Page (por locale)**
+- [ ] Localizations: añadir **English (U.S.)** además de **Spanish (Spain)**.
+- [ ] Por cada locale necesitas:
+   - [ ] **Name** (30 chars max): "Raskmap" / "Raskmap" (igual).
+   - [ ] **Subtitle** (30 chars max):
+     - ES: "Tu mapa personal de viajes"
+     - EN: "Your personal travel map"
+   - [ ] **Promotional Text** (170 chars).
+   - [ ] **Description** (4000 chars max).
+   - [ ] **Keywords** (100 chars total, separados por coma — sin espacios).
+     - ES: `viajes,mapa,países,visitados,viajar,bucket,list,vuelos,aeropuertos,wrapped`
+     - EN: `travel,map,countries,visited,trips,bucket,list,flights,airports,wrapped`
+   - [ ] **What's New in This Version** (4000 chars).
+   - [ ] **Screenshots** — ver Fase 5.
+
+**3.6 — Review Information**
+- [ ] Contact email + phone (lo verá Apple, no users).
+- [ ] Demo Account: NO necesario (la app no requiere login).
+- [ ] Notes for Review: explica que la app está 100% local + iCloud privado,
+      sin tracking, sin login. Incluye un disclaimer corto sobre Twemoji
+      (CC-BY 4.0) si los reviewers preguntan.
+
+---
+
+### Fase 4 — Privacy Policy y soporte legal (~30 min)
+
+**4.1 — Activar GitHub Pages**
+- [ ] El repo ya tiene `docs/` con los textos legales (privacy, terms, gdpr,
+      imprint, credits, index).
+- [ ] Repo Settings → Pages → Source: **Deploy from a branch**.
+- [ ] Branch: `master` (o `main` si lo renombras), Folder: `/docs`.
+- [ ] Save → esperar ~1 min.
+- [ ] La URL final será `https://jamesfdeza.github.io/Raskmap/` o similar.
+
+**4.2 — URLs concretas que necesita App Store Connect**
+- [ ] Privacy Policy URL: `https://<usuario>.github.io/Raskmap/privacy`
+- [ ] Support URL: `https://<usuario>.github.io/Raskmap/` (landing)
+- [ ] Marketing URL (opcional): igual que support.
+
+**4.3 — Verificar que coinciden con la app**
+- [ ] La privacy policy en docs/privacy.md DEBE ser idéntica al texto
+      mostrado dentro de la app (Ajustes → Política de Privacidad).
+      Apple verifica esto en revisión. Hoy ya coinciden (commit b09efc4).
+
+---
+
+### Fase 5 — Capturas y App Preview (~2 horas)
+
+**5.1 — Screenshots requeridos (App Store Connect)**
+
+Apple acepta los del iPhone más grande y los infiere para más pequeños.
+Solo necesitas:
+
+- [ ] **iPhone 6.9" (iPhone 16 Pro Max)** — 1320 × 2868 px o equivalente.
+- [ ] **iPhone 6.5" (Plus / Pro Max viejos)** — 1242 × 2688 px (mismo simulator).
+- [ ] Opcionales pero recomendados: iPad 13" si la app soporta iPad
+      (cuando actives `IPadRootView` del XL 2).
+
+Por locale (ES + EN): mínimo 3 screenshots, máximo 10. Recomendado 5-6:
+
+1. Mapa con varios países marcados (visitados + próximos + bucket list).
+2. Country sheet abierta con un país visitado (Japón, Marruecos…).
+3. Sheet de perfil con stats y heatmap.
+4. Wrapped anual (slide hero "ASÍ FUE MI 2025").
+5. Modo Flight con rutas geodésicas.
+6. Widget Lock Screen + Home screen previews.
+
+**5.2 — Cómo capturar**
+- [ ] Simulator (Hardware → Device → iPhone 16 Pro Max).
+- [ ] Cmd+S para screenshot → guarda en Desktop como PNG.
+- [ ] Editar (opcional pero ayuda):
+  - [ ] Añadir mock de status bar (9:41 AM siempre).
+  - [ ] Marcos / texto explicativo opcional (Apple permite text overlays).
+
+**5.3 — App Preview (vídeo, opcional)**
+- [ ] 15-30s vertical 9:16.
+- [ ] Captura desde simulator con Cmd+R recording.
+- [ ] Editar en iMovie / CapCut para añadir música + transitions.
+- [ ] NO mostrar UI de iOS (no toolbars del simulator).
+
+---
+
+### Fase 6 — Verificaciones técnicas finales (~1 hora)
+
+**6.1 — Items pendientes del CONTEXT.md (Sprint 1 ⏸️)**
+- [ ] **B3 — Restore Purchases en sandbox**:
+   - [ ] Crear sandbox tester en App Store Connect → Users and Access →
+         Sandbox → Testers → "+".
+   - [ ] En iPhone real (Settings → Developer → Sandbox Apple Account → sign in
+         con el sandbox tester).
+   - [ ] Lanzar la app → comprar Pro → debe completar la compra.
+   - [ ] Borrar la app → reinstalar → Ajustes → "Restaurar compras" debe
+         devolver el estado Pro sin pagar de nuevo.
+
+- [ ] **B4 — CloudKit container en Production**:
+   - [ ] Hecho en Fase 2.4 arriba.
+
+**6.2 — Activar swift-snapshot-testing (item residual)**
+- [ ] Xcode → File → Add Package Dependencies →
+      `https://github.com/pointfreeco/swift-snapshot-testing` → target `RaskmapTests`.
+- [ ] Los tests de scaffold ya esperan esta dep — al instalarla, los snapshot
+      tests del commit `04c7702` se activan automáticamente.
+
+**6.3 — Build & Archive**
+- [ ] Xcode → Product → Scheme → seleccionar "Raskmap" + destination "Any iOS Device".
+- [ ] Product → Archive (~5-10 min, requiere device target real, no simulator).
+- [ ] Window → Organizer → Last Archive → "Distribute App" → App Store Connect.
+- [ ] Upload (~5-10 min subiendo a App Store Connect).
+- [ ] Esperar que Apple procese el binario (~15-30 min).
+
+---
+
+### Fase 7 — TestFlight beta (recomendado, ~3-5 días)
+
+- [ ] TestFlight → Builds → seleccionar el build subido.
+- [ ] What to Test: rellenar con lista de features para los testers.
+- [ ] Internal Testers: añadir tu propio Apple ID (testing inmediato).
+- [ ] External Testers: invitar 15-20 usuarios conocidos. Apple revisa
+      el build para TestFlight (~24h primera vez).
+- [ ] Ronda de feedback: 3-5 días mínimo. Itera bugs visibles antes del submit final.
+
+---
+
+### Fase 8 — Submission a App Store (~10 min de tu lado, ~1-3 días Apple)
+
+- [ ] App Store Connect → tu app → Version 1.0 → "Add for Review".
+- [ ] Verificar checklist:
+   - [ ] Screenshots subidos (ES + EN).
+   - [ ] Descripción rellena (ES + EN).
+   - [ ] Privacy Policy URL OK.
+   - [ ] IAP product approved together.
+   - [ ] Notes for Review claras.
+- [ ] "Submit for Review".
+- [ ] Apple suele tardar **24-48h** para apps nuevas. Si rechazan, Apple
+      manda email con motivo + Resolution Center para responder.
+
+---
+
+### 🎉 Cuando esté aprobada
+
+- [ ] Publicar manual o automáticamente (recomendado manual la primera vez).
+- [ ] Anunciar en Instagram / Twitter / etc.
+- [ ] Activar TestFlight para futuras versiones (es más rápido subir builds
+      una vez la app está aprobada).
+- [ ] Monitor App Store Connect → Sales and Trends para ver descargas + IAP.
+
+---
+
+### Bonus opcional (después del launch)
+
+- [ ] **AdMob** si quieres anuncios para usuarios no-Pro:
+   - [ ] Crear cuenta admob.google.com.
+   - [ ] Registrar la app → obtener App ID y Ad Unit ID (Banner).
+   - [ ] Añadir SDK en Xcode: `swift-package-manager-google-mobile-ads`.
+   - [ ] `Info.plist`: `GADApplicationIdentifier = <App ID>`.
+   - [ ] `BannerAdView.swift`: sustituir test ID por Ad Unit ID real.
+
+- [ ] **Activar los XL 🔵 scaffolds** ya implementados:
+   - [ ] iPad layout: añadir `.adaptiveRoot(...)` al body de ContentView.
+   - [ ] Watch app: ya activo solo con instalar la app en un Watch emparejado.
+   - [ ] iOS 18 Map: subir target a 18.0 + feature flag.
+   - [ ] CloudKit sharing: configurar zona + record type + descomentar
+         `CKModifyRecordsOperation`.
+
+---
+
 ## 👁 Resumen visual de cambios para el usuario final
 
 Tras la iteración completa (Sprints 1-4 + nice-to-haves 🟡 + 🟢), un
