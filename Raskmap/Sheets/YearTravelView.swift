@@ -166,13 +166,51 @@ struct YearTravelView: View {
     }
 
     /// Cuenta trips primarios y países únicos visitados en un año concreto.
+    /// La lógica de países se alinea con `WrappedStats.compute()` para que
+    /// la comparativa de perfil coincida con el Wrapped:
+    /// · Incluimos `segmentChild` trips (escalas guardadas como child).
+    /// · Para segments de trips primarios:
+    ///   - ✈️: endpoints (primer/último isoCode) + escalas marcadas como
+    ///     visitadas vía `visitedLayoverISOs` (checkbox en AddSegmentSheet).
+    ///   - Terrestre/marítimo: TODOS los isoCodes (cruzar frontera = visita).
+    /// · Dedupe por país (Set), así que un round-trip a Japón cuenta 1.
+    /// Antes solo contaba `trip.isoCode` de los primarios → subreportaba
+    /// países visitados, sobre todo en viajes multi-modales o con escalas
+    /// terrestres.
     private func yearStats(_ year: Int) -> (trips: Int, countries: Int) {
         let cal = Calendar.current
-        let yearTrips = trips.filter { trip in
+        // Trips count: solo primarios — la convención del proyecto es que
+        // un viaje multi-segmento cuenta como 1 trip, no N.
+        let primaries = trips.filter { trip in
             !trip.isSegmentChild && cal.component(.year, from: trip.dateFrom) == year
         }
-        let countries = Set(yearTrips.map(\.isoCode)).count
-        return (yearTrips.count, countries)
+        // Countries: incluye children + segments embebidos del primario.
+        var isos = Set<String>()
+        // 1) Cualquier trip del año (incluye children) aporta su isoCode.
+        for trip in trips where cal.component(.year, from: trip.dateFrom) == year {
+            if !trip.isoCode.isEmpty { isos.insert(trip.isoCode) }
+        }
+        // 2) Segments de trips primarios — capturan ISOs adicionales no
+        //    presentes como child trips.
+        for trip in primaries {
+            for seg in trip.tripSegments {
+                let segIsos = seg.isoCodes.filter { !$0.isEmpty }
+                guard !segIsos.isEmpty else { continue }
+                if seg.transport == "✈️" {
+                    // Endpoints
+                    if let first = segIsos.first { isos.insert(first) }
+                    if segIsos.count > 1, let last = segIsos.last { isos.insert(last) }
+                    // Escalas marcadas como visitadas por el usuario
+                    for iso in seg.visitedLayoverISOs ?? [] where !iso.isEmpty {
+                        isos.insert(iso)
+                    }
+                } else {
+                    // Terrestre/marítimo: todos cuentan (cruzar = visita)
+                    for iso in segIsos { isos.insert(iso) }
+                }
+            }
+        }
+        return (primaries.count, isos.count)
     }
 
     @ViewBuilder
