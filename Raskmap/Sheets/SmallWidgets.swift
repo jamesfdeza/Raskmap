@@ -159,9 +159,13 @@ struct RangeDatePicker: UIViewRepresentable {
                     } else {
                         parent.dateTo = nextDay
                     }
-                } else if date == parent.dateFrom {
-                    parent.dateTo = nil
                 } else {
+                    // `date == dateFrom` → ida y vuelta en el mismo día (válido
+                    // para TODOS los transportes: vuelo express, viaje en
+                    // tren/coche, excursión a pie, etc.). Cuenta como 1 día
+                    // visitado en `daysPerCountry` (tripLen = max(1, ...) ya
+                    // lo cubre).
+                    // `date > dateFrom` → rango multi-día normal.
                     parent.dateTo = date
                 }
             }
