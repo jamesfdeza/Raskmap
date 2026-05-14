@@ -31,6 +31,10 @@ struct EditTripSheet: View {
     @State private var confirmVisits: [VisitEntry] = []
     @State private var confirmAirports: [AirportConfirmEntry] = []
     @State private var confirmAirlines: [AirlineConfirmEntry] = []
+    /// Conteos por emoji de transportes no-✈️ para la card de confirmación.
+    /// Regla por tramo: `dateTo == nil` → +1; `dateTo != nil` → +2 (ida + vuelta,
+    /// incluyendo mismo-día). N tramos del mismo emoji se acumulan.
+    @State private var confirmTransports: [TransportConfirmEntry] = []
     @State private var localAirports: [TripAirport] = []
     @State private var localReturnAirports: [TripAirport] = []
     @State private var localAirlines: [TripAirline] = []
@@ -247,7 +251,18 @@ struct EditTripSheet: View {
             for ap in localReturnAirports { apCombined[ap.iata, default: 0] += ap.count }
             confirmAirports = apCombined.map { AirportConfirmEntry(iata: $0.key, count: $0.value) }.sorted { $0.iata < $1.iata }
             confirmAirlines = localAirlines.map { AirlineConfirmEntry(name: $0.name, count: $0.count) }
-            if confirmAirports.isEmpty && confirmAirlines.isEmpty { performEditSave(); return }
+            // Path legacy sin segmentos: el trip "es" un único tramo con
+            // `selectedTransport` y `localDateFrom`/`localDateTo`. Si es no-✈️
+            // (y no vacío), aplicamos la misma regla: dateTo != nil → 2, sino 1.
+            confirmTransports = []
+            if let tr = selectedTransport, !tr.isEmpty, tr != "✈️" {
+                let labelByEmoji = Dictionary(uniqueKeysWithValues:
+                    PlannedDatePickerSheet.transports.map { ($0.emoji, $0.label) })
+                let delta = localDateTo != nil ? 2 : 1
+                confirmTransports = [TransportConfirmEntry(
+                    emoji: tr, label: labelByEmoji[tr] ?? tr, count: delta)]
+            }
+            if confirmAirports.isEmpty && confirmAirlines.isEmpty && confirmTransports.isEmpty { performEditSave(); return }
             showSaveConfirmation = true
             return
         }
@@ -297,6 +312,26 @@ struct EditTripSheet: View {
         }
         if confirmAirlines.isEmpty {
             confirmAirlines = trip.tripAirlines.map { AirlineConfirmEntry(name: $0.name, count: $0.count) }
+        }
+        // Conteos de transportes no-✈️ (tren, coche, bus, etc.). Aplicamos la
+        // regla por tramo: dateTo == nil → +1; dateTo != nil → +2. N tramos del
+        // mismo emoji se acumulan. Orden por primera aparición cronológica.
+        var trC: [String: Int] = [:]
+        var trOrder: [String] = []
+        let nonFlightSegs = tripSegments
+            .sorted { $0.dateFrom < $1.dateFrom }
+            .filter { $0.transport != "✈️" && !$0.transport.isEmpty }
+        for seg in nonFlightSegs {
+            let delta = seg.dateTo != nil ? 2 : 1
+            if trC[seg.transport] == nil { trOrder.append(seg.transport) }
+            trC[seg.transport, default: 0] += delta
+        }
+        let labelByEmoji = Dictionary(uniqueKeysWithValues:
+            PlannedDatePickerSheet.transports.map { ($0.emoji, $0.label) })
+        confirmTransports = trOrder.map { emoji in
+            TransportConfirmEntry(emoji: emoji,
+                                  label: labelByEmoji[emoji] ?? emoji,
+                                  count: trC[emoji] ?? 0)
         }
         showSaveConfirmation = true
     }
@@ -789,7 +824,11 @@ struct EditTripSheet: View {
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(showSaveConfirmation)
         .sheet(isPresented: $showAddSegment, onDismiss: { editingSegment = nil }) {
-            AddSegmentSheet(features: features, isForFuture: isForFuture, initialSegment: editingSegment, existingSegments: tripSegments) { seg in
+            // `baseIsoCode: trip.isoCode` solo aplica al CREAR un tramo nuevo
+            // desde EditTripSheet — al editar uno existente, AddSegmentSheet
+            // ya inicializa selectedIsoCodes desde seg.isoCodes y ignora
+            // baseIsoCode (lógica gateada en init por `initialSegment == nil`).
+            AddSegmentSheet(features: features, isForFuture: isForFuture, initialSegment: editingSegment, existingSegments: tripSegments, baseIsoCode: trip.isoCode) { seg in
                 // Reemplaza por id si ya existe (edición), o añade (creación).
                 if let idx = tripSegments.firstIndex(where: { $0.id == seg.id }) {
                     tripSegments[idx] = seg
@@ -828,6 +867,7 @@ struct EditTripSheet: View {
     private func editVisitConfirmCard(onSave: @escaping () -> Void, onCancel: @escaping () -> Void) -> some View {
         confirmCardContent(
             confirmVisits: $confirmVisits, confirmAirports: $confirmAirports, confirmAirlines: $confirmAirlines,
+            confirmTransports: $confirmTransports,
             accent: accent, onSave: onSave, onCancel: onCancel
         )
     }

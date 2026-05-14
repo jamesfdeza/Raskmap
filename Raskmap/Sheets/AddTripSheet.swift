@@ -34,6 +34,9 @@ struct AddTripSheet: View {
     @State private var confirmVisits: [VisitEntry] = []
     @State private var confirmAirports: [AirportConfirmEntry] = []
     @State private var confirmAirlines: [AirlineConfirmEntry] = []
+    /// Conteo de transportes no-✈️ (tren, coche, bus, etc.). 1 por tramo
+    /// sin `dateTo`, 2 por tramo con `dateTo` (incluido mismo día → ida + vuelta).
+    @State private var confirmTransports: [TransportConfirmEntry] = []
     @State private var sheetDetent: PresentationDetent = .medium
 
     private static let fmt: DateFormatter = {
@@ -109,6 +112,26 @@ struct AddTripSheet: View {
         }
         confirmAirports = apC.map { AirportConfirmEntry(iata: $0.key, count: $0.value) }.sorted { $0.iata < $1.iata }
         confirmAirlines = alOrder.map { AirlineConfirmEntry(name: $0, count: alC[$0] ?? 0) }
+        // Conteo de transportes no-✈️. Por cada tramo del mismo emoji:
+        //   · sin dateTo → +1.
+        //   · con dateTo (mismo día o multi-día) → +2 (ida + vuelta).
+        // Preservamos el orden de aparición de cada transporte en los segments
+        // para que la card no salte de orden en cada re-render.
+        var trC: [String: Int] = [:]
+        var trOrder: [String] = []
+        let nonFlightSegs = tripSegments.filter { $0.transport != "✈️" && !$0.transport.isEmpty }
+        for seg in nonFlightSegs {
+            let delta = seg.dateTo != nil ? 2 : 1
+            if trC[seg.transport] == nil { trOrder.append(seg.transport) }
+            trC[seg.transport, default: 0] += delta
+        }
+        let labelByEmoji = Dictionary(uniqueKeysWithValues:
+            PlannedDatePickerSheet.transports.map { ($0.emoji, $0.label) })
+        confirmTransports = trOrder.map { emoji in
+            TransportConfirmEntry(emoji: emoji,
+                                  label: labelByEmoji[emoji] ?? emoji,
+                                  count: trC[emoji] ?? 0)
+        }
         withAnimation { sheetDetent = .large }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(0.25))
@@ -394,7 +417,11 @@ struct AddTripSheet: View {
             if !didSave { onCancel?() }
         }
         .sheet(isPresented: $showAddSegment) {
-            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments) { seg in
+            // `baseIsoCode: isoCode` preselecciona el país del trip en step 2
+            // de AddSegmentSheet para transportes no-✈️. El usuario llegó aquí
+            // tappeando un país concreto, así que tiene sentido que aparezca
+            // ya marcado en la lista de países del tramo.
+            AddSegmentSheet(features: features, isForFuture: isForFuture, existingSegments: tripSegments, baseIsoCode: isoCode) { seg in
                 tripSegments.append(seg)
                 // Mantener el array siempre ordenado por fecha de vuelo,
                 // no por orden de inserción — el del 29 aparece antes del 30
@@ -417,6 +444,7 @@ struct AddTripSheet: View {
             confirmVisits: $confirmVisits,
             confirmAirports: $confirmAirports,
             confirmAirlines: $confirmAirlines,
+            confirmTransports: $confirmTransports,
             accent: BrandColor.accent,
             onSave: onSave,
             onCancel: onCancel

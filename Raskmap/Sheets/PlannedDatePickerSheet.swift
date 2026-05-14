@@ -323,10 +323,34 @@ struct confirmCardContent: View {
     @Binding var confirmVisits: [VisitEntry]
     @Binding var confirmAirports: [AirportConfirmEntry]
     @Binding var confirmAirlines: [AirlineConfirmEntry]
+    /// Conteos de transportes no-✈️ (tren, coche, bus, etc.). Default vacío
+    /// para compat — callers que aún no migran la lista lo dejan en .constant([]).
+    @Binding var confirmTransports: [TransportConfirmEntry]
     let accent: Color
     let onSave: () -> Void
     let onCancel: () -> Void
     @State private var isSaving: Bool = false
+
+    /// Init compatible para callers que aún no pasan `confirmTransports`
+    /// (p.ej. PlannedDatePickerSheet en su sección de confirmación rápida).
+    /// Crea un binding a un array vacío inmutable que no aparece en la UI.
+    init(
+        confirmVisits: Binding<[VisitEntry]>,
+        confirmAirports: Binding<[AirportConfirmEntry]>,
+        confirmAirlines: Binding<[AirlineConfirmEntry]>,
+        confirmTransports: Binding<[TransportConfirmEntry]> = .constant([]),
+        accent: Color,
+        onSave: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self._confirmVisits = confirmVisits
+        self._confirmAirports = confirmAirports
+        self._confirmAirlines = confirmAirlines
+        self._confirmTransports = confirmTransports
+        self.accent = accent
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
 
     var body: some View {
         ZStack {
@@ -358,6 +382,21 @@ struct confirmCardContent: View {
                                         Text(entry.name).font(.palatino(.body)).lineLimit(1)
                                     }
                                 }, count: $entry.count, accent: accent)
+                            }
+                        }
+                        if !confirmTransports.isEmpty {
+                            // Transportes no-✈️ (tren, coche, bus, barco, andando).
+                            // Para ✈️ ya existen secciones AEROPUERTOS/AEROLÍNEAS
+                            // con su propio conteo, así que aquí solo aparecen
+                            // los emojis del resto.
+                            sectionHeader("TRANSPORTE")
+                            ForEach($confirmTransports) { $tr in
+                                counterRow(leading: {
+                                    HStack(spacing: 8) {
+                                        Text(tr.emoji).font(.system(size: 18))
+                                        Text(tr.label).font(.palatino(.body)).lineLimit(1)
+                                    }
+                                }, count: $tr.count, accent: accent)
                             }
                         }
                         if !confirmAirports.isEmpty {

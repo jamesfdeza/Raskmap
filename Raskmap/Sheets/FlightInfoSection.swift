@@ -556,6 +556,19 @@ struct AirlineConfirmEntry: Identifiable {
     var count: Int
 }
 
+/// Entry de transporte (no-✈️) para la card de confirmación pre-save.
+/// Para vuelos ya tenemos AirportConfirmEntry/AirlineConfirmEntry; para
+/// el resto (🚗 🚂 🚌 🚢 🚶) sumamos por emoji con reglas:
+///  · 1 tramo sin `dateTo` → 1.
+///  · 1 tramo con `dateTo` (mismo día o multi-día) → 2 (ida + vuelta).
+///  · N tramos del mismo transporte se acumulan.
+struct TransportConfirmEntry: Identifiable {
+    var id: String { emoji }
+    let emoji: String
+    let label: String
+    var count: Int
+}
+
 // MARK: - Achievement toast (UIWindow, aparece sobre modales)
 final class AchievementToastController {
     static let shared = AchievementToastController()

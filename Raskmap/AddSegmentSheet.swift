@@ -74,6 +74,7 @@ struct AddSegmentSheet: View {
 
     init(features: [CountryFeature], isForFuture: Bool, initialSegment: TripSegment? = nil,
          existingSegments: [TripSegment] = [],
+         baseIsoCode: String? = nil,
          onAdd: @escaping (TripSegment) -> Void) {
         self.features = features
         self.isForFuture = isForFuture
@@ -125,6 +126,15 @@ struct AddSegmentSheet: View {
             let from = isForFuture ? tomorrow : today
             _dateFrom = State(initialValue: from)
             _dateTo = State(initialValue: nil)
+        }
+        // Preseleccionar el país base del viaje (el que el usuario tappeó en
+        // el mapa para iniciar la creación) en step 2. Solo aplica si no
+        // estamos editando un segmento existente — al editar, `seg.isoCodes` ya
+        // trae las selecciones reales y `_selectedIsoCodes` se setea arriba.
+        // Esta asignación se hace DESPUÉS de inicializar todos los stored props
+        // sin default (p.ej. `_dateFrom`) para no violar el orden de init.
+        if initialSegment == nil, let base = baseIsoCode, !base.isEmpty {
+            _selectedIsoCodes = State(initialValue: [base])
         }
     }
 
