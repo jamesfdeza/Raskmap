@@ -39,6 +39,50 @@ enum AchievementKind: CaseIterable {
     // Oro – pasaporte lleno
     case pasaporteEuropa, pasaporteAsia, pasaporteMedioOriente, pasaporteAfrica, pasaporteAmerica, pasaporteOceania
 
+    // === LOGROS FASE 2 (numéricos + culturales + transporte + temporal) ===
+    //
+    // Bronce / Plata / Oro – hitos numéricos de VIAJES (trips). NO filtran
+    // por countingMode: un viaje a HKG sigue siendo un viaje aunque HKG no
+    // cuente como país en modo ONU.
+    case trips5, trips10, trips25, trips50
+    // Bronce / Plata / Oro / Trophy – hitos numéricos de PAÍSES distintos
+    // visitados. SÍ filtran por countingMode (paises10 en ONU mide solo
+    // ONU members; en Todos cuenta cualquier territorio).
+    case paises10, paises25, paises50, paises75, centurion
+    // Plata – grupos culturales/geográficos pequeños
+    case todosBalticos       // EST, LVA, LTU (3) – Cultural báltico
+    case todosCaucaso        // ARM, AZE, GEO (3) – AZE/GEO son pluricontinentales
+    case todosAnglosfera     // USA, GBR, CAN, AUS, NZL (5)
+    // Oro – grupos culturales/políticos medianos
+    case todosNordicos       // NOR, SWE, DNK, FIN, ISL (5) — más estricto que Escandinavos
+    case todosG7             // CAN, FRA, DEU, ITA, JPN, GBR, USA (7)
+    case todosBRICS          // BRA, RUS, IND, CHN, ZAF (5) — RUS pluri
+    case todosASEAN          // 10 países sudeste asiático
+    case todosLusofonos      // 8 países lusoparlantes
+    case todosMediterraneo   // 22 países con costa mediterránea — TUR/CYP/EGY pluri
+    // Trophy – grupos legendarios (mucho volumen)
+    case todosHispanohablantes // 21 países hispanohablantes
+    // Bronce / Plata / Oro / Trophy – tramos de VUELOS (✈️ legs)
+    case primerVuelo, vuelos10, vuelos50, frequentFlyer
+    // Plata – transporte no-✈️
+    case trotamundosTerrestre  // 10 trips sin ningún tramo de avión
+    // Bronce / Plata / Oro – viajes especiales por DURACIÓN
+    case daytrip      // ≥1 trip de 1 día (dateTo == dateFrom o dateTo == nil)
+    case sabbatical   // ≥1 trip > 30 días
+    case nomada       // ≥1 trip > 90 días
+    // Bronce / Plata / Trophy – países distintos visitados en UN MISMO año
+    case cincoPaisesAno, diezPaisesAno, veintePaisesAno
+    // Oro – temporal: ≥1 viaje en cada uno de los 12 meses del calendario
+    // (no necesariamente mismo año — acumulativo).
+    case anoCompletoViajero
+    // Bronce – trip cuyo rango cubre algún día entre 20-dic y 6-ene
+    case viajeroNavideno
+    // Trophy – Las 7 maravillas modernas. Disparo NO basado en países
+    // visitados — se desbloquea cuando el usuario marca las 7 en la sheet
+    // dedicada `ModernWondersSheet` (entrada "Maravillas modernas" en el
+    // perfil, debajo de "Transportes").
+    case sieteMaravillas
+
     // MARK: Sets de ISO por región (logros visitados/five)
     private static let _northAmerica: Set<String> = ["USA","MEX","CAN"]
     private static let _caribbean: Set<String> = [
@@ -96,6 +140,38 @@ enum AchievementKind: CaseIterable {
         "ALB","BIH","BGR","HRV","GRC","MKD","MNE","ROU","SRB","SVN","KOS"
     ]
     private static let _microestados: Set<String> = ["AND","LIE","MCO","SMR","VAT","MLT"]
+
+    // MARK: Sets de grupos culturales/políticos (Fase 2)
+    // Bálticos — 3 países ex-soviéticos del Báltico
+    private static let _balticos: Set<String> = ["EST","LVA","LTU"]
+    // Nórdicos — Escandinavos + Islandia + Finlandia (criterio amplio)
+    private static let _nordicos: Set<String> = ["NOR","SWE","DNK","FIN","ISL"]
+    // Cáucaso — Armenia, Azerbaiyán, Georgia (AZE/GEO son pluricontinentales)
+    private static let _caucaso: Set<String> = ["ARM","AZE","GEO"]
+    // G7 — Estados industrializados líderes (no incluye Rusia tras 2014)
+    private static let _g7: Set<String> = ["CAN","FRA","DEU","ITA","JPN","GBR","USA"]
+    // BRICS — Brasil, Rusia, India, China, Sudáfrica (RUS es pluricontinental)
+    private static let _brics: Set<String> = ["BRA","RUS","IND","CHN","ZAF"]
+    // Anglosfera — 5 países de habla inglesa con vínculos históricos
+    private static let _anglosfera: Set<String> = ["USA","GBR","CAN","AUS","NZL"]
+    // ASEAN — 10 países del sudeste asiático
+    private static let _asean: Set<String> = [
+        "BRN","KHM","IDN","LAO","MYS","MMR","PHL","SGP","THA","VNM"
+    ]
+    // Lusófonos — 8 países donde el portugués es oficial
+    private static let _lusofonos: Set<String> = [
+        "PRT","BRA","AGO","MOZ","CPV","GNB","STP","TLS"
+    ]
+    // Mediterráneo — 22 países con costa mediterránea (TUR/CYP/EGY pluri)
+    private static let _mediterraneo: Set<String> = [
+        "ESP","FRA","MCO","ITA","SVN","HRV","BIH","MNE","ALB","GRC",
+        "TUR","CYP","SYR","LBN","ISR","PSE","EGY","LBY","TUN","DZA","MAR","MLT"
+    ]
+    // Hispanohablantes — 21 países donde el español es oficial
+    private static let _hispanohablantes: Set<String> = [
+        "ESP","MEX","GTM","HND","SLV","NIC","CRI","PAN","CUB","DOM","PRI",
+        "VEN","COL","ECU","PER","BOL","CHL","ARG","PRY","URY","GNQ"
+    ]
 
     // MARK: Sets de ISO por zona de Mi mapa (logros completados)
     private static let _zoneEuropa: Set<String> = [
@@ -286,6 +362,17 @@ enum AchievementKind: CaseIterable {
         case .todosEscandinavos:    return Self._escandinavos
         case .todosBalcanicos:      return Self._balcanicos
         case .todosMicroestados:    return Self._microestados
+        // Grupos culturales/políticos Fase 2
+        case .todosBalticos:        return Self._balticos
+        case .todosNordicos:        return Self._nordicos
+        case .todosCaucaso:         return Self._caucaso
+        case .todosG7:              return Self._g7
+        case .todosBRICS:           return Self._brics
+        case .todosAnglosfera:      return Self._anglosfera
+        case .todosASEAN:           return Self._asean
+        case .todosLusofonos:       return Self._lusofonos
+        case .todosMediterraneo:    return Self._mediterraneo
+        case .todosHispanohablantes: return Self._hispanohablantes
         // passport achievements use candidateIsoCodes from mapQuadrantsData, not static sets
         case .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
              .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania: return []
@@ -370,46 +457,111 @@ enum AchievementKind: CaseIterable {
         case .pasaporteAfrica:      return "Pasaporte África completo"
         case .pasaporteAmerica:     return "Pasaporte América completo"
         case .pasaporteOceania:     return "Pasaporte Oceanía completo"
+        // Fase 2 — numéricos viajes
+        case .trips5:                   return "5 viajes"
+        case .trips10:                  return "10 viajes"
+        case .trips25:                  return "25 viajes"
+        case .trips50:                  return "50 viajes"
+        // Fase 2 — numéricos países
+        case .paises10:                 return "10 países"
+        case .paises25:                 return "25 países"
+        case .paises50:                 return "50 países"
+        case .paises75:                 return "75 países"
+        case .centurion:                return "Centurión: 100 países"
+        // Fase 2 — grupos culturales/geográficos
+        case .todosBalticos:            return "Todos los bálticos"
+        case .todosCaucaso:             return "Todo el Cáucaso"
+        case .todosAnglosfera:          return "Toda la Anglosfera"
+        case .todosNordicos:            return "Todos los nórdicos"
+        case .todosG7:                  return "Todo el G7"
+        case .todosBRICS:               return "Todos los BRICS"
+        case .todosASEAN:               return "Todos los ASEAN"
+        case .todosLusofonos:           return "Todos los lusófonos"
+        case .todosMediterraneo:        return "Todo el Mediterráneo"
+        case .todosHispanohablantes:    return "Todos los hispanohablantes"
+        // Fase 2 — transporte
+        case .primerVuelo:              return "Mi primer vuelo"
+        case .vuelos10:                 return "10 vuelos"
+        case .vuelos50:                 return "50 vuelos"
+        case .frequentFlyer:            return "Frequent Flyer (100 vuelos)"
+        case .trotamundosTerrestre:     return "Trotamundos terrestre"
+        // Fase 2 — viajes especiales por duración
+        case .daytrip:                  return "Daytrip"
+        case .sabbatical:               return "Sabbatical"
+        case .nomada:                   return "Nómada"
+        // Fase 2 — países por año
+        case .cincoPaisesAno:           return "5 países en 1 año"
+        case .diezPaisesAno:            return "10 países en 1 año"
+        case .veintePaisesAno:          return "20 países en 1 año"
+        // Fase 2 — temporal
+        case .anoCompletoViajero:       return "Año completo viajero"
+        case .viajeroNavideno:          return "Viajero navideño"
+        // Fase 2 — 7 maravillas modernas
+        case .sieteMaravillas:          return "Las 7 maravillas modernas"
         }
     }
 
     var medal: String {
         switch self {
-        case .allWorld, .visitedAntarctica, .todosLosContinentes:
+        case .allWorld, .visitedAntarctica, .todosLosContinentes,
+             .centurion, .todosHispanohablantes, .frequentFlyer, .veintePaisesAno,
+             .sieteMaravillas:
             return "🏆"
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
              .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
              .todaLaUE,
              .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
-             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania:
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania,
+             .trips50, .paises50, .paises75,
+             .todosNordicos, .todosG7, .todosBRICS, .todosASEAN,
+             .todosLusofonos, .todosMediterraneo,
+             .vuelos50, .nomada, .anoCompletoViajero:
             return "🥇"
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
              .firstLayover,
-             .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados:
+             .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados,
+             .trips25, .paises25,
+             .todosBalticos, .todosCaucaso, .todosAnglosfera,
+             .vuelos10, .trotamundosTerrestre,
+             .sabbatical, .diezPaisesAno:
             return "🥈"
         case .firstTrip, .visitedNortamerica, .visitedCaribe, .visitedSudamerica,
              .visitedCentroamerica, .visitedAfrica, .visitedEuropa, .visitedMedioOriente,
-             .visitedOceania, .visitedAsia, .primerMicroestado:
+             .visitedOceania, .visitedAsia, .primerMicroestado,
+             .trips5, .trips10, .paises10,
+             .primerVuelo, .daytrip, .cincoPaisesAno, .viajeroNavideno:
             return "🥉"
         }
     }
 
     var medalOrder: Int {
         switch self {
-        case .allWorld, .visitedAntarctica, .todosLosContinentes: return 0
+        case .allWorld, .visitedAntarctica, .todosLosContinentes,
+             .centurion, .todosHispanohablantes, .frequentFlyer, .veintePaisesAno,
+             .sieteMaravillas: return 0
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
              .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
              .todaLaUE,
              .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
-             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania: return 1
+             .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania,
+             .trips50, .paises50, .paises75,
+             .todosNordicos, .todosG7, .todosBRICS, .todosASEAN,
+             .todosLusofonos, .todosMediterraneo,
+             .vuelos50, .nomada, .anoCompletoViajero: return 1
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
              .firstLayover,
-             .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados: return 2
+             .todosEslavos, .todosEscandinavos, .todosBalcanicos, .todosMicroestados,
+             .trips25, .paises25,
+             .todosBalticos, .todosCaucaso, .todosAnglosfera,
+             .vuelos10, .trotamundosTerrestre,
+             .sabbatical, .diezPaisesAno: return 2
         case .firstTrip, .visitedNortamerica, .visitedCaribe, .visitedSudamerica,
              .visitedCentroamerica, .visitedAfrica, .visitedEuropa, .visitedMedioOriente,
-             .visitedOceania, .visitedAsia, .primerMicroestado: return 3
+             .visitedOceania, .visitedAsia, .primerMicroestado,
+             .trips5, .trips10, .paises10,
+             .primerVuelo, .daytrip, .cincoPaisesAno, .viajeroNavideno: return 3
         }
     }
 }

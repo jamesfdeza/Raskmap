@@ -252,6 +252,127 @@ struct ProfileSheet: View {
             return continentSets.allSatisfy { set in
                 !set.filter { countingMode.counts($0) }.isDisjoint(with: visitedIsoCodes)
             }
+        // === FASE 2: nuevos logros ===
+        // Réplica de la lógica de `multiContAchievedNow` en ContentView, pero
+        // usando el `cachedPastTrips` / `visitedIsoCodes` que ProfileSheet
+        // recibe del padre. Cualquier cambio de regla aquí debe replicarse
+        // en ContentView para mantener consistencia visual ↔ celebración.
+        case .trips5:   return cachedPastTrips.filter { !$0.isSegmentChild }.count >= 5
+        case .trips10:  return cachedPastTrips.filter { !$0.isSegmentChild }.count >= 10
+        case .trips25:  return cachedPastTrips.filter { !$0.isSegmentChild }.count >= 25
+        case .trips50:  return cachedPastTrips.filter { !$0.isSegmentChild }.count >= 50
+        case .paises10:   return visitedIsoCodes.filter { countingMode.counts($0) }.count >= 10
+        case .paises25:   return visitedIsoCodes.filter { countingMode.counts($0) }.count >= 25
+        case .paises50:   return visitedIsoCodes.filter { countingMode.counts($0) }.count >= 50
+        case .paises75:   return visitedIsoCodes.filter { countingMode.counts($0) }.count >= 75
+        case .centurion:  return visitedIsoCodes.filter { countingMode.counts($0) }.count >= 100
+        case .todosBalticos, .todosCaucaso, .todosAnglosfera,
+             .todosNordicos, .todosG7, .todosBRICS, .todosASEAN,
+             .todosLusofonos, .todosMediterraneo, .todosHispanohablantes:
+            let base = kind.zoneIsoCodes
+            let valid = base.filter { countingMode.counts($0) }
+            return !valid.isEmpty && valid.allSatisfy { visitedIsoCodes.contains($0) }
+        case .primerVuelo:
+            return cachedPastTrips.contains { trip in
+                if trip.transport == "✈️" { return true }
+                return trip.tripSegments.contains { $0.transport == "✈️" }
+            }
+        case .vuelos10, .vuelos50, .frequentFlyer:
+            let target: Int
+            switch kind {
+            case .vuelos10:      target = 10
+            case .vuelos50:      target = 50
+            case .frequentFlyer: target = 100
+            default:             target = 0
+            }
+            var legs = 0
+            for trip in cachedPastTrips where !trip.isSegmentChild {
+                let segs = trip.tripSegments
+                if segs.isEmpty {
+                    if trip.transport == "✈️" {
+                        let touches = trip.tripAirports.reduce(0) { $0 + $1.count }
+                        legs += max(1, touches / 2)
+                    }
+                } else {
+                    for seg in segs where seg.transport == "✈️" {
+                        let outLegs = max(0, (seg.airports?.count ?? 0) - 1)
+                        let retLegs = max(0, (seg.returnAirports?.count ?? 0) - 1)
+                        legs += max(1, outLegs + retLegs)
+                    }
+                }
+            }
+            return legs >= target
+        case .trotamundosTerrestre:
+            let groundTrips = cachedPastTrips.filter { trip in
+                guard !trip.isSegmentChild else { return false }
+                let segs = trip.tripSegments
+                if segs.isEmpty {
+                    let tr = trip.transport ?? ""
+                    return !tr.isEmpty && tr != "✈️"
+                } else {
+                    let nonFlight = segs.filter { !$0.transport.isEmpty && $0.transport != "✈️" }
+                    let hasFlight = segs.contains { $0.transport == "✈️" }
+                    return !nonFlight.isEmpty && !hasFlight
+                }
+            }
+            return groundTrips.count >= 10
+        case .daytrip:
+            return cachedPastTrips.contains { trip in
+                guard !trip.isSegmentChild else { return false }
+                guard let to = trip.dateTo else { return true }
+                let cal = Calendar.current
+                return cal.startOfDay(for: trip.dateFrom) == cal.startOfDay(for: to)
+            }
+        case .sabbatical, .nomada:
+            let threshold = (kind == .sabbatical) ? 30 : 90
+            return cachedPastTrips.contains { trip in
+                guard !trip.isSegmentChild, let to = trip.dateTo else { return false }
+                let days = Calendar.current.dateComponents([.day],
+                    from: Calendar.current.startOfDay(for: trip.dateFrom),
+                    to: Calendar.current.startOfDay(for: to)).day ?? 0
+                return days > threshold
+            }
+        case .cincoPaisesAno, .diezPaisesAno, .veintePaisesAno:
+            let target: Int
+            switch kind {
+            case .cincoPaisesAno:   target = 5
+            case .diezPaisesAno:    target = 10
+            case .veintePaisesAno:  target = 20
+            default:                target = 0
+            }
+            let cal = Calendar.current
+            let byYear = Dictionary(grouping: cachedPastTrips.filter { !$0.isSegmentChild }) { trip in
+                cal.component(.year, from: trip.dateFrom)
+            }
+            let maxPerYear = byYear.values.map { yearTrips -> Int in
+                Set(yearTrips.map(\.isoCode)).filter { countingMode.counts($0) }.count
+            }.max() ?? 0
+            return maxPerYear >= target
+        case .anoCompletoViajero:
+            let cal = Calendar.current
+            let monthsSeen = Set(cachedPastTrips
+                .filter { !$0.isSegmentChild }
+                .map { cal.component(.month, from: $0.dateFrom) })
+            return monthsSeen.count == 12
+        case .viajeroNavideno:
+            return cachedPastTrips.contains { trip in
+                guard !trip.isSegmentChild else { return false }
+                let cal = Calendar.current
+                var date = cal.startOfDay(for: trip.dateFrom)
+                let endDate = cal.startOfDay(for: trip.dateTo ?? trip.dateFrom)
+                while date <= endDate {
+                    let m = cal.component(.month, from: date)
+                    let d = cal.component(.day, from: date)
+                    if (m == 12 && d >= 20) || (m == 1 && d <= 6) { return true }
+                    guard let next = cal.date(byAdding: .day, value: 1, to: date) else { break }
+                    date = next
+                }
+                return false
+            }
+        case .sieteMaravillas:
+            let raw = UserDefaults.standard.string(forKey: "modernWondersVisited") ?? "[]"
+            let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(raw.utf8))) ?? []
+            return set.count >= 7
         }
     }
 

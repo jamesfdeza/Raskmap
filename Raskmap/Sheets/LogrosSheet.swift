@@ -229,6 +229,68 @@ struct LogrosSheet: View {
                     .font(.palatino(.caption))
                     .foregroundStyle(.secondary)
             }
+        // === FASE 2: nuevos logros ===
+        // Detalle genérico por categoría — el título del propio logro ya dice
+        // mucho, así que el modal sólo añade un subtítulo motivacional.
+        case .trips5, .trips10, .trips25, .trips50:
+            genericAchievementDetail(headline: kind.title, subtitle: "¡Sigue acumulando aventuras!")
+        case .paises10, .paises25, .paises50, .paises75, .centurion:
+            genericAchievementDetail(headline: kind.title, subtitle: "Conteo según tu modo activo (ONU / ONU+obs / Todos)")
+        case .todosBalticos:
+            genericAchievementDetail(headline: "¡Los 3 países bálticos!", subtitle: "Estonia, Letonia y Lituania")
+        case .todosCaucaso:
+            genericAchievementDetail(headline: "¡Todo el Cáucaso!", subtitle: "Armenia, Azerbaiyán y Georgia")
+        case .todosAnglosfera:
+            genericAchievementDetail(headline: "¡Toda la Anglosfera!", subtitle: "USA, UK, Canadá, Australia y Nueva Zelanda")
+        case .todosNordicos:
+            genericAchievementDetail(headline: "¡Los 5 países nórdicos!", subtitle: "Noruega, Suecia, Dinamarca, Finlandia e Islandia")
+        case .todosG7:
+            genericAchievementDetail(headline: "¡Todo el G7!", subtitle: "Las 7 economías más industrializadas")
+        case .todosBRICS:
+            genericAchievementDetail(headline: "¡Todos los BRICS!", subtitle: "Brasil, Rusia, India, China y Sudáfrica")
+        case .todosASEAN:
+            genericAchievementDetail(headline: "¡Todos los ASEAN!", subtitle: "Los 10 países del sudeste asiático")
+        case .todosLusofonos:
+            genericAchievementDetail(headline: "¡Todos los lusófonos!", subtitle: "Los 8 países donde se habla portugués")
+        case .todosMediterraneo:
+            genericAchievementDetail(headline: "¡Todo el Mediterráneo!", subtitle: "Los 22 países con costa mediterránea")
+        case .todosHispanohablantes:
+            genericAchievementDetail(headline: "¡Todos los hispanohablantes!", subtitle: "Los 21 países donde el español es oficial")
+        case .primerVuelo:
+            genericAchievementDetail(headline: "¡Tu primer vuelo!", subtitle: "Despegaron las alas del viaje")
+        case .vuelos10, .vuelos50, .frequentFlyer:
+            genericAchievementDetail(headline: kind.title, subtitle: "Tramos de avión acumulados")
+        case .trotamundosTerrestre:
+            genericAchievementDetail(headline: "¡Trotamundos terrestre!", subtitle: "10 viajes sin pisar un avión")
+        case .daytrip:
+            genericAchievementDetail(headline: "¡Daytrip!", subtitle: "Un viaje de ida y vuelta en el mismo día")
+        case .sabbatical:
+            genericAchievementDetail(headline: "¡Sabbatical!", subtitle: "Un viaje de más de 30 días")
+        case .nomada:
+            genericAchievementDetail(headline: "¡Nómada!", subtitle: "Un viaje de más de 90 días")
+        case .cincoPaisesAno, .diezPaisesAno, .veintePaisesAno:
+            genericAchievementDetail(headline: kind.title, subtitle: "Países distintos en un mismo año")
+        case .anoCompletoViajero:
+            genericAchievementDetail(headline: "¡Año completo viajero!", subtitle: "Has viajado en los 12 meses del calendario")
+        case .viajeroNavideno:
+            genericAchievementDetail(headline: "¡Viajero navideño!", subtitle: "Has viajado entre 20-dic y 6-ene")
+        case .sieteMaravillas:
+            genericAchievementDetail(headline: "¡Las 7 maravillas modernas!", subtitle: "Has visitado las 7: Gran Muralla, Petra, Cristo Redentor, Machu Picchu, Chichén Itzá, Coliseo y Taj Mahal")
+        }
+    }
+
+    /// Detalle genérico para logros Fase 2 — un par título + subtítulo
+    /// centrados, mismo estilo visual que los específicos.
+    @ViewBuilder
+    private func genericAchievementDetail(headline: String, subtitle: String) -> some View {
+        VStack(spacing: 4) {
+            Text(headline)
+                .font(.palatino(.subheadline, weight: .bold))
+                .multilineTextAlignment(.center)
+            Text(subtitle)
+                .font(.palatino(.caption))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
     }
 

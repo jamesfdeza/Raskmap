@@ -211,6 +211,175 @@ struct ContentView: View {
             case .pasaporteEuropa, .pasaporteAsia, .pasaporteMedioOriente,
                  .pasaporteAfrica, .pasaporteAmerica, .pasaporteOceania:
                 achieved = false // ya tratado arriba via passportZoneKey
+
+            // ─── FASE 2: hitos numéricos VIAJES ───────────────────────────
+            // Trips son trips: NO filtran por countingMode (una visita a HKG
+            // sigue siendo un viaje válido aunque HKG no cuente como país en
+            // modo ONU). Sólo contamos trips primarios PASADOS para que un
+            // viaje futuro programado no infle el contador.
+            case .trips5:  achieved = past.filter { !$0.isSegmentChild }.count >= 5
+            case .trips10: achieved = past.filter { !$0.isSegmentChild }.count >= 10
+            case .trips25: achieved = past.filter { !$0.isSegmentChild }.count >= 25
+            case .trips50: achieved = past.filter { !$0.isSegmentChild }.count >= 50
+
+            // ─── FASE 2: hitos numéricos PAÍSES ───────────────────────────
+            // Filtran por countingMode: en ONU sólo cuenta los 193, en
+            // ONU+obs los 195, en Todos los 249. Esto hace los logros
+            // DINÁMICOS — cambiar de modo en ajustes recalcula al vuelo.
+            case .paises10:   achieved = visited.filter { mode.counts($0) }.count >= 10
+            case .paises25:   achieved = visited.filter { mode.counts($0) }.count >= 25
+            case .paises50:   achieved = visited.filter { mode.counts($0) }.count >= 50
+            case .paises75:   achieved = visited.filter { mode.counts($0) }.count >= 75
+            case .centurion:  achieved = visited.filter { mode.counts($0) }.count >= 100
+
+            // ─── FASE 2: grupos culturales/políticos/geográficos ──────────
+            // Patrón homogéneo: el set del grupo es FIJO (no se ajusta por
+            // asignación pluricontinental — un país como RUS está en BRICS
+            // independientemente de si lo asignaste a Europa o Asia en
+            // ajustes). Sí filtramos por countingMode por consistencia con
+            // los logros existentes — si el modo activo excluye un ISO del
+            // grupo, no se requiere para el logro.
+            case .todosBalticos, .todosCaucaso, .todosAnglosfera,
+                 .todosNordicos, .todosG7, .todosBRICS, .todosASEAN,
+                 .todosLusofonos, .todosMediterraneo, .todosHispanohablantes:
+                let base = kind.zoneIsoCodes
+                let valid = base.filter { mode.counts($0) }
+                achieved = !valid.isEmpty && valid.allSatisfy { visited.contains($0) }
+
+            // ─── FASE 2: transporte (vuelos ✈️) ───────────────────────────
+            // Conta tramos de avión legacy (tripAirports/2) y segment-based
+            // (sum de (airports-1) + (returnAirports-1) por seg ✈️).
+            case .primerVuelo:
+                achieved = past.contains { trip in
+                    if trip.transport == "✈️" { return true }
+                    return trip.tripSegments.contains { $0.transport == "✈️" }
+                }
+            case .vuelos10, .vuelos50, .frequentFlyer:
+                let target: Int
+                switch kind {
+                case .vuelos10:      target = 10
+                case .vuelos50:      target = 50
+                case .frequentFlyer: target = 100
+                default:             target = 0
+                }
+                var legs = 0
+                for trip in past where !trip.isSegmentChild {
+                    let segs = trip.tripSegments
+                    if segs.isEmpty {
+                        if trip.transport == "✈️" {
+                            let touches = trip.tripAirports.reduce(0) { $0 + $1.count }
+                            legs += max(1, touches / 2)
+                        }
+                    } else {
+                        for seg in segs where seg.transport == "✈️" {
+                            let outLegs = max(0, (seg.airports?.count ?? 0) - 1)
+                            let retLegs = max(0, (seg.returnAirports?.count ?? 0) - 1)
+                            legs += max(1, outLegs + retLegs)
+                        }
+                    }
+                }
+                achieved = legs >= target
+
+            // ─── FASE 2: transporte (no-✈️) ───────────────────────────────
+            case .trotamundosTerrestre:
+                // ≥10 trips primarios PASADOS sin ningún tramo de avión y
+                // con algún transporte registrado (los trips "sin transporte"
+                // — flag manual de un país — no cuentan).
+                let groundTrips = past.filter { trip in
+                    guard !trip.isSegmentChild else { return false }
+                    let segs = trip.tripSegments
+                    if segs.isEmpty {
+                        let tr = trip.transport ?? ""
+                        return !tr.isEmpty && tr != "✈️"
+                    } else {
+                        let nonFlight = segs.filter { !$0.transport.isEmpty && $0.transport != "✈️" }
+                        let hasFlight = segs.contains { $0.transport == "✈️" }
+                        return !nonFlight.isEmpty && !hasFlight
+                    }
+                }
+                achieved = groundTrips.count >= 10
+
+            // ─── FASE 2: viajes por DURACIÓN ──────────────────────────────
+            case .daytrip:
+                // ≥1 trip primario cuyo rango es de 1 solo día. Cubre los
+                // dos casos: sin dateTo (1 día implícito) Y dateTo == dateFrom
+                // (ida y vuelta el mismo día tras el último cambio).
+                achieved = past.contains { trip in
+                    guard !trip.isSegmentChild else { return false }
+                    guard let to = trip.dateTo else { return true }
+                    let cal = Calendar.current
+                    return cal.startOfDay(for: trip.dateFrom) == cal.startOfDay(for: to)
+                }
+            case .sabbatical, .nomada:
+                let threshold = (kind == .sabbatical) ? 30 : 90
+                achieved = past.contains { trip in
+                    guard !trip.isSegmentChild, let to = trip.dateTo else { return false }
+                    let days = Calendar.current.dateComponents([.day],
+                        from: Calendar.current.startOfDay(for: trip.dateFrom),
+                        to: Calendar.current.startOfDay(for: to)).day ?? 0
+                    return days > threshold
+                }
+
+            // ─── FASE 2: países por AÑO ───────────────────────────────────
+            // Cuenta ISOs distintos visitados (por dateFrom del trip) por año
+            // calendario. Devuelve el máximo entre todos los años. Respeta
+            // countingMode — un viaje a HKG en modo ONU no suma. Sólo trips
+            // primarios PASADOS.
+            case .cincoPaisesAno, .diezPaisesAno, .veintePaisesAno:
+                let target: Int
+                switch kind {
+                case .cincoPaisesAno:   target = 5
+                case .diezPaisesAno:    target = 10
+                case .veintePaisesAno:  target = 20
+                default:                target = 0
+                }
+                let cal = Calendar.current
+                let byYear = Dictionary(grouping: past.filter { !$0.isSegmentChild }) { trip in
+                    cal.component(.year, from: trip.dateFrom)
+                }
+                let maxPerYear = byYear.values.map { yearTrips -> Int in
+                    Set(yearTrips.map(\.isoCode)).filter { mode.counts($0) }.count
+                }.max() ?? 0
+                achieved = maxPerYear >= target
+
+            // ─── FASE 2: temporal — año completo ──────────────────────────
+            // ≥1 viaje en cada uno de los 12 meses del calendario (acumulativo
+            // entre años — no exige que sea el mismo año). Sólo trips
+            // primarios pasados.
+            case .anoCompletoViajero:
+                let cal = Calendar.current
+                let monthsSeen = Set(past
+                    .filter { !$0.isSegmentChild }
+                    .map { cal.component(.month, from: $0.dateFrom) })
+                achieved = monthsSeen.count == 12
+
+            // ─── FASE 2: temporal — navideño ──────────────────────────────
+            // ≥1 trip que cubra algún día en el rango [20-dic, 6-ene].
+            case .viajeroNavideno:
+                achieved = past.contains { trip in
+                    guard !trip.isSegmentChild else { return false }
+                    let cal = Calendar.current
+                    var date = cal.startOfDay(for: trip.dateFrom)
+                    let endDate = cal.startOfDay(for: trip.dateTo ?? trip.dateFrom)
+                    while date <= endDate {
+                        let m = cal.component(.month, from: date)
+                        let d = cal.component(.day, from: date)
+                        if (m == 12 && d >= 20) || (m == 1 && d <= 6) { return true }
+                        guard let next = cal.date(byAdding: .day, value: 1, to: date) else { break }
+                        date = next
+                    }
+                    return false
+                }
+
+            // ─── FASE 2: 7 Maravillas modernas ────────────────────────────
+            // Disparo desacoplado de países visitados — el usuario marca cada
+            // maravilla manualmente en `ModernWondersSheet`. El logro salta
+            // cuando las 7 están marcadas. Persistencia en AppStorage
+            // `modernWondersVisited` (JSON Set<String>).
+            case .sieteMaravillas:
+                let raw = UserDefaults.standard.string(forKey: "modernWondersVisited") ?? "[]"
+                let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(raw.utf8))) ?? []
+                achieved = set.count >= 7
             }
             if achieved { result.insert(kind) }
         }
