@@ -83,6 +83,29 @@ enum AchievementKind: CaseIterable {
     // perfil, debajo de "Transportes").
     case sieteMaravillas
 
+    // === LOGROS FASE 3 (transporte + 1-viaje patterns + aerolíneas) ===
+    //
+    // Trophy – hito numérico extremo de países (50% del mundo según modo).
+    case medioMundo
+    // Plata – transporte específico no-✈️
+    case capitanBarco          // ≥5 tramos en 🚢
+    case mochileroAutentico    // ≥5 tramos andando (🚶🏻 / 🚶)
+    case multimodal            // 1 viaje con ≥3 transportes distintos
+    // Bronce / Oro – aerolíneas distintas
+    case cincoAerolineas, veinticincoAerolineas
+    // Bronce / Oro – aeropuertos distintos
+    case diezAeropuertos, cincuentaAeropuertos
+    // Plata – pasar por 3 de los grandes hubs mundiales
+    case hubMaster
+    // Plata – maratón viajero: 3 países distintos en 30 días
+    case maratonViajero
+    // Plata / Oro – patrones por 1 viaje
+    case dosContinentesUnViaje // 1 trip con ISOs en ≥2 macro-continentes
+    case cincoPaisesUnViaje    // 1 trip con ≥5 ISOs distintos
+    // Plata / Oro – fidelidad a un mismo país (visitas repetidas)
+    case segundaCasa           // mismo país visitado 5+ veces
+    case querencia             // mismo país visitado 10+ veces
+
     // MARK: Sets de ISO por región (logros visitados/five)
     private static let _northAmerica: Set<String> = ["USA","MEX","CAN"]
     private static let _caribbean: Set<String> = [
@@ -172,6 +195,30 @@ enum AchievementKind: CaseIterable {
         "ESP","MEX","GTM","HND","SLV","NIC","CRI","PAN","CUB","DOM","PRI",
         "VEN","COL","ECU","PER","BOL","CHL","ARG","PRY","URY","GNQ"
     ]
+
+    // MARK: - Top hubs aéreos mundiales (logro Hub Master)
+    // Set de IATAs de los 8 mayores hubs internacionales por tráfico
+    // (Dubai, Heathrow, JFK, Haneda, Charles de Gaulle, Changi, Atlanta,
+    // Schiphol). El logro pide pasar por ≥3 de estos 8. Lista cerrada —
+    // no usamos el listado de aeropuertos del propio app porque queremos
+    // un criterio "icónico", no "top por mi historial".
+    static let topGlobalHubs: Set<String> = [
+        "DXB","LHR","JFK","HND","CDG","SIN","ATL","AMS"
+    ]
+
+    /// Macro-continente para un ISO. Agrupa NA/SA/Caribe/CA en "america" y
+    /// trata M.Oriente como parte de "asia" (criterio Naciones Unidas para
+    /// el "Asia geográfica"). Devuelve nil si el ISO no encaja en ninguna
+    /// región conocida. Usado por `dosContinentesUnViaje`.
+    static func macroContinent(for iso: String) -> String? {
+        if _zoneEuropa.contains(iso) { return "europa" }
+        if _zoneAsia.contains(iso) || _zoneMedioOriente.contains(iso) { return "asia" }
+        if _zoneAfrica.contains(iso) { return "africa" }
+        if _zoneAmerica.contains(iso) { return "america" }
+        if _zoneOceania.contains(iso) { return "oceania" }
+        if _antarctica.contains(iso) { return "antartida" }
+        return nil
+    }
 
     // MARK: Sets de ISO por zona de Mi mapa (logros completados)
     private static let _zoneEuropa: Set<String> = [
@@ -498,6 +545,21 @@ enum AchievementKind: CaseIterable {
         case .viajeroNavideno:          return "Viajero navideño"
         // Fase 2 — 7 maravillas modernas
         case .sieteMaravillas:          return "Las 7 maravillas modernas"
+        // Fase 3 — extras
+        case .medioMundo:               return "Medio mundo"
+        case .capitanBarco:             return "Capitán de barco"
+        case .mochileroAutentico:       return "Mochilero auténtico"
+        case .multimodal:               return "Multimodal"
+        case .cincoAerolineas:          return "5 aerolíneas"
+        case .veinticincoAerolineas:    return "25 aerolíneas"
+        case .diezAeropuertos:          return "10 aeropuertos"
+        case .cincuentaAeropuertos:     return "50 aeropuertos"
+        case .hubMaster:                return "Hub Master"
+        case .maratonViajero:           return "Maratón viajero"
+        case .dosContinentesUnViaje:    return "2 continentes en 1 viaje"
+        case .cincoPaisesUnViaje:       return "5 países en 1 viaje"
+        case .segundaCasa:              return "Segunda casa"
+        case .querencia:                return "Querencia"
         }
     }
 
@@ -505,7 +567,8 @@ enum AchievementKind: CaseIterable {
         switch self {
         case .allWorld, .visitedAntarctica, .todosLosContinentes,
              .centurion, .todosHispanohablantes, .frequentFlyer, .veintePaisesAno,
-             .sieteMaravillas:
+             .sieteMaravillas,
+             .medioMundo:
             return "🏆"
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
              .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
@@ -515,7 +578,9 @@ enum AchievementKind: CaseIterable {
              .trips50, .paises50, .paises75,
              .todosNordicos, .todosG7, .todosBRICS, .todosASEAN,
              .todosLusofonos, .todosMediterraneo,
-             .vuelos50, .nomada, .anoCompletoViajero:
+             .vuelos50, .nomada, .anoCompletoViajero,
+             .veinticincoAerolineas, .cincuentaAeropuertos,
+             .cincoPaisesUnViaje, .querencia:
             return "🥇"
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
@@ -524,13 +589,16 @@ enum AchievementKind: CaseIterable {
              .trips25, .paises25,
              .todosBalticos, .todosCaucaso, .todosAnglosfera,
              .vuelos10, .trotamundosTerrestre,
-             .sabbatical, .diezPaisesAno:
+             .sabbatical, .diezPaisesAno,
+             .capitanBarco, .mochileroAutentico, .multimodal, .hubMaster,
+             .maratonViajero, .dosContinentesUnViaje, .segundaCasa:
             return "🥈"
         case .firstTrip, .visitedNortamerica, .visitedCaribe, .visitedSudamerica,
              .visitedCentroamerica, .visitedAfrica, .visitedEuropa, .visitedMedioOriente,
              .visitedOceania, .visitedAsia, .primerMicroestado,
              .trips5, .trips10, .paises10,
-             .primerVuelo, .daytrip, .cincoPaisesAno, .viajeroNavideno:
+             .primerVuelo, .daytrip, .cincoPaisesAno, .viajeroNavideno,
+             .cincoAerolineas, .diezAeropuertos:
             return "🥉"
         }
     }
@@ -539,7 +607,8 @@ enum AchievementKind: CaseIterable {
         switch self {
         case .allWorld, .visitedAntarctica, .todosLosContinentes,
              .centurion, .todosHispanohablantes, .frequentFlyer, .veintePaisesAno,
-             .sieteMaravillas: return 0
+             .sieteMaravillas,
+             .medioMundo: return 0
         case .trips100, .europaCompleta, .asiaCompleta, .medioOrienteCompleto,
              .africaCompleta, .americaCompleta, .oceaniaCompleta, .ambosHemisferios,
              .todaLaUE,
@@ -548,7 +617,9 @@ enum AchievementKind: CaseIterable {
              .trips50, .paises50, .paises75,
              .todosNordicos, .todosG7, .todosBRICS, .todosASEAN,
              .todosLusofonos, .todosMediterraneo,
-             .vuelos50, .nomada, .anoCompletoViajero: return 1
+             .vuelos50, .nomada, .anoCompletoViajero,
+             .veinticincoAerolineas, .cincuentaAeropuertos,
+             .cincoPaisesUnViaje, .querencia: return 1
         case .fiveEurope, .fiveAsia, .fiveAfrica, .fiveMedioOriente, .fiveOceania,
              .fiveNortamerica, .fiveCaribe, .fiveSudamerica, .fiveCentroamerica,
              .firstLayover,
@@ -556,12 +627,15 @@ enum AchievementKind: CaseIterable {
              .trips25, .paises25,
              .todosBalticos, .todosCaucaso, .todosAnglosfera,
              .vuelos10, .trotamundosTerrestre,
-             .sabbatical, .diezPaisesAno: return 2
+             .sabbatical, .diezPaisesAno,
+             .capitanBarco, .mochileroAutentico, .multimodal, .hubMaster,
+             .maratonViajero, .dosContinentesUnViaje, .segundaCasa: return 2
         case .firstTrip, .visitedNortamerica, .visitedCaribe, .visitedSudamerica,
              .visitedCentroamerica, .visitedAfrica, .visitedEuropa, .visitedMedioOriente,
              .visitedOceania, .visitedAsia, .primerMicroestado,
              .trips5, .trips10, .paises10,
-             .primerVuelo, .daytrip, .cincoPaisesAno, .viajeroNavideno: return 3
+             .primerVuelo, .daytrip, .cincoPaisesAno, .viajeroNavideno,
+             .cincoAerolineas, .diezAeropuertos: return 3
         }
     }
 }

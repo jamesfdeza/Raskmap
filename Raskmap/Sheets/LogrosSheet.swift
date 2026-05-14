@@ -276,6 +276,31 @@ struct LogrosSheet: View {
             genericAchievementDetail(headline: "¡Viajero navideño!", subtitle: "Has viajado entre 20-dic y 6-ene")
         case .sieteMaravillas:
             genericAchievementDetail(headline: "¡Las 7 maravillas modernas!", subtitle: "Has visitado las 7: Gran Muralla, Petra, Cristo Redentor, Machu Picchu, Chichén Itzá, Coliseo y Taj Mahal")
+        // Fase 3
+        case .medioMundo:
+            genericAchievementDetail(headline: "¡Medio mundo visitado!", subtitle: "Has cruzado el ecuador del mundo según tu modo de conteo")
+        case .capitanBarco:
+            genericAchievementDetail(headline: "¡Capitán de barco!", subtitle: "5 tramos en barco completados")
+        case .mochileroAutentico:
+            genericAchievementDetail(headline: "¡Mochilero auténtico!", subtitle: "5 tramos andando — los pies como motor")
+        case .multimodal:
+            genericAchievementDetail(headline: "¡Multimodal!", subtitle: "Un viaje con 3 o más medios de transporte distintos")
+        case .cincoAerolineas, .veinticincoAerolineas:
+            genericAchievementDetail(headline: kind.title, subtitle: "Aerolíneas distintas en tu historial")
+        case .diezAeropuertos, .cincuentaAeropuertos:
+            genericAchievementDetail(headline: kind.title, subtitle: "Aeropuertos distintos por los que has pasado")
+        case .hubMaster:
+            genericAchievementDetail(headline: "¡Hub Master!", subtitle: "Has pasado por 3 de los grandes hubs mundiales (DXB, LHR, JFK, HND, CDG, SIN, ATL, AMS)")
+        case .maratonViajero:
+            genericAchievementDetail(headline: "¡Maratón viajero!", subtitle: "3 países distintos en 30 días")
+        case .dosContinentesUnViaje:
+            genericAchievementDetail(headline: "¡2 continentes en 1 viaje!", subtitle: "Cruzaste dos macro-continentes en el mismo trip")
+        case .cincoPaisesUnViaje:
+            genericAchievementDetail(headline: "¡5 países en 1 viaje!", subtitle: "Cinco destinos en un solo trip")
+        case .segundaCasa:
+            genericAchievementDetail(headline: "¡Segunda casa!", subtitle: "Has visitado el mismo país 5 veces")
+        case .querencia:
+            genericAchievementDetail(headline: "¡Querencia!", subtitle: "Has visitado el mismo país 10 veces")
         }
     }
 

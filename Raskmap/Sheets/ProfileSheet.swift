@@ -382,6 +382,108 @@ struct ProfileSheet: View {
             // logros se re-renderiza al instante al marcar la 7ª maravilla.
             let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(modernWondersRaw.utf8))) ?? []
             return set.count >= 7
+
+        // ─── FASE 3: medio mundo ─────────────────────────────────────────
+        case .medioMundo:
+            let valid = visitedIsoCodes.filter { countingMode.counts($0) }.count
+            return valid * 2 >= countingMode.denominator && countingMode.denominator > 0
+
+        // ─── FASE 3: transporte específico (no-✈️) ───────────────────────
+        case .capitanBarco, .mochileroAutentico:
+            let target = (kind == .capitanBarco) ? "🚢" : "🚶🏻"
+            let alt    = (kind == .mochileroAutentico) ? "🚶" : ""
+            func matches(_ tr: String) -> Bool {
+                return tr == target || (!alt.isEmpty && tr == alt)
+            }
+            var count = 0
+            for trip in cachedPastTrips where !trip.isSegmentChild {
+                let segs = trip.tripSegments
+                if segs.isEmpty {
+                    if matches(trip.transport ?? "") { count += 1 }
+                } else {
+                    count += segs.filter { matches($0.transport) }.count
+                }
+            }
+            return count >= 5
+        case .multimodal:
+            return cachedPastTrips.contains { trip in
+                guard !trip.isSegmentChild else { return false }
+                let segs = trip.tripSegments.filter { !$0.transport.isEmpty }
+                let normalized = Set(segs.map { $0.transport == "🚶" ? "🚶🏻" : $0.transport })
+                return normalized.count >= 3
+            }
+
+        // ─── FASE 3: aerolíneas / aeropuertos distintos + hubs ───────────
+        case .cincoAerolineas, .veinticincoAerolineas:
+            let target = (kind == .cincoAerolineas) ? 5 : 25
+            var airlines = Set<String>()
+            for trip in cachedPastTrips where !trip.isSegmentChild {
+                for al in trip.tripAirlines { airlines.insert(al.name) }
+                for seg in trip.tripSegments {
+                    for al in seg.airlines ?? [] { airlines.insert(al.name) }
+                }
+            }
+            return airlines.count >= target
+        case .diezAeropuertos, .cincuentaAeropuertos:
+            let target = (kind == .diezAeropuertos) ? 10 : 50
+            var iatas = Set<String>()
+            for trip in cachedPastTrips where !trip.isSegmentChild {
+                for ap in trip.tripAirports { iatas.insert(ap.iata) }
+                for seg in trip.tripSegments {
+                    for ap in seg.airports ?? []       { iatas.insert(ap.iata) }
+                    for ap in seg.returnAirports ?? [] { iatas.insert(ap.iata) }
+                }
+            }
+            return iatas.count >= target
+        case .hubMaster:
+            let hubs = AchievementKind.topGlobalHubs
+            var seen = Set<String>()
+            for trip in cachedPastTrips where !trip.isSegmentChild {
+                for ap in trip.tripAirports where hubs.contains(ap.iata) { seen.insert(ap.iata) }
+                for seg in trip.tripSegments {
+                    for ap in seg.airports ?? []       where hubs.contains(ap.iata) { seen.insert(ap.iata) }
+                    for ap in seg.returnAirports ?? [] where hubs.contains(ap.iata) { seen.insert(ap.iata) }
+                }
+            }
+            return seen.count >= 3
+
+        // ─── FASE 3: maratón ─────────────────────────────────────────────
+        case .maratonViajero:
+            let cal = Calendar.current
+            let sorted = cachedPastTrips
+                .filter { !$0.isSegmentChild }
+                .sorted { $0.dateFrom < $1.dateFrom }
+            for start in sorted {
+                let windowEnd = cal.date(byAdding: .day, value: 30, to: start.dateFrom) ?? start.dateFrom
+                let windowTrips = sorted.filter { $0.dateFrom >= start.dateFrom && $0.dateFrom <= windowEnd }
+                let isos = Set(windowTrips.map(\.isoCode)).filter { countingMode.counts($0) }
+                if isos.count >= 3 { return true }
+            }
+            return false
+
+        // ─── FASE 3: patrones por 1 viaje ────────────────────────────────
+        case .dosContinentesUnViaje:
+            return cachedPastTrips.contains { trip in
+                guard !trip.isSegmentChild else { return false }
+                var isos = Set<String>([trip.isoCode])
+                for seg in trip.tripSegments { isos.formUnion(seg.isoCodes) }
+                let cs = Set(isos.compactMap { AchievementKind.macroContinent(for: $0) })
+                return cs.count >= 2
+            }
+        case .cincoPaisesUnViaje:
+            return cachedPastTrips.contains { trip in
+                guard !trip.isSegmentChild else { return false }
+                var isos = Set<String>([trip.isoCode])
+                for seg in trip.tripSegments { isos.formUnion(seg.isoCodes) }
+                return isos.count >= 5
+            }
+
+        // ─── FASE 3: fidelidad a un país ─────────────────────────────────
+        case .segundaCasa, .querencia:
+            let threshold = (kind == .segundaCasa) ? 5 : 10
+            var byIso: [String: Int] = [:]
+            for trip in cachedPastTrips { byIso[trip.isoCode, default: 0] += 1 }
+            return (byIso.values.max() ?? 0) >= threshold
         }
     }
 

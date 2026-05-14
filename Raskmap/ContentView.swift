@@ -387,6 +387,139 @@ struct ContentView: View {
                 // UserDefaults.standard.string(...) suelto no es reactivo.
                 let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(modernWondersRaw.utf8))) ?? []
                 achieved = set.count >= 7
+
+            // ─── FASE 3: medio mundo ──────────────────────────────────────
+            // 50% del denominador del modo activo (97 ONU / 98 ONU+obs / 125 todos).
+            case .medioMundo:
+                let valid = visited.filter { mode.counts($0) }.count
+                achieved = valid * 2 >= mode.denominator && mode.denominator > 0
+
+            // ─── FASE 3: transporte específico (no-✈️) ────────────────────
+            // Cuenta TRAMOS del emoji indicado en trips primarios pasados.
+            // Para 🚶 normalizamos a 🚶🏻 (skin-tone) que es el emoji que
+            // ofrece la app por defecto en el picker — agrupamos ambas
+            // codificaciones para no perder tramos guardados con la versión
+            // sin modificador.
+            case .capitanBarco, .mochileroAutentico:
+                let target = (kind == .capitanBarco) ? "🚢" : "🚶🏻"
+                let alt    = (kind == .mochileroAutentico) ? "🚶" : ""
+                func matches(_ tr: String) -> Bool {
+                    return tr == target || (!alt.isEmpty && tr == alt)
+                }
+                var count = 0
+                for trip in past where !trip.isSegmentChild {
+                    let segs = trip.tripSegments
+                    if segs.isEmpty {
+                        if matches(trip.transport ?? "") { count += 1 }
+                    } else {
+                        count += segs.filter { matches($0.transport) }.count
+                    }
+                }
+                achieved = count >= 5
+            case .multimodal:
+                // ≥1 trip primario con ≥3 transportes DISTINTOS entre sus
+                // segments. Normalizamos 🚶 a 🚶🏻 para evitar contarlos como
+                // medios distintos cuando son el mismo "andar".
+                achieved = past.contains { trip in
+                    guard !trip.isSegmentChild else { return false }
+                    let segs = trip.tripSegments.filter { !$0.transport.isEmpty }
+                    let normalized = Set(segs.map { $0.transport == "🚶" ? "🚶🏻" : $0.transport })
+                    return normalized.count >= 3
+                }
+
+            // ─── FASE 3: aerolíneas / aeropuertos distintos ───────────────
+            // No filtra por countingMode — un aeropuerto es un aeropuerto
+            // independientemente del modo. Recorre tanto el array legacy
+            // del trip como los de los segments.
+            case .cincoAerolineas, .veinticincoAerolineas:
+                let target = (kind == .cincoAerolineas) ? 5 : 25
+                var airlines = Set<String>()
+                for trip in past where !trip.isSegmentChild {
+                    for al in trip.tripAirlines { airlines.insert(al.name) }
+                    for seg in trip.tripSegments {
+                        for al in seg.airlines ?? [] { airlines.insert(al.name) }
+                    }
+                }
+                achieved = airlines.count >= target
+            case .diezAeropuertos, .cincuentaAeropuertos:
+                let target = (kind == .diezAeropuertos) ? 10 : 50
+                var iatas = Set<String>()
+                for trip in past where !trip.isSegmentChild {
+                    for ap in trip.tripAirports { iatas.insert(ap.iata) }
+                    for seg in trip.tripSegments {
+                        for ap in seg.airports ?? []       { iatas.insert(ap.iata) }
+                        for ap in seg.returnAirports ?? [] { iatas.insert(ap.iata) }
+                    }
+                }
+                achieved = iatas.count >= target
+            case .hubMaster:
+                // ≥3 de los 8 mayores hubs internacionales. Lista en
+                // AchievementKind.topGlobalHubs.
+                let hubs = AchievementKind.topGlobalHubs
+                var seen = Set<String>()
+                for trip in past where !trip.isSegmentChild {
+                    for ap in trip.tripAirports where hubs.contains(ap.iata) { seen.insert(ap.iata) }
+                    for seg in trip.tripSegments {
+                        for ap in seg.airports ?? []       where hubs.contains(ap.iata) { seen.insert(ap.iata) }
+                        for ap in seg.returnAirports ?? [] where hubs.contains(ap.iata) { seen.insert(ap.iata) }
+                    }
+                }
+                achieved = seen.count >= 3
+
+            // ─── FASE 3: maratón viajero (3 países en 30 días) ────────────
+            // Algoritmo de ventana deslizante: ordena trips por dateFrom,
+            // y para cada inicio comprueba cuántos ISOs distintos hay en
+            // el rango [start, start+30 días]. Respeta countingMode —
+            // un trip a HKG en modo ONU no cuenta como país.
+            case .maratonViajero:
+                let cal = Calendar.current
+                let sorted = past
+                    .filter { !$0.isSegmentChild }
+                    .sorted { $0.dateFrom < $1.dateFrom }
+                var hit = false
+                for start in sorted {
+                    let windowEnd = cal.date(byAdding: .day, value: 30, to: start.dateFrom) ?? start.dateFrom
+                    let windowTrips = sorted.filter { $0.dateFrom >= start.dateFrom && $0.dateFrom <= windowEnd }
+                    let isos = Set(windowTrips.map(\.isoCode)).filter { mode.counts($0) }
+                    if isos.count >= 3 { hit = true; break }
+                }
+                achieved = hit
+
+            // ─── FASE 3: patrones por 1 viaje ─────────────────────────────
+            case .dosContinentesUnViaje:
+                // 1 trip primario cuyos ISOs (destino + segments) cruzan
+                // ≥2 macro-continentes (Europa, Asia, África, América,
+                // Oceanía, Antártida). M.Oriente queda dentro de "asia".
+                achieved = past.contains { trip in
+                    guard !trip.isSegmentChild else { return false }
+                    var isos = Set<String>([trip.isoCode])
+                    for seg in trip.tripSegments { isos.formUnion(seg.isoCodes) }
+                    let cs = Set(isos.compactMap { AchievementKind.macroContinent(for: $0) })
+                    return cs.count >= 2
+                }
+            case .cincoPaisesUnViaje:
+                // 1 trip primario con ≥5 ISOs distintos. No filtra por
+                // countingMode — pisar un país menor en un trip largo
+                // sigue siendo "5 países en 1 viaje".
+                achieved = past.contains { trip in
+                    guard !trip.isSegmentChild else { return false }
+                    var isos = Set<String>([trip.isoCode])
+                    for seg in trip.tripSegments { isos.formUnion(seg.isoCodes) }
+                    return isos.count >= 5
+                }
+
+            // ─── FASE 3: fidelidad a un país (visitas repetidas) ──────────
+            // Cuenta el número de trips (primarios + isSegmentChild) que
+            // tienen el mismo `isoCode` como destino, y verifica si ALGÚN
+            // ISO supera el threshold. Incluye trips child porque cada
+            // estancia en un país es una "visita" — un trip multi-tramo a
+            // Francia x3 vía train suma 3 a Francia.
+            case .segundaCasa, .querencia:
+                let threshold = (kind == .segundaCasa) ? 5 : 10
+                var byIso: [String: Int] = [:]
+                for trip in past { byIso[trip.isoCode, default: 0] += 1 }
+                let maxCount = byIso.values.max() ?? 0
+                achieved = maxCount >= threshold
             }
             if achieved { result.insert(kind) }
         }
