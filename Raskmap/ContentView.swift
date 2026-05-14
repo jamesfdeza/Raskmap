@@ -98,6 +98,11 @@ struct ContentView: View {
     @AppStorage("isRaskmapPro") private var isRaskmapPro: Bool = false
     @AppStorage("mapQuadrantsData") private var mapQuadrantsData: String = "{}"
     @AppStorage("earnedPassportAchievementsRaw") private var earnedPassportRaw: String = "[]"
+    /// AppStorage de las maravillas modernas marcadas (Set<String> JSON).
+    /// Declarado aquí (además de en `ModernWondersSheet`) para que SwiftUI
+    /// rastree los cambios y re-evalúe `multiContAchievedNow` — sin esto,
+    /// el logro `sieteMaravillas` no dispararía celebración al marcar la 7ª.
+    @AppStorage("modernWondersVisited") private var modernWondersRaw: String = "[]"
     @AppStorage("liveActivityEnabled") private var liveActivityEnabled: Bool = false
     @AppStorage("neverShowReview") private var neverShowReview: Bool = false
     @AppStorage("tripRemindersEnabled") private var tripRemindersEnabled: Bool = false
@@ -377,8 +382,10 @@ struct ContentView: View {
             // cuando las 7 están marcadas. Persistencia en AppStorage
             // `modernWondersVisited` (JSON Set<String>).
             case .sieteMaravillas:
-                let raw = UserDefaults.standard.string(forKey: "modernWondersVisited") ?? "[]"
-                let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(raw.utf8))) ?? []
+                // Lee del @AppStorage local (`modernWondersRaw`) para que
+                // SwiftUI rastree el cambio y dispare la re-evaluación —
+                // UserDefaults.standard.string(...) suelto no es reactivo.
+                let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(modernWondersRaw.utf8))) ?? []
                 achieved = set.count >= 7
             }
             if achieved { result.insert(kind) }
@@ -818,6 +825,10 @@ struct ContentView: View {
             .onChange(of: multiHemisphereRaw) { _, _ in checkAndShowAchievementToasts() }
             .onChange(of: tripsFingerprint) { _, _ in handleTripsCountChange() }
             .onChange(of: mapQuadrantsData) { _, _ in checkAndShowAchievementToasts() }
+            // Re-evaluar logros al marcar/desmarcar maravillas modernas —
+            // dispara la celebración del logro `sieteMaravillas` cuando se
+            // marca la 7ª desde `ModernWondersSheet`.
+            .onChange(of: modernWondersRaw) { _, _ in checkAndShowAchievementToasts() }
             .onChange(of: visitedCountAll) { _, newCount in handleVisitedCountChange(newCount) }
             .onChange(of: countingModeRaw) { _, newMode in handleCountingModeChange(newMode) }
     }

@@ -347,6 +347,9 @@
         }
       }
     },
+    "¿Restablecer colores predeterminados?" : {
+
+    },
     "¿Te gusta Raskmap?" : {
       "localizations" : {
         "en" : {
@@ -3422,6 +3425,9 @@
           }
         }
       }
+    },
+    "Se descartará tu paleta personalizada y volverán los colores originales del mapa." : {
+
     },
     "Se eliminará «%@»." : {
       "localizations" : {

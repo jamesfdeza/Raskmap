@@ -50,6 +50,14 @@ struct ProfileSheet: View {
     @State private var showVisitedFlags: Bool = false
     @State private var showMedallero: Bool = false
     @State private var showTransportStats: Bool = false
+    /// Sheet de "Maravillas modernas" — el usuario marca cuáles de las 7
+    /// new wonders ha visitado y dispara el logro `sieteMaravillas` al
+    /// completar las 7. Persistencia en AppStorage `modernWondersVisited`.
+    @State private var showModernWonders: Bool = false
+    /// AppStorage espejo del usado en `ModernWondersSheet` — declarado
+    /// aquí para que SwiftUI rastree los cambios y re-evalúe `isAchieved(.sieteMaravillas)`
+    /// en el grid de logros sin necesidad de re-abrir la sheet.
+    @AppStorage("modernWondersVisited") private var modernWondersRaw: String = "[]"
     @State private var showYearWrapped: Bool = false
     @State private var showSubscriptionFromProfile: Bool = false
     // Sheet de finalizados gestionado dentro del perfil para que no haya conflicto
@@ -370,8 +378,9 @@ struct ProfileSheet: View {
                 return false
             }
         case .sieteMaravillas:
-            let raw = UserDefaults.standard.string(forKey: "modernWondersVisited") ?? "[]"
-            let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(raw.utf8))) ?? []
+            // Lee del @AppStorage local para reactividad — el grid de
+            // logros se re-renderiza al instante al marcar la 7ª maravilla.
+            let set = (try? JSONDecoder().decode(Set<String>.self, from: Data(modernWondersRaw.utf8))) ?? []
             return set.count >= 7
         }
     }
@@ -601,6 +610,14 @@ struct ProfileSheet: View {
                             showTransportStats = true
                         }
                         Divider().padding(.leading, 52)
+                        // Maravillas modernas — entrada debajo de Transportes.
+                        // Icono `crown.fill` en gradiente magenta para
+                        // diferenciarla visualmente como sección "legendaria".
+                        // Color sólido (no gradiente — profileMenuRow toma 1 Color).
+                        profileMenuRow(icon: "crown.fill", iconColor: Color(red: 0xC8/255, green: 0x52/255, blue: 0xE0/255), label: "Maravillas modernas") {
+                            showModernWonders = true
+                        }
+                        Divider().padding(.leading, 52)
                         profileMenuRow(icon: "sparkles", iconColor: .purple, label: "Resumen \(Calendar.current.component(.year, from: Date()) - 1)") {
                             showYearWrapped = true
                         }
@@ -643,6 +660,9 @@ struct ProfileSheet: View {
                 trips: trips,
                 allFeatures: allFeatures
             )
+        }
+        .sheet(isPresented: $showModernWonders) {
+            ModernWondersSheet()
         }
         .fullScreenCover(isPresented: $showYearWrapped) {
             YearWrappedSheet(trips: trips, allFeatures: allFeatures)
