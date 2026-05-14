@@ -747,6 +747,42 @@ struct ContentView: View {
         return trip.flightDetails?.bookingRef ?? ""
     }
 
+    /// Días que faltan hasta el próximo vuelo + IATA del aeropuerto de salida.
+    /// Análogo a `nextProximosBanner` pero para el contador del modo vuelo —
+    /// muestra "Quedan N días · MAD" arriba del mapa de vuelos. Devuelve nil
+    /// si no hay ningún trip ✈️ futuro con aeropuertos guardados.
+    /// Usa la misma heurística que `nextFlightAirportsAny()`: ordena trips
+    /// primarios futuros por dateFrom, y para el primero busca un segment
+    /// ✈️ con airports ≥ 2 (o trip legacy con tripAirports ≥ 2).
+    private var nextFlightCounter: (days: Int, depIATA: String)? {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let candidates = trips.filter {
+            !$0.isSegmentChild && cal.startOfDay(for: $0.dateFrom) >= today
+        }.sorted { $0.dateFrom < $1.dateFrom }
+        for trip in candidates {
+            // Caso segments: prioriza el primer segmento ✈️ del trip por
+            // orden cronológico de partida.
+            if let seg = trip.tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
+                            .first(where: { $0.transport == "✈️" && ($0.airports?.count ?? 0) >= 1 }),
+               let firstAp = seg.airports?.first {
+                let days = cal.dateComponents([.day],
+                    from: today,
+                    to: cal.startOfDay(for: seg.dateFrom)).day ?? 0
+                return (max(0, days), firstAp.iata)
+            }
+            // Caso legacy: trip sin segments pero con transport ✈️ + airports.
+            if trip.tripSegments.isEmpty, trip.transport == "✈️",
+               let firstAp = trip.tripAirports.first {
+                let days = cal.dateComponents([.day],
+                    from: today,
+                    to: cal.startOfDay(for: trip.dateFrom)).day ?? 0
+                return (max(0, days), firstAp.iata)
+            }
+        }
+        return nil
+    }
+
     /// Aeropuertos (IATA) y coordenadas del próximo vuelo. Busca el primer
     /// trip ✈️ futuro en TODOS los trips (no solo el país del banner) — para
     /// que el widget de mapa de vuelos muestre la ruta aunque el siguiente
@@ -1539,6 +1575,32 @@ struct ContentView: View {
                         .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
                     }
                     .buttonStyle(.plain)
+                    .padding(.bottom, menuPositionIsTop ? 16 : 0)
+                    .padding(.top, menuPositionIsTop ? 0 : 16)
+                    if !menuPositionIsTop { Spacer() }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            } else if flightMode, showCountdown, let info = nextFlightCounter {
+                // Contador equivalente para MODO VUELO. Mismo formato visual
+                // que el banner del modo mapa pero usando ✈️ + IATA del
+                // aeropuerto de salida en lugar de bandera + nombre país.
+                VStack {
+                    if menuPositionIsTop { Spacer() }
+                    let dayWord = info.days == 1 ? "día" : "días"
+                    let quedaWord = info.days == 1 ? "Queda" : "Quedan"
+                    HStack(spacing: 8) {
+                        Text("✈️").font(.system(size: 17))
+                        Text("\(quedaWord) \(info.days) \(dayWord)")
+                            .font(.palatino(.footnote, weight: .bold))
+                            .foregroundStyle(.primary)
+                        Text("· \(info.depIATA)")
+                            .font(.palatino(.footnote))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 18).padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
                     .padding(.bottom, menuPositionIsTop ? 16 : 0)
                     .padding(.top, menuPositionIsTop ? 0 : 16)
                     if !menuPositionIsTop { Spacer() }
