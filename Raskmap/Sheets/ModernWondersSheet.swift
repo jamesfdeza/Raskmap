@@ -30,9 +30,9 @@ struct ModernWonder: Identifiable, Hashable {
     static let all: [ModernWonder] = [
         ModernWonder(id: "gran_muralla", emoji: "🏯",   name: "Gran Muralla",    country: "China"),
         ModernWonder(id: "petra",        emoji: "🏛️", name: "Petra",            country: "Jordania"),
-        ModernWonder(id: "cristo",       emoji: "🗿",   name: "Cristo Redentor", country: "Brasil"),
+        ModernWonder(id: "cristo",       emoji: "✝️",  name: "Cristo Redentor", country: "Brasil"),
         ModernWonder(id: "machu_picchu", emoji: "⛰️",  name: "Machu Picchu",    country: "Perú"),
-        ModernWonder(id: "chichen_itza", emoji: "🔺",  name: "Chichén Itzá",    country: "México"),
+        ModernWonder(id: "chichen_itza", emoji: "🌮",  name: "Chichén Itzá",    country: "México"),
         ModernWonder(id: "coliseo",      emoji: "🏟️", name: "Coliseo",          country: "Italia"),
         ModernWonder(id: "taj_mahal",    emoji: "🕌",  name: "Taj Mahal",       country: "India"),
     ]
@@ -111,14 +111,39 @@ struct ModernWondersSheet: View {
                     }
                     .padding(.top, 16)
 
-                    // ── Grid de 7 tarjetas (2 cols × 4 filas, última solo 1) ─
+                    // ── Grid de 6 tarjetas (2 cols × 3 filas) + 7ª centrada ─
+                    // El LazyVGrid rellena columna izquierda primero, así
+                    // que metiendo solo las 6 primeras tenemos un grid
+                    // simétrico. La 7ª (Taj Mahal) va aparte en un HStack
+                    // con Spacers para quedar centrada y al mismo ancho
+                    // visual que las celdas del grid (1/2 del ancho útil).
                     LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(ModernWonder.all) { wonder in
+                        ForEach(ModernWonder.all.prefix(6)) { wonder in
                             wonderCard(wonder: wonder, isMarked: visited.contains(wonder.id))
                                 .onTapGesture { toggle(wonder.id) }
                         }
                     }
                     .padding(.horizontal, 20)
+
+                    if let seventh = ModernWonder.all.last {
+                        // GeometryReader para emular el mismo ancho que un
+                        // cell del LazyVGrid (~ mitad del ancho útil tras
+                        // descontar padding 20 + spacing 14 entre cols).
+                        GeometryReader { geo in
+                            let cellWidth = (geo.size.width - 20*2 - 14) / 2
+                            HStack {
+                                Spacer()
+                                wonderCard(wonder: seventh, isMarked: visited.contains(seventh.id))
+                                    .frame(width: cellWidth)
+                                    .onTapGesture { toggle(seventh.id) }
+                                Spacer()
+                            }
+                        }
+                        // Altura aprox. de una tarjeta para que el
+                        // GeometryReader reserve espacio (las tarjetas son
+                        // ~120pt: emoji 44 + paddings + nombre + país).
+                        .frame(height: 130)
+                    }
 
                     // ── Banner de logro completado ───────────────────────────
                     // Sólo aparece tras marcar las 7. El logro 🏆
