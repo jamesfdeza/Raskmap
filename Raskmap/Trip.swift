@@ -222,6 +222,41 @@ private struct _DaySet {
 ///   200 + len — Trip hijo (`isSegmentChild`).
 ///   1000+ len — Trip primario "ambiental". Solo rellena días no cubiertos por
 ///         segmentos a más alta prioridad.
+/// Lookup estático IATA → ISO A3 construido al primer acceso.
+/// Combina `airports.json` (IATA → A2) con `countries.geojson` (A2 → A3) para
+/// permitir consultar "¿es este IATA del país X?" sin tener que pasar
+/// CountryFeatures como parámetro a `daysPerCountry`.
+private enum _IATACountryLookup {
+    private struct _AirportRecord: Decodable {
+        let iata: String
+        let country: String  // ISO A2
+    }
+    static let iataToA3: [String: String] = {
+        guard let url = Bundle.main.url(forResource: "airports", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let arr = try? JSONDecoder().decode([_AirportRecord].self, from: data) else { return [:] }
+        let features = GeoJSONLoader.loadCountries()
+        var a2ToA3 = [String: String](minimumCapacity: features.count)
+        for f in features { a2ToA3[f.isoA2] = f.isoCode }
+        var result = [String: String](minimumCapacity: arr.count)
+        for ap in arr {
+            if let a3 = a2ToA3[ap.country] { result[ap.iata] = a3 }
+        }
+        return result
+    }()
+}
+
+/// `true` si alguno de los aeropuertos de la ruta pertenece al país `isoA3`.
+/// Usado para decidir si stakear una escala visitada en el día de ida o de
+/// vuelta — un layover SRB solo debe contar el día en que físicamente
+/// pasaste por SRB, no en la dirección donde no había escala allí.
+private func _routeContainsIsoA3(_ isoA3: String, route: [TripAirport]?) -> Bool {
+    guard let route, !route.isEmpty else { return false }
+    return route.contains { ap in
+        _IATACountryLookup.iataToA3[ap.iata] == isoA3
+    }
+}
+
 func daysPerCountry(trips: [Trip]) -> [String: Int] {
     let cal = Calendar.current
     var claims: [Date: _DaySet] = [:]
@@ -362,16 +397,32 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
                 stake(iso: layoverIso, from: segStart, to: segStart, priority: layoverExcursionPriority)
             }
         }
-        // 3) Escalas de segmentos ✈️: reclaman tanto el día de la ida (segStart)
-        //    como el de la vuelta (segDateTo) si existe. REEMPLAZAN al primary
-        //    en esos días (prio 150) — el día del vuelo con escala cuenta
-        //    SOLO para el país de la escala, no para el destino final.
+        // 3) Escalas de segmentos ✈️: reclaman el día de la ida (segStart) y/o
+        //    el de la vuelta (segDateTo) SEGÚN la dirección donde físicamente
+        //    pasaste por ese país. REEMPLAZAN al primary en esos días (prio 150).
+        //
+        //    Distinción ida/vuelta:
+        //    · Si el layoverIso aparece en `seg.airports` (ruta ida) → stake segStart.
+        //    · Si aparece en `seg.returnAirports` (ruta vuelta) → stake segEnd.
+        //    · Si NO aparece en ninguna (data legacy/manual sin ruta detallada)
+        //      → fallback al comportamiento histórico: stake ambos extremos.
+        //
+        //    Esto evita el bug de "escala visitada solo a la ida pero cuenta 2 días"
+        //    cuando el user marca un layover que físicamente solo cruzó una vez.
         for seg in segs where seg.transport == "✈️" {
             let segStart = cal.startOfDay(for: seg.dateFrom)
             let segEnd = seg.dateTo.map { cal.startOfDay(for: $0) }
             for layoverIso in seg.visitedLayoverISOs ?? [] where !layoverIso.isEmpty {
-                stake(iso: layoverIso, from: segStart, to: segStart, priority: layoverExcursionPriority)
-                if let end = segEnd, end != segStart {
+                let onIda = _routeContainsIsoA3(layoverIso, route: seg.airports)
+                let onReturn = _routeContainsIsoA3(layoverIso, route: seg.returnAirports)
+                // Fallback: si no detectamos el layoverIso en ninguna ruta
+                // (típicamente data legacy donde airports/returnAirports están
+                // vacíos), preservamos el comportamiento anterior — stake ambos.
+                let useFallback = !onIda && !onReturn
+                if onIda || useFallback {
+                    stake(iso: layoverIso, from: segStart, to: segStart, priority: layoverExcursionPriority)
+                }
+                if (onReturn || useFallback), let end = segEnd, end != segStart {
                     stake(iso: layoverIso, from: end, to: end, priority: layoverExcursionPriority)
                 }
             }

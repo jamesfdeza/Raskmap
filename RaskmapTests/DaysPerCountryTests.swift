@@ -218,6 +218,42 @@ struct DaysPerCountryTests {
         #expect(result["VAT"] == 1)  // solo el 3
     }
 
+    @Test("Vuelo con escala visitada SOLO a la ida + segmento multi-día")
+    func madridSingapurEscalaIdaCase() {
+        // Trip ✈️ Madrid-Singapur 30 mar-8 abr (10 días) primary SGP.
+        // Escala TUR visitada solo en ida (IST está en airports, NO en returnAirports).
+        // Plus 🚙 multi-día a MYS del 3 al 6 de abril (4 días).
+        //
+        // Esperado con el split ida/vuelta:
+        //   · 30 mar → TUR (escala ida exclusive)
+        //   · 31 mar, 1, 2 abr → SGP
+        //   · 3-6 abr → MYS (multi-día replace)
+        //   · 7 abr → SGP
+        //   · 8 abr → SGP (no TUR porque IST no está en returnAirports)
+        //   Total: TUR=1, MYS=4, SGP=5.
+        let trip = Self.makeTrip(
+            iso: "SGP",
+            from: Self.d(2025, 3, 30),
+            to: Self.d(2025, 4, 8),
+            segments: [
+                Self.seg(transport: "✈️", isos: ["SGP", "TUR"],
+                         from: Self.d(2025, 3, 30), to: Self.d(2025, 4, 8),
+                         layoverISOs: ["TUR"],
+                         airports: [TripAirport(iata: "MAD", count: 1),
+                                    TripAirport(iata: "IST", count: 1),
+                                    TripAirport(iata: "SIN", count: 1)],
+                         returnAirports: [TripAirport(iata: "SIN", count: 1),
+                                          TripAirport(iata: "MAD", count: 1)]),
+                Self.seg(transport: "🚙", isos: ["MYS"],
+                         from: Self.d(2025, 4, 3), to: Self.d(2025, 4, 6))
+            ]
+        )
+        let result = daysPerCountry(trips: [trip])
+        #expect(result["TUR"] == 1)
+        #expect(result["MYS"] == 4)
+        #expect(result["SGP"] == 5)
+    }
+
     @Test("Layover ✈️ legacy en trip sin segments desplaza al primary ese día")
     func layoverLegacy() {
         // Trip ✈️ legacy a NRT con escala visitada DXB. Sin segments embebidos,
