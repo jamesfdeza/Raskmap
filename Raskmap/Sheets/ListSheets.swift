@@ -234,6 +234,7 @@ struct StatusListSheet: View {
                     .listStyle(.plain)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle(filter.label)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -523,6 +524,7 @@ struct FinalizadosListSheet: View {
                 }
             }
             } // end VStack
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Finalizados \(String(year))")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
