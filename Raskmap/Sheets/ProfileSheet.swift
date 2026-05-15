@@ -138,15 +138,37 @@ struct ProfileSheet: View {
     // Próximos rows: una fila por cada país wantToVisit (con o sin trip futuro)
     // y por cada visited con trip futuro. Mismo patrón que `allProximoRows` del root.
     private var profileProximoRows: [ProximoRow] {
-        let today = Calendar.current.startOfDay(for: Date())
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let curYear = cal.component(.year, from: Date())
         let tripsByIso: [String: [Trip]] = Dictionary(grouping: trips, by: { $0.isoCode })
+        // Filtra a trips futuros DEL AÑO ACTUAL. Los trips de años posteriores
+        // (p.ej. 2027 estando en 2026) se ocultan aquí — saldrán cuando llegue
+        // su año correspondiente. Simétrico a la sección Finalizados (year-scoped).
+        func isFutureThisYear(_ d: Date) -> Bool {
+            let day = cal.startOfDay(for: d)
+            return day > today && cal.component(.year, from: day) == curYear
+        }
+        func isThisYearAndFutureOrToday(_ d: Date) -> Bool {
+            let day = cal.startOfDay(for: d)
+            return day >= today && cal.component(.year, from: day) == curYear
+        }
         var rows: [ProximoRow] = []
         for country in countries where country.status == .wantToVisit {
             let futureTrips = (tripsByIso[country.isoCode] ?? [])
-                .filter { Calendar.current.startOfDay(for: $0.dateFrom) > today }
+                .filter { isFutureThisYear($0.dateFrom) }
                 .sorted { $0.dateFrom < $1.dateFrom }
             if futureTrips.isEmpty {
-                rows.append(ProximoRow(id: "c_\(country.isoCode)", country: country, trip: nil))
+                // Sólo añadimos el país "sin trip" si su plannedDate cae en
+                // año actual — si no, no aparece (consistente con la regla
+                // de futuro en año actual).
+                if let pd = country.plannedDate, isFutureThisYear(pd) {
+                    rows.append(ProximoRow(id: "c_\(country.isoCode)", country: country, trip: nil))
+                } else if country.plannedDate == nil {
+                    // País wantToVisit sin fecha programada — lo dejamos
+                    // como "sin fecha" en la lista actual.
+                    rows.append(ProximoRow(id: "c_\(country.isoCode)", country: country, trip: nil))
+                }
             } else {
                 for trip in futureTrips {
                     let tid = "\(trip.isoCode)_\(trip.createdAt.timeIntervalSince1970)"
@@ -155,12 +177,12 @@ struct ProfileSheet: View {
             }
         }
         let futureIsoCodes = Set(trips.compactMap { trip -> String? in
-            guard Calendar.current.startOfDay(for: trip.dateFrom) >= today else { return nil }
+            guard isThisYearAndFutureOrToday(trip.dateFrom) else { return nil }
             return trip.isoCode
         })
         for country in countries where country.status == .visited && futureIsoCodes.contains(country.isoCode) {
             let nearestTrip = (tripsByIso[country.isoCode] ?? [])
-                .filter { Calendar.current.startOfDay(for: $0.dateFrom) >= today }
+                .filter { isThisYearAndFutureOrToday($0.dateFrom) }
                 .min(by: { $0.dateFrom < $1.dateFrom })
             rows.append(ProximoRow(id: "v_\(country.isoCode)", country: country, trip: nearestTrip))
         }

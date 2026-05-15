@@ -35,7 +35,8 @@ class ColorThemeManager: ObservableObject {
     // — sus elecciones persisten en UserDefaults. Solo los nuevos usuarios o
     // los que pulsen "Restablecer colores" verán la nueva paleta.
     static let defaultVisited: Color     = Color(.sRGB, red: 0xD6/255.0, green: 0x5B/255.0, blue: 0x3F/255.0, opacity: 1.0)
-    static let defaultWantToVisit: Color = Color(.sRGB, red: 0x5B/255.0, green: 0xA8/255.0, blue: 0x9B/255.0, opacity: 1.0)
+    // 0x01C7FC — cian vibrante (default nuevo para "Próximos").
+    static let defaultWantToVisit: Color = Color(.sRGB, red: 0x01/255.0, green: 0xC7/255.0, blue: 0xFC/255.0, opacity: 1.0)
     static let defaultLived: Color       = Color(.sRGB, red: 0x7B/255.0, green: 0x5B/255.0, blue: 0xAB/255.0, opacity: 1.0)
     static let defaultBucketList: Color  = Color(.sRGB, red: 0xF2/255.0, green: 0xC2/255.0, blue: 0x65/255.0, opacity: 1.0)
 

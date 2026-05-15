@@ -89,26 +89,52 @@ struct YearTravelView: View {
     }
 
     private var proximos: [Country] {
-        let today = Calendar.current.startOfDay(for: Date())
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let curYear = cal.component(.year, from: Date())
         let tripsByIso: [String: [Trip]] = Dictionary(grouping: trips, by: { $0.isoCode })
+        // Sólo trips FUTUROS y en el AÑO ACTUAL. Los trips programados para
+        // años futuros (p.ej. 2027 mientras estamos en 2026) NO aparecen aquí
+        // — saldrán cuando empiece su año correspondiente, simétrico a cómo
+        // funciona la sección Finalizados.
         let futureIsoCodes = Set(trips.compactMap { trip -> String? in
-            guard Calendar.current.startOfDay(for: trip.dateFrom) >= today else { return nil }
+            let d = cal.startOfDay(for: trip.dateFrom)
+            guard d >= today, cal.component(.year, from: d) == curYear else { return nil }
             return trip.isoCode
         })
         let visitedWithFuture = countries.filter { $0.status == .visited && futureIsoCodes.contains($0.isoCode) }
-        let wantToVisit = countries.filter { $0.status == .wantToVisit }
+        // Países wantToVisit: sólo si su próxima fecha cae en el año actual.
+        // Si tienen un plannedDate de un año posterior, se ocultan hasta que
+        // llegue ese año.
+        let wantToVisit = countries.filter { country in
+            guard country.status == .wantToVisit else { return false }
+            // 1) Mira trips de ese país futuros en año actual.
+            let hasTripThisYear = (tripsByIso[country.isoCode] ?? []).contains { trip in
+                let d = cal.startOfDay(for: trip.dateFrom)
+                return d >= today && cal.component(.year, from: d) == curYear
+            }
+            if hasTripThisYear { return true }
+            // 2) Fallback plannedDate legacy: incluir sólo si está en año actual.
+            if let pd = country.plannedDate {
+                let d = cal.startOfDay(for: pd)
+                return d >= today && cal.component(.year, from: d) == curYear
+            }
+            return false
+        }
         let all = (wantToVisit + visitedWithFuture)
         // Próxima fecha REAL del país: la primera fecha futura de cualquier trip
-        // (incluido children). Para países wantToVisit sin trips, fallback al
-        // `plannedDate` legacy. Esto evita que países como "Chipre del Norte"
-        // queden mal ordenados porque su plannedDate sea stale (heredado de
-        // una iteración anterior) y no coincida con su trip futuro real.
+        // (incluido children) DEL AÑO ACTUAL. Para países wantToVisit sin trips,
+        // fallback al `plannedDate` legacy si está en el año actual.
         func nextDate(_ country: Country) -> Date? {
             let tripDates = (tripsByIso[country.isoCode] ?? [])
-                .map { Calendar.current.startOfDay(for: $0.dateFrom) }
-                .filter { $0 >= today }
+                .map { cal.startOfDay(for: $0.dateFrom) }
+                .filter { $0 >= today && cal.component(.year, from: $0) == curYear }
             if let earliest = tripDates.min() { return earliest }
-            return country.plannedDate
+            if let pd = country.plannedDate,
+               cal.component(.year, from: pd) == curYear {
+                return pd
+            }
+            return nil
         }
         // Orden fijo: próxima fecha asc + isoCode asc como tiebreaker.
         return all.sorted { c0, c1 in
