@@ -68,6 +68,14 @@ struct ProfileSheet: View {
     @State private var proximosShown: Bool = false
     @State private var editingProximoTrip: Trip? = nil
     @State private var pendingProximoCountryForDate: Country? = nil
+    /// Cache de las filas snapshot al abrir el sheet de Próximos. Antes
+    /// `profileProximoRows` se computaba inline en el closure del .sheet → se
+    /// re-evaluaba (iterando trips + countries) en cada render del ProfileSheet
+    /// padre, incluyendo durante la animación dismiss. Ahora se computa UNA
+    /// vez al tappear "Próximos" y se queda fijo hasta que se cierra.
+    @State private var cachedProximoRows: [ProximoRow] = []
+    /// Idem para Finalizados de un año concreto. Se popula al tappear un año.
+    @State private var cachedFinalizadoRows: [ProximoRow] = []
 
     @AppStorage("multiContinentRaw") private var multiContinentRaw: String = "{}"
     @AppStorage("multiHemisphereRaw") private var multiHemisphereRaw: String = "{}"
@@ -685,8 +693,15 @@ struct ProfileSheet: View {
                         countries: countries,
                         features: allFeatures,
                         trips: trips,
-                        onProximosTap: { proximosShown = true },
+                        onProximosTap: {
+                            // Snapshot las filas ANTES de mostrar la sheet —
+                            // así el cómputo no recae sobre la animación de
+                            // apertura ni sobre el dismiss (más adelante).
+                            cachedProximoRows = profileProximoRows
+                            proximosShown = true
+                        },
                         onFinalizadosTap: { year in
+                            cachedFinalizadoRows = finalizadoRows(year: year)
                             finalizadosPayload = FinalizadosSheetPayload(year: year)
                         }
                     )
@@ -803,7 +818,7 @@ struct ProfileSheet: View {
             StatusListSheet(
                 filter: .wantToVisit,
                 countries: [],
-                proximoRows: profileProximoRows,
+                proximoRows: cachedProximoRows,
                 features: allFeatures,
                 trips: trips,
                 onRemove: { country in
@@ -919,7 +934,7 @@ struct ProfileSheet: View {
         .sheet(item: $finalizadosPayload) { payload in
             FinalizadosListSheet(
                 year: payload.year,
-                rows: finalizadoRows(year: payload.year),
+                rows: cachedFinalizadoRows,
                 features: allFeatures,
                 onRemove: { row in
                     // Borrar el trip + cascada de grupo. Mismo comportamiento que el
@@ -962,8 +977,10 @@ struct ProfileSheet: View {
                         }
                     }
                     modelContext.saveOrWarn()
-                    // Refrescar el sheet con las filas actualizadas — si no quedan, cerramos
+                    // Refrescar el sheet con las filas actualizadas — si no quedan, cerramos.
+                    // Refrescamos el cache para que la sheet se renderice con los rows nuevos.
                     let updated = finalizadoRows(year: payload.year)
+                    cachedFinalizadoRows = updated
                     if updated.isEmpty {
                         finalizadosPayload = nil
                     } else {

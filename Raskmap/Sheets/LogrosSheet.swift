@@ -320,16 +320,24 @@ struct LogrosSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        // Pre-computar el set de logros desbloqueados UNA sola vez por render
+        // del body. Antes el body llamaba `isAchieved($0)` 3 veces por logro
+        // (filtro achieved, filtro pending, lookup per-row) → ~294 evaluaciones
+        // de funciones pesadas que iteran trips/countries. Con el cache aquí
+        // bajamos a 98 llamadas (una por logro) + lookups O(1) en el Set.
+        // Esto reduce drásticamente el delay al abrir la sheet de logros.
+        let achievedSet: Set<AchievementKind> = Set(AchievementKind.allCases.filter { isAchieved($0) })
+        return NavigationStack {
             List {
-                let achievedKinds = AchievementKind.allCases.filter { isAchieved($0) }.sorted { a, b in
+                let achievedKinds = achievedSet.sorted { a, b in
                     if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
                     return lastTripDate(for: a) > lastTripDate(for: b)
                 }
-                let pendingKinds = AchievementKind.allCases.filter { !isAchieved($0) }
+                let pendingKinds = AchievementKind.allCases
+                    .filter { !achievedSet.contains($0) }
                     .sorted { $0.medalOrder < $1.medalOrder }
                 ForEach(achievedKinds + pendingKinds, id: \.title) { kind in
-                    let unlocked = isAchieved(kind)
+                    let unlocked = achievedSet.contains(kind)
                     Button {
                         if unlocked { selectedKind = kind }
                     } label: {
