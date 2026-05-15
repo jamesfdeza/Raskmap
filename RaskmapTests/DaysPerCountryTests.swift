@@ -124,33 +124,31 @@ struct DaysPerCountryTests {
     func macedoniaKosovoCase() {
         // Trip ✈️ a Macedonia 12-18 julio (7 días) con escala SRB ida y vuelta
         // + excursión de día a Kosovo el 14.
-        // Modelo EXCLUSIVO de días: cada día cuenta para UN país (el más
-        // específico). Escalas y excursiones desplazan al primary en su día.
+        // Modelo mixto:
+        //  · Escalas ✈️ EXCLUSIVAS — SRB se queda los días 12 y 18 enteros,
+        //    MKD los pierde (estás de tránsito, no en destino).
+        //  · Excursión 🚗 single-day SHARED — KOS se suma a MKD el día 14
+        //    sin quitarle el día al primary (vas y vuelves el mismo día,
+        //    sigues "estando en MKD").
         // Esperado:
-        //   · Día 12 → SRB (escala vuelo ida)
-        //   · Día 13 → MKD
-        //   · Día 14 → KOS (excursión de día)
-        //   · Día 15 → MKD
-        //   · Día 16 → MKD
-        //   · Día 17 → MKD
-        //   · Día 18 → SRB (escala vuelo vuelta)
-        //   Total: MKD=4, SRB=2, KOS=1.
+        //   · Día 12 → SRB (escala)
+        //   · Días 13, 14, 15, 16, 17 → MKD (día 14 también KOS)
+        //   · Día 18 → SRB (escala)
+        //   Total: MKD=5, SRB=2, KOS=1 (KOS añade día 14 sin quitárselo a MKD).
         let trip = Self.makeTrip(
             iso: "MKD",
             from: Self.d(2025, 7, 12),
             to: Self.d(2025, 7, 18),
             segments: [
-                // ✈️ ida-vuelta con escala SRB
                 Self.seg(transport: "✈️", isos: ["MKD", "SRB"],
                          from: Self.d(2025, 7, 12), to: Self.d(2025, 7, 18),
                          layoverISOs: ["SRB"]),
-                // 🚗 excursión a KOS el 14 (mismo día ida y vuelta, dateTo=dateFrom)
                 Self.seg(transport: "🚗", isos: ["KOS"],
                          from: Self.d(2025, 7, 14), to: Self.d(2025, 7, 14))
             ]
         )
         let result = daysPerCountry(trips: [trip])
-        #expect(result["MKD"] == 4)
+        #expect(result["MKD"] == 5)
         #expect(result["SRB"] == 2)
         #expect(result["KOS"] == 1)
     }
@@ -201,11 +199,11 @@ struct DaysPerCountryTests {
         #expect(result["FRA"] == 3)
     }
 
-    @Test("Excursión single-day a otro país desplaza al primary ese día")
-    func excursionSingleDayDesplazaPrimary() {
+    @Test("Excursión single-day a otro país cuenta para ambos países")
+    func excursionSingleDayCuentaParaAmbos() {
         // Trip a Italia 1-7 junio, excursión a Vaticano el 3 (mismo día).
-        // Modelo exclusivo: el día 3 cuenta SOLO para Vaticano. Italia
-        // queda con 6 días (1, 2, 4, 5, 6, 7).
+        // Modelo SHARED: el día 3 cuenta para AMBOS (Vaticano se suma al
+        // primary sin quitarle el día). Italia sigue teniendo 7 días.
         let trip = Self.makeTrip(
             iso: "ITA",
             from: Self.d(2025, 6, 1),
@@ -216,7 +214,7 @@ struct DaysPerCountryTests {
             ]
         )
         let result = daysPerCountry(trips: [trip])
-        #expect(result["ITA"] == 6)  // todos menos el 3
+        #expect(result["ITA"] == 7)  // todos los 7 días (la excursión NO le quita el día)
         #expect(result["VAT"] == 1)  // solo el 3
     }
 

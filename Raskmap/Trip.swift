@@ -331,10 +331,14 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
                             ?? isos.first
             if let dest = destPick {
                 if isSingleDay {
-                    // Excursión de día: REEMPLAZA al primary en ese día.
-                    // prio 150 < tripPriority, así que el día cuenta SOLO
-                    // para el país de la excursión.
-                    stake(iso: dest, from: segStart, to: segStart, priority: layoverExcursionPriority)
+                    // Excursión de día: AÑADE el destino al primary sin
+                    // reemplazarlo (mismo prio que ambient → set unión).
+                    // El día cuenta tanto para el país visitado como para
+                    // el primary del trip — si vas a SMR en daytrip desde
+                    // Italia, ese día cuenta para ambos países. Distinto a
+                    // las escalas ✈️ (exclusivas) porque en una excursión
+                    // por tierra "vuelves a casa" — sigues en el primary.
+                    stake(iso: dest, from: segStart, to: segStart, priority: tripPriority)
                 } else if let segEnd = segEndExplicit {
                     // Estancia multi-día explícita: reemplaza al primary.
                     stake(iso: dest, from: segStart, to: segEnd, priority: 100)
