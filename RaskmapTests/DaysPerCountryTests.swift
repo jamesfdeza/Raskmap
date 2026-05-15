@@ -122,10 +122,19 @@ struct DaysPerCountryTests {
 
     @Test("Trip Macedonia con escala SRB ida+vuelta y excursión Kosovo de día")
     func macedoniaKosovoCase() {
-        // Trip ✈️ a Macedonia 12-18 julio con escala SRB ida y vuelta + excursión
-        // de día a Kosovo el 14.
-        // Esperado: MKD=7 (todos los días — ambient cubre), SRB=2 (12, 18 layovers),
-        // KOS=1 (14, single-day add to primary).
+        // Trip ✈️ a Macedonia 12-18 julio (7 días) con escala SRB ida y vuelta
+        // + excursión de día a Kosovo el 14.
+        // Modelo EXCLUSIVO de días: cada día cuenta para UN país (el más
+        // específico). Escalas y excursiones desplazan al primary en su día.
+        // Esperado:
+        //   · Día 12 → SRB (escala vuelo ida)
+        //   · Día 13 → MKD
+        //   · Día 14 → KOS (excursión de día)
+        //   · Día 15 → MKD
+        //   · Día 16 → MKD
+        //   · Día 17 → MKD
+        //   · Día 18 → SRB (escala vuelo vuelta)
+        //   Total: MKD=4, SRB=2, KOS=1.
         let trip = Self.makeTrip(
             iso: "MKD",
             from: Self.d(2025, 7, 12),
@@ -141,7 +150,7 @@ struct DaysPerCountryTests {
             ]
         )
         let result = daysPerCountry(trips: [trip])
-        #expect(result["MKD"] == 7)
+        #expect(result["MKD"] == 4)
         #expect(result["SRB"] == 2)
         #expect(result["KOS"] == 1)
     }
@@ -172,11 +181,10 @@ struct DaysPerCountryTests {
         // al primary y FRA tendría 3 días pero ESP perdería esos 3 días aunque
         // el primary tiene segments que ya los reclaman correctamente.
         // El skip de children con groupID = primary.groupID evita doble cómputo.
+        // Días 2-4 = FRA por el segmento (prio 100 < 1005 ambient ESP).
+        // Días 1, 5 = ESP ambient. Total: ESP={1,5}=2, FRA={2,3,4}=3.
         #expect(result["FRA"] == 3)  // 2, 3, 4
-        #expect(result["ESP"] == 4)  // 1, 2 (start), 4 (end), 5 — wait
-        // Día 2 = ESP ambient + seg FRA → FRA gana (prio 100 < 1003).
-        // Día 4 = seg FRA. Día 1, 5 = ESP ambient. Día 2, 3 = FRA. Día 4 = FRA.
-        // Total: ESP={1, 5}=2, FRA={2,3,4}=3.
+        #expect(result["ESP"] == 2)  // 1, 5
     }
 
     @Test("Children sin primary (huérfanos) sí cuentan con su ambient")
@@ -193,9 +201,11 @@ struct DaysPerCountryTests {
         #expect(result["FRA"] == 3)
     }
 
-    @Test("Excursión single-day a otro país cuenta para ambos países")
-    func excursionSingleDayCuentaParaAmbos() {
+    @Test("Excursión single-day a otro país desplaza al primary ese día")
+    func excursionSingleDayDesplazaPrimary() {
         // Trip a Italia 1-7 junio, excursión a Vaticano el 3 (mismo día).
+        // Modelo exclusivo: el día 3 cuenta SOLO para Vaticano. Italia
+        // queda con 6 días (1, 2, 4, 5, 6, 7).
         let trip = Self.makeTrip(
             iso: "ITA",
             from: Self.d(2025, 6, 1),
@@ -206,14 +216,15 @@ struct DaysPerCountryTests {
             ]
         )
         let result = daysPerCountry(trips: [trip])
-        #expect(result["ITA"] == 7)  // todos los 7 días
+        #expect(result["ITA"] == 6)  // todos menos el 3
         #expect(result["VAT"] == 1)  // solo el 3
     }
 
-    @Test("Layover ✈️ legacy en trip sin segments suma 1 día al país-escala")
+    @Test("Layover ✈️ legacy en trip sin segments desplaza al primary ese día")
     func layoverLegacy() {
         // Trip ✈️ legacy a NRT con escala visitada DXB. Sin segments embebidos,
-        // solo `t.visitedLayoverISOs`.
+        // solo `t.visitedLayoverISOs`. Modelo exclusivo: las 2 escalas (día
+        // de ida y de vuelta) cuentan SOLO para ARE. JPN queda con 9 días.
         let trip = Self.makeTrip(
             iso: "JPN",
             from: Self.d(2025, 9, 10),
@@ -222,10 +233,8 @@ struct DaysPerCountryTests {
             layoverISOs: ["ARE"]
         )
         let result = daysPerCountry(trips: [trip])
-        #expect(result["JPN"] == 11)   // todos los días
-        // ARE recibe 2 stakes: tFrom + tTo. Misma prio que ambient → set unión
-        // → ARE en 2 días (10 y 20).
-        #expect(result["ARE"] == 2)
+        #expect(result["JPN"] == 9)    // 11 días - 2 días de escala
+        #expect(result["ARE"] == 2)    // día 10 y día 20
     }
 
     @Test("Múltiples segments superpuestos: días frontera cuentan para ambos")

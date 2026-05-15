@@ -226,6 +226,20 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
     let cal = Calendar.current
     var claims: [Date: _DaySet] = [:]
 
+    // Prioridad para layovers (✈️ y trip-level) + excursiones single-day no-✈️.
+    // Más BAJA que el ambient del trip (1000+len) y que segment children
+    // (200+len), pero más ALTA que los segments multi-día no-✈️ (100), de
+    // forma que:
+    //   · Reemplaza al primary en el día de la escala/excursión (el día NO
+    //     cuenta para el país-base del trip, solo para el país visitado en
+    //     ese momento).
+    //   · Si en el mismo día coincide con un segmento multi-día (frontera
+    //     o solape), el multi-día gana — físicamente estás en su destino.
+    // Esto es lo que el usuario espera: "1 día Kosovo, 2 Serbia, 4 Macedonia"
+    // en un viaje 12-18 julio con 2 escalas SRB + 1 daytrip a KOS, en vez
+    // del viejo "1 KOS, 2 SRB, 7 MKD" donde días compartidos contaban doble.
+    let layoverExcursionPriority = 150
+
     func stake(iso: String, from: Date, to: Date, priority: Int) {
         guard !iso.isEmpty else { return }
         let f = cal.startOfDay(for: from)
@@ -278,14 +292,14 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
 
         let segs = t.tripSegments.sorted { $0.dateFrom < $1.dateFrom }
         // Caso sin segmentos: aplicar layovers a nivel trip si los hay.
-        // Las escalas se reclaman como 1 día compartido con el primary
-        // (mismo prio que ambient → set unión). El día de la escala cuenta
-        // tanto para el país-escala como para el destino del trip.
+        // Las escalas REEMPLAZAN al primary en sus días (prio 150 <
+        // tripPriority) — el día del layover cuenta SOLO para el país-escala,
+        // no para el destino. Esto da la suma "exclusiva" que el user espera.
         guard !segs.isEmpty else {
             for layoverIso in t.visitedLayoverISOs ?? [] where !layoverIso.isEmpty {
-                stake(iso: layoverIso, from: tFrom, to: tFrom, priority: tripPriority)
+                stake(iso: layoverIso, from: tFrom, to: tFrom, priority: layoverExcursionPriority)
                 if tTo != tFrom {
-                    stake(iso: layoverIso, from: tTo, to: tTo, priority: tripPriority)
+                    stake(iso: layoverIso, from: tTo, to: tTo, priority: layoverExcursionPriority)
                 }
             }
             continue
@@ -317,8 +331,10 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
                             ?? isos.first
             if let dest = destPick {
                 if isSingleDay {
-                    // Excursión de día: añade dest al primary (prio = ambient).
-                    stake(iso: dest, from: segStart, to: segStart, priority: tripPriority)
+                    // Excursión de día: REEMPLAZA al primary en ese día.
+                    // prio 150 < tripPriority, así que el día cuenta SOLO
+                    // para el país de la excursión.
+                    stake(iso: dest, from: segStart, to: segStart, priority: layoverExcursionPriority)
                 } else if let segEnd = segEndExplicit {
                     // Estancia multi-día explícita: reemplaza al primary.
                     stake(iso: dest, from: segStart, to: segEnd, priority: 100)
@@ -334,22 +350,25 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
                     stake(iso: dest, from: segStart, to: inferredEnd, priority: 100)
                 }
             }
-            // Layovers de cualquier transport: 1 día compartido con primary
-            // (prio = ambient para que se sume sin desplazar al primary).
+            // Layovers de cualquier transport: REEMPLAZAN al primary en su
+            // día (prio 150). Si el día tiene también un multi-día segment
+            // (prio 100), ese gana — estás físicamente en el destino del
+            // segmento, la "escala" del trayecto no debería contar entonces.
             for layoverIso in layoverSet where !layoverIso.isEmpty {
-                stake(iso: layoverIso, from: segStart, to: segStart, priority: tripPriority)
+                stake(iso: layoverIso, from: segStart, to: segStart, priority: layoverExcursionPriority)
             }
         }
         // 3) Escalas de segmentos ✈️: reclaman tanto el día de la ida (segStart)
-        //    como el de la vuelta (segDateTo) si existe. Se añaden al primary
-        //    sin desplazarlo (mismo prio que ambient).
+        //    como el de la vuelta (segDateTo) si existe. REEMPLAZAN al primary
+        //    en esos días (prio 150) — el día del vuelo con escala cuenta
+        //    SOLO para el país de la escala, no para el destino final.
         for seg in segs where seg.transport == "✈️" {
             let segStart = cal.startOfDay(for: seg.dateFrom)
             let segEnd = seg.dateTo.map { cal.startOfDay(for: $0) }
             for layoverIso in seg.visitedLayoverISOs ?? [] where !layoverIso.isEmpty {
-                stake(iso: layoverIso, from: segStart, to: segStart, priority: tripPriority)
+                stake(iso: layoverIso, from: segStart, to: segStart, priority: layoverExcursionPriority)
                 if let end = segEnd, end != segStart {
-                    stake(iso: layoverIso, from: end, to: end, priority: tripPriority)
+                    stake(iso: layoverIso, from: end, to: end, priority: layoverExcursionPriority)
                 }
             }
         }
