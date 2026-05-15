@@ -254,6 +254,32 @@ struct DaysPerCountryTests {
         #expect(result["SGP"] == 5)
     }
 
+    @Test("Layover ✈️ legacy en SEGMENT sin airports → fallback stake ambos extremos")
+    func layoverFallbackSegmentSinAirports() {
+        // Garantiza compat con trips guardados antes de que la app populara
+        // `seg.airports`/`seg.returnAirports`. Cuando esas listas están
+        // vacías/nil, el algoritmo NO puede saber en qué dirección se hizo
+        // la escala — fallback: stake ambos extremos (comportamiento previo
+        // al fix de ida/vuelta).
+        // Trip ✈️ SGP 30 mar - 8 abr con escala TUR pero sin airports detallados.
+        // Esperado: TUR=2 (mar 30 + abr 8), SGP=8 (resto).
+        let trip = Self.makeTrip(
+            iso: "SGP",
+            from: Self.d(2025, 3, 30),
+            to: Self.d(2025, 4, 8),
+            segments: [
+                Self.seg(transport: "✈️", isos: ["SGP", "TUR"],
+                         from: Self.d(2025, 3, 30), to: Self.d(2025, 4, 8),
+                         layoverISOs: ["TUR"],
+                         airports: nil,         // ← legacy: ruta no guardada
+                         returnAirports: nil)   // ← idem
+            ]
+        )
+        let result = daysPerCountry(trips: [trip])
+        #expect(result["TUR"] == 2)
+        #expect(result["SGP"] == 8)
+    }
+
     @Test("Layover ✈️ legacy en trip sin segments desplaza al primary ese día")
     func layoverLegacy() {
         // Trip ✈️ legacy a NRT con escala visitada DXB. Sin segments embebidos,
