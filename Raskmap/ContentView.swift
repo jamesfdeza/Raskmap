@@ -1424,37 +1424,50 @@ struct ContentView: View {
                 )
             }
             .sheet(item: $editingFutureTrip, onDismiss: {
-                guard let isoCode = lastEditedFutureTripIso else { return }
-                let today = Calendar.current.startOfDay(for: Date())
-                let countryDesc = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == isoCode })
-                guard let country = modelContext.fetchFirstOrWarn(countryDesc),
-                      country.status == .wantToVisit else { return }
-                let tripDesc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == isoCode })
-                let allTrips = modelContext.fetchOrWarn(tripDesc)
-                let futureTrips = allTrips
-                    .filter { Calendar.current.startOfDay(for: $0.dateFrom) > today && !$0.isSegmentChild }
-                    .sorted { $0.dateFrom < $1.dateFrom }
-                if let earliest = futureTrips.first {
-                    country.transport = earliest.transport
-                    country.plannedDate = earliest.dateFrom
-                    country.plannedDateTo = earliest.dateTo
-                    country.plannedTitle = earliest.title
-                    modelContext.saveOrWarn()
-                }
-                let b = nextProximosBanner
-                cachedNextBanner = b
-                WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
-                // Evitar que el iso anterior se reutilice si el usuario reabre rápido
-                // antes de que el nuevo sheet haga .onAppear.
+                // Defer el trabajo pesado (fetch + nextProximosBanner +
+                // sync widget) para que NO bloquee el último frame de la
+                // animación dismiss del sheet. El user nota el "trab" al
+                // cerrar deslizando rápido cuando este bloque corre síncrono.
+                // 0.3s = duración estándar de la animación dismiss en iOS.
+                let isoCode = lastEditedFutureTripIso
                 lastEditedFutureTripIso = nil
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.3))
+                    guard let isoCode else { return }
+                    let today = Calendar.current.startOfDay(for: Date())
+                    let countryDesc = FetchDescriptor<Country>(predicate: #Predicate { $0.isoCode == isoCode })
+                    guard let country = modelContext.fetchFirstOrWarn(countryDesc),
+                          country.status == .wantToVisit else { return }
+                    let tripDesc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == isoCode })
+                    let allTrips = modelContext.fetchOrWarn(tripDesc)
+                    let futureTrips = allTrips
+                        .filter { Calendar.current.startOfDay(for: $0.dateFrom) > today && !$0.isSegmentChild }
+                        .sorted { $0.dateFrom < $1.dateFrom }
+                    if let earliest = futureTrips.first {
+                        country.transport = earliest.transport
+                        country.plannedDate = earliest.dateFrom
+                        country.plannedDateTo = earliest.dateTo
+                        country.plannedTitle = earliest.title
+                        modelContext.saveOrWarn()
+                    }
+                    let b = nextProximosBanner
+                    cachedNextBanner = b
+                    WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
+                }
             }) { trip in
                 EditTripSheet(trip: trip, isForFuture: true, features: features)
                     .onAppear { lastEditedFutureTripIso = trip.isoCode }
             }
             .sheet(item: $bannerTappedCountry, onDismiss: {
-                let b = nextProximosBanner
-                cachedNextBanner = b
-                WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
+                // Defer al final de la animación dismiss — recalcular el
+                // banner y sincronizar widget son operaciones pesadas (iteran
+                // trips + write a disk) y notabas un "trab" al cerrar rápido.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.3))
+                    let b = nextProximosBanner
+                    cachedNextBanner = b
+                    WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
+                }
             }) { country in
                 CountryTripsSheet(
                     country: country,
