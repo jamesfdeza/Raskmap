@@ -4194,3 +4194,303 @@ Rediseño visual integral de la app sin tocar ninguna funcionalidad ni lógica d
 - Fondo: `LinearGradient` de `#3A91F0` a `#53A3FE` (antes color plano).
 - Animación: `.spring(response: 0.6, dampingFraction: 0.75)` — globo cae desde offset 12pt + fade in junto con el texto.
 - Footer: `"v.1.0 · 2026"` en una sola línea + copyright debajo. Sin año "–año+1".
+
+---
+
+# 🔍 AUDITORÍA PROFUNDA (mayo 2026) — TO-DO MAÑANA
+
+Snapshot del estado de la app tras 4 auditorías paralelas (bugs / performance /
+UX / tests). Pendiente de abordar — orden recomendado: Sprint 1 → 2 → 3.
+
+## 🐛 BUGS REALES
+
+### 🔴 Bloqueantes
+
+1. **Trip primary == ISO de segmento → días duplicados**
+   - File: `Raskmap/Trip.swift:364`
+   - Si trip "España" tiene segmento `bus a España` (tour interno), España
+     cuenta los días 2 veces. `destPick` fallback termina staking primary +
+     destino segmento al mismo prio 100.
+   - Fix: cuando `destPick == t.isoCode`, no stake (el ambient ya lo cubre).
+
+2. **Children huérfanos doble-cuentan antes del cleanup**
+   - File: `Raskmap/Trip.swift:306-316`, `ContentView.swift:1152`
+   - Entre el borrado del primary y el `cleanupOrphanChildTrips()` deferido
+     0.3s, `daysPerCountry` ve children + primary fantasma → conteos erróneos
+     durante esa ventana.
+   - Fix: filtrar children huérfanos en `daysPerCountry` antes del cleanup,
+     o invertir el orden (cleanup primero).
+
+3. **Segmento sin `isoCodes` permitido al guardar**
+   - File: `Raskmap/AddSegmentSheet.swift:591`
+   - User selecciona ✈️, abre RouteWizardSheet, no añade aeropuertos →
+     segmento con `isoCodes=[]` se guarda. Causa undefined behavior aguas
+     abajo.
+   - Fix: `guard !finalIsoCodes.isEmpty else { return }` antes de save.
+
+### 🟡 Molestos
+
+4. **Layovers de vuelta perdidos si `airports` está vacío**
+   - File: `Raskmap/AddSegmentSheet.swift:585`
+   - `realLayoverISOs` solo lee `outboundLayoverChoices`. Si user borra los
+     aeropuertos de ida pero marca escala visitada en vuelta → se pierde
+     silenciosamente.
+   - Fix: incluir `returnLayoverChoices` en `realLayoverISOs`.
+
+5. **`dateFrom > dateTo` posible vía quickDateChips**
+   - File: `Raskmap/AddSegmentSheet.swift:689`
+   - El branch para "HASTA" desactiva la corrección. Resultado: rango
+     invertido, `daysPerCountry` lo skip silenciosamente (guard `t >= f`).
+   - Fix: en el branch HASTA, si `chip.value < dateFrom` → ajustar dateFrom
+     o avisar al user.
+
+6. **Race condition en `handleTripsCountChange` deferido + `cachedNextBanner`**
+   - File: `Raskmap/ContentView.swift:1125-1135`
+   - Dos guardados seguidos a 200ms con tasks deferidos 0.3s pueden
+     sobrescribir el cache con datos stale.
+   - Fix: cancelar la task previa cuando llega una nueva (token UUID).
+
+7. **`WidgetDataWriter` falla silenciosamente sin AppGroup**
+   - File: `Raskmap/WidgetDataWriter.swift:15-38`
+   - `guard let store else { return }` pero `WidgetCenter.reloadAllTimelines()`
+     se ejecuta igual → widget queda con datos stale, sin log.
+   - Fix: log + skip reloadAllTimelines si store es nil.
+
+### 🔘 Cosmético
+
+8. **`visitCount` divergente tras delete masivo parcial**
+   - File: `Raskmap/ContentView.swift:1318-1332`
+   - Cleanup de status corre antes que cleanup de children huérfanos →
+     `visitCount > 0` con `status = .none` brevemente.
+
+---
+
+## ⚡ PERFORMANCE
+
+### 🔴 Alta
+
+9. **`multiContAchievedNow` decodifica 3 JSON × 98 cases en cada render**
+   - File: `Raskmap/ContentView.swift:139,143,196`
+   - Cualquier scroll/tap que re-renderice ContentView dispara ~294 ops de
+     JSON parsing.
+   - Fix: cache decoded como `@State`, refresh via `.onChange` en AppStorage
+     raws (`multiContinentRaw`, `multiHemisphereRaw`, `mapQuadrantsData`).
+
+10. **`@Query private var countries/trips` sin predicado**
+    - File: `Raskmap/ContentView.swift:26-27`
+    - SwiftData carga TODAS las filas en memoria al lanzar la app.
+    - Fix: predicados + índices SwiftData en `Trip.isoCode`, `Trip.dateFrom`,
+      `Country.status`. Considerar lazy-load de trips históricos.
+
+### 🟡 Media
+
+11. **`tripAirports`/`tripAirlines`/`tripSegments` decodifican JSON en cada acceso**
+    - File: `Raskmap/Trip.swift:76-144`
+    - Acceder `trip.tripSegments` 3 veces seguidas decodifica 3 veces.
+    - Fix: `@Transient` cache interno que se llena en get + se invalida en
+      set; o usar un decoder estático compartido.
+
+12. **`_routeContainsIsoA3` con búsqueda lineal por layover**
+    - File: `Raskmap/Trip.swift:253-258`
+    - Vuelo con 4 escalas × 8 aeropuertos = 32 iteraciones.
+    - Fix: pre-compute `Set<String>` de ISOs por ruta una vez por segment.
+
+13. **`visitedFlagEmojis`/`firstLayoverTrip` ordenan en cada render**
+    - File: `Raskmap/Sheets/ProfileSheet.swift:106,130-136`
+    - `localizedCompare` O(n log n) por acceso.
+    - Fix: `@State` cacheado, invalidado por `.onChange(of: visitedIsoCodes)`.
+
+14. **`GeoJSONLoader.loadCountries()` sin memoización**
+    - File: `Raskmap/GeoJSONLoader.swift`
+    - Se llama desde Trip.swift static init y posiblemente otros sitios.
+      Si concurrente, puede parsear el GeoJSON varias veces.
+    - Fix: `lazy static let` con cache, o `dispatch_once`.
+
+15. **`JSONDecoder()` instanciado por línea (Trip.swift:79,109,114,159,238,242)**
+    - Crear `nonisolated static let decoder = JSONDecoder()` compartido.
+
+---
+
+## 🎨 UX / UI
+
+### 🔴 Alta
+
+16. **Accesibilidad — `accessibilityLabel` ausente en botones icon-only**
+    - 28 ocurrencias en 51 archivos (muy bajo).
+    - Botones X de cerrar sheet, controles de mapa, etc. no son VoiceOver-friendly.
+    - Fix: pass de añadir labels a todos los botones icon-only.
+
+17. **Dynamic Type no soportado en fonts custom**
+    - File: `Raskmap/DesignTokens.swift:91-118`
+    - `Font.custom("Satoshi-Bold", size: 22)` sin `relativeTo:`.
+    - Fix: usar `Font.custom(_:size:relativeTo:)` en Typography enum.
+
+18. **i18n — `Locale(identifier: "es_ES")` hardcoded en 10+ sitios**
+    - Fechas en español aunque iOS esté en inglés.
+    - Files: ContentView, AddSegmentSheet, YearWrappedSheet, IPadRootView,
+      ListSheets, SmallWidgets.
+    - Fix: `Locale.current` + Localizable.strings (ES + EN) + .stringsdict
+      para plurales.
+
+### 🟡 Media
+
+19. **DesignTokens existen pero no se usan uniformemente**
+    - 11 valores distintos de `cornerRadius` hardcoded, 15+ tamaños de font.
+    - Fix: refactor progresivo de Sheets/ usando `Radius.cell/card`,
+      `Typography.body`, `Spacing.l/xl`.
+
+20. **`.presentationDragIndicator` inconsistente**
+    - Solo `AddTripSheet` oculta, el resto visible. Criterio no claro.
+
+21. **Empty states incompletos**
+    - `IPadRootView` tiene, pero ListSheets/StatsBreakdownSheets podrían no.
+
+22. **Confirmación destructive faltante en swipe-to-delete**
+    - File: `Raskmap/Sheets/ListSheets.swift` (swipeActions delete)
+    - El delete de Settings sí confirma, los swipeActions no.
+
+23. **`Color.black`/`Color.white` hardcoded en 64 sitios** sin adaptación
+    a dark mode (RaskMapViewV2, SplashView, etc.).
+    - Fix: helpers tipo `Color.surfaceOverlay` con
+      `Color(UIColor { traitCollection in ... })`.
+
+24. **Tap targets < 44pt HIG**
+    - Solo 3 hits de `TapTarget.min`. Muchos botones podrían estar por debajo.
+
+25. **Spacing hardcodeado** — `Spacing` enum existe pero no se usa
+    uniformemente (`.padding(20)` vs `Spacing.xl = 20`).
+
+---
+
+## 🛡️ TESTS / ROBUSTEZ
+
+### 🔴 Alta
+
+26. **`sorted.last!` en AddSegmentSheet:116** — crash risk si la lista
+    queda vacía tras filter. Fix: `guard let last = sorted.last else { return }`.
+
+27. **Logros sin tests** — `multiContAchievedNow`, `adjustSet`,
+    `adjustedHemispheres`, `filterCandidatesForZone`, `nextProximosBanner`
+    no tienen cobertura. Solo `daysPerCountry` tiene 11 tests.
+    - Fix: añadir 10-15 tests para escenarios de achievements críticos.
+
+28. **122 ocurrencias de `try?` sin logging**
+    - Files: Trip.swift, GeoJSONLoader, WidgetDataWriter.
+    - Decodings/migrations fallan silenciosamente.
+    - Fix: audit + añadir logging a decodifications críticas. Considerar
+      `#if DEBUG print(...)` para no contaminar release.
+
+### 🟡 Media
+
+29. **No hay tests de migraciones de Trip/TripSegment**
+    - FlightInfo legacy → outboundLegs[], TripSegment con/sin airports.
+    - Fix: tests JSON corruption + legacy format round-trips.
+
+30. **Live Activities huérfanas tras crash**
+    - Si la app crashea con una Activity activa, nadie la cierra.
+    - Fix: al lanzar la app, listar Activities activas y cerrar las stale.
+
+31. **No recovery path para CloudKit failure**
+    - Sin retry, sin UI de "Reintentar sync".
+    - Fix: botón "Reintentar sincronización" en Settings (visible si stale).
+
+32. **`Trip.isoCode = ""` permitido** sin validación
+    - Fix: `precondition(!isoCode.isEmpty)` en init.
+
+---
+
+## 🌟 NICE-TO-HAVES
+
+### Alto valor, esfuerzo S/M
+
+33. **Búsqueda en LogrosSheet** — `.searchable` para filtrar entre 98 logros.
+
+34. **Notas largas por viaje** — añadir `trip.notes: String?`. Simple y valioso.
+
+35. **Compartir viaje individual** — share image estilo Wrapped pero por trip
+    (no solo el resumen anual).
+
+36. **Mapa con filtros** — visitados/próximos/buckets/transporte. El mapa
+    muestra todo siempre.
+
+37. **Reset/retry sync del widget** desde Settings — botón "Reintentar
+    sincronización" cuando el widget muestra stale data.
+
+### Alto valor, esfuerzo L
+
+38. **Etiquetas/tags por viaje** — "luna de miel", "negocios", etc.
+    Requiere modelo nuevo.
+
+39. **Fotos por viaje** — `PhotosPicker` + thumbnail storage. Habilita
+    mucho UX downstream.
+
+40. **iPad optimization real** — `IPadRootView` existe pero es scaffold;
+    split-view + landscape merece pulido.
+
+41. **Companions (con quién viajaste)** — modelo nuevo + relacionar con
+    achievements ("viajé con 5 personas distintas").
+
+42. **Importar datos desde JSON exportado** — el export ya existe, falta
+    el import.
+
+### Medio valor
+
+43. **Currency / presupuesto por viaje** — opcional, monetario.
+
+44. **Idioma del país visitado** + países hispanohablantes etc. expuestos
+    en stats (achievement ya existe, falta UI).
+
+45. **Apple Watch app más rica** — `RaskmapWatch` existe pero placeholder.
+
+46. **Shortcuts integration** — "Hey Siri, add trip" / widgets de configuración.
+
+---
+
+## 📋 ROADMAP SUGERIDO
+
+### Sprint 1 — Correctitud (1-2 días)
+- Bugs #1, #2, #3, #6 (bloqueantes)
+- Bug #26 (force unwrap crash risk)
+- Validación `Trip.isoCode != ""` y `dateFrom <= dateTo` en init
+- Tests para 5 escenarios de achievements críticos (#27)
+
+### Sprint 2 — Performance percibida (2-3 días)
+- Cache `multiContAchievedNow` con invalidación por @AppStorage onChange (#9)
+- `@Transient` cache de JSON-encoded properties en Trip (#11)
+- Pre-compute `Set<String>` ISOs por ruta en `_routeContainsIsoA3` (#12)
+- Cache `visitedFlagEmojis` con @State (#13)
+- `lazy static let` en GeoJSONLoader (#14)
+
+### Sprint 3 — UX polish (3-5 días)
+- Accesibilidad: `accessibilityLabel` + Dynamic Type en Typography (#16, #17)
+- Confirm dialogs en swipe-to-delete (#22)
+- Migrar `Color.black/.white` hardcoded a tokens adaptativos (#23)
+- DesignTokens: ronda de migración progresiva (#19)
+- Tap targets ≥ 44pt (#24)
+
+### Sprint 4 — Features ganadores (variable)
+- Notas por viaje (#34) — fácil, muy útil
+- Búsqueda en logros (#33) — barato y notable
+- Share por viaje individual (#35) — pieza media
+- Filtros en mapa (#36) — pieza media
+
+### Sprint 5 — i18n (1-2 días)
+- Reemplazar `Locale(identifier: "es_ES")` por `Locale.current` (#18)
+- Strings catalogs ya existen — activar pluralización (.stringsdict)
+
+---
+
+## ⚠️ Salud general
+
+- ✅ **Sólido**: arquitectura SwiftData + CloudKit, DesignTokens existen,
+  AppStorage bien usado, `daysPerCountry` bien testeada (11 tests pasan).
+- ⚠️ **Riesgos**: ContentView.swift (~2877 líneas) sigue siendo monolito,
+  achievements sin cobertura de tests, errores silenciosos en JSON decoding.
+- 🟢 **No urgente**: la app está lista para TestFlight tras fixes Sprint 1.
+  Sprints 2-5 son refinamiento progresivo.
+
+---
+
+**Última auditoría**: 2026-05-15. Si vuelves a auditar y los hallazgos
+cambian materialmente, actualiza este bloque o crea uno nuevo con la
+fecha — no edites el histórico para preservar el track de progreso.
