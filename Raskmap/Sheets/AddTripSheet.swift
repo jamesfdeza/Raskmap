@@ -398,6 +398,7 @@ struct AddTripSheet: View {
                 .padding(.horizontal, 24).padding(.vertical, 14)
             } // end VStack
             } // end ScrollView
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle(isForFuture ? "Añadir a Próximos" : "Añadir viaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

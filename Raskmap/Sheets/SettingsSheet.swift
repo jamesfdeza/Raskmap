@@ -725,6 +725,7 @@ struct SettingsSheet: View {
                 }
                 .padding(.top, 20)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Ajustes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

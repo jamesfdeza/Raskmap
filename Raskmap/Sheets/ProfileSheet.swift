@@ -729,6 +729,10 @@ struct ProfileSheet: View {
                     .padding(.bottom, 12)
                 }
             }
+            // Bounce sólo si el contenido excede — evita que el scroll
+            // interno compita con el drag-to-dismiss del sheet padre y
+            // mejora la fluidez del gesto.
+            .scrollBounceBehavior(.basedOnSize)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {

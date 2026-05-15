@@ -80,6 +80,11 @@ struct ModernWondersSheet: View {
 
     var body: some View {
         NavigationStack {
+            // `.basedOnSize`: el scroll solo hace bounce si el contenido
+            // excede la altura del sheet. En sheets con poca chicha (caso
+            // típico: pocas tarjetas) evita que el gesto de drag-to-dismiss
+            // del sheet padre compita con el bounce interno — la causa
+            // principal de jank al arrastrar.
             ScrollView {
                 VStack(spacing: 20) {
                     // ── Header: icono + título + subtítulo + progreso ────────
@@ -179,6 +184,7 @@ struct ModernWondersSheet: View {
                 }
                 .padding(.bottom, 28)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

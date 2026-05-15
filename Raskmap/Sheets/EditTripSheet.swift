@@ -811,6 +811,7 @@ struct EditTripSheet: View {
                 .padding(.horizontal, 24).padding(.bottom, 36)
             }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Editar viaje")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
