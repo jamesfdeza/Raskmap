@@ -1088,11 +1088,7 @@ struct ProfileSheet: View {
                 visitedIsoCodes: visitedIsoCodes
             ) { kind in isAchieved(kind) }
         }
-        // Dos detents: el 70% es el tamaño BASE al que abre el sheet
-        // (preserva el layout fijo original). El user puede arrastrar
-        // hacia arriba para expandirlo a pantalla completa (`.large`).
-        // El primero de la lista es el inicial.
-        .presentationDetents([.fraction(0.70), .large])
+        .presentationDetents([.fraction(0.70)])
         .presentationDragIndicator(.visible)
         .preferredColorScheme(colorTheme.isDarkMode ? .dark : .light)
         .onAppear { refreshProfileCaches() }

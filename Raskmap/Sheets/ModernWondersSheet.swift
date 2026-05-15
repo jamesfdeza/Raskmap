@@ -200,19 +200,10 @@ struct ModernWondersSheet: View {
     @ViewBuilder
     private func wonderCard(wonder: ModernWonder, isMarked: Bool) -> some View {
         VStack(spacing: 10) {
-            ZStack(alignment: .topTrailing) {
-                Text(wonder.emoji)
-                    .font(.system(size: 44))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                if isMarked {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Color.green, Color.white)
-                        .background(Circle().fill(Color.white).frame(width: 18, height: 18))
-                        .offset(x: 2, y: -2)
-                }
-            }
+            Text(wonder.emoji)
+                .font(.system(size: 44))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
             VStack(spacing: 2) {
                 Text(wonder.name)
                     .font(.custom("Satoshi-Bold", size: 14))
@@ -233,6 +224,18 @@ struct ModernWondersSheet: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(isMarked ? accent.opacity(0.45) : Color.clear, lineWidth: 1.5)
         )
+        // Tick verde sale DESPUÉS del overlay del borde para no quedar
+        // tapado por la línea azul/accent. Va como overlay de la card
+        // entera, anclado al topTrailing del frame final.
+        .overlay(alignment: .topTrailing) {
+            if isMarked {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.green, Color.white)
+                    .background(Circle().fill(Color.white).frame(width: 18, height: 18))
+                    .offset(x: 6, y: -6)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 18))
         .animation(.easeInOut(duration: 0.18), value: isMarked)
     }
