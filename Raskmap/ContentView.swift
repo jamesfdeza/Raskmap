@@ -1110,24 +1110,37 @@ struct ContentView: View {
     fileprivate func handleTripsCountChange() {
         // Re-evalúa Country.status: si tras borrar el último trip de un país
         // visited queda sin pasados ni futuros ni visitCount manual, vuelve
-        // a .none (o .wantToVisit si tenía planned). Antes esto solo corría
-        // al arrancar la app y dejaba estados stale entre sesiones.
-        cleanupZeroXVisitedStates()
-        cleanupOrphanChildTrips()
-        checkAndShowAchievementToasts()
-        WidgetDataWriter.sync(countries: countries)
-        WidgetDataWriter.syncCountingMode(countingMode.rawValue)
-        WidgetDataWriter.syncTopVisitedFlags(topVisitedFlagsString)
-        let b = nextProximosBanner
-        cachedNextBanner = b
-        WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
-        WidgetDataWriter.syncAllFlags(allProximosFlagsString)
-        let af = nextFlightAirportsAny()
-        WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
-        recalculateFlightRouteAvailability()
-        // Reprograma recordatorios de viaje si el usuario los tiene activos.
-        if tripRemindersEnabled {
-            TripNotifications.reschedule(trips: trips, featuresByIso: featuresByIso)
+        // a .none (o .wantToVisit si tanto tenía planned). Antes esto solo
+        // corría al arrancar la app y dejaba estados stale entre sesiones.
+        //
+        // ⚡ Defer al final del próximo runloop: este handler se dispara en
+        // onChange(of: tripsFingerprint), y cuando un sheet edita un trip,
+        // el dismiss y este onChange ocurren casi a la vez. Si corremos
+        // síncrono, el último frame de la animación dismiss se bloquea por
+        // las escrituras a disco (WidgetDataWriter) + el cómputo de
+        // nextProximosBanner. Diferir 300ms (~duración animación dismiss)
+        // hace que el cierre del sheet se sienta limpio y luego corre todo
+        // sin bloquear UI. Las operaciones son idempotentes — si trips
+        // cambia 2 veces rápido, ambas tasks se ejecutan pero la 2ª gana.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.3))
+            cleanupZeroXVisitedStates()
+            cleanupOrphanChildTrips()
+            checkAndShowAchievementToasts()
+            WidgetDataWriter.sync(countries: countries)
+            WidgetDataWriter.syncCountingMode(countingMode.rawValue)
+            WidgetDataWriter.syncTopVisitedFlags(topVisitedFlagsString)
+            let b = nextProximosBanner
+            cachedNextBanner = b
+            WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
+            WidgetDataWriter.syncAllFlags(allProximosFlagsString)
+            let af = nextFlightAirportsAny()
+            WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
+            recalculateFlightRouteAvailability()
+            // Reprograma recordatorios de viaje si el usuario los tiene activos.
+            if tripRemindersEnabled {
+                TripNotifications.reschedule(trips: trips, featuresByIso: featuresByIso)
+            }
         }
     }
 
@@ -1148,13 +1161,21 @@ struct ContentView: View {
     }
 
     fileprivate func handleVisitedCountChange(_ newCount: Int) {
+        // Mostrar la review alert tiene que ser síncrono — el state del
+        // alert es @State y debe estar coherente con el cambio de count.
         if newCount == 5 && !neverShowReview { showReviewAlert = true }
-        let b = nextProximosBanner
-        cachedNextBanner = b
-        WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
-        WidgetDataWriter.syncAllFlags(allProximosFlagsString)
-        let af = nextFlightAirportsAny()
-        WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
+        // Lo demás se difiere para no bloquear el dismiss de sheets que
+        // marquen un país como visitado/no-visitado. Mismo razonamiento
+        // que en handleTripsCountChange — operaciones idempotentes.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.3))
+            let b = nextProximosBanner
+            cachedNextBanner = b
+            WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)
+            WidgetDataWriter.syncAllFlags(allProximosFlagsString)
+            let af = nextFlightAirportsAny()
+            WidgetDataWriter.syncNextFlightSnapshot(depIATA: af?.depIATA, arrIATA: af?.arrIATA, depCoord: af?.depCoord, arrCoord: af?.arrCoord)
+        }
     }
 
     fileprivate func handleCountingModeChange(_ newMode: String) {

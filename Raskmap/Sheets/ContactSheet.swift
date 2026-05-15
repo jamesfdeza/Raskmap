@@ -195,6 +195,7 @@ struct ContactSheet: View {
                 }
                 .padding(.top, 12)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Contacto")
             .navigationBarTitleDisplayMode(.inline)

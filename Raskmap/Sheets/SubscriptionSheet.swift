@@ -139,6 +139,7 @@ struct SubscriptionSheet: View {
                         .padding(.bottom, 48)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Raskmap Pro")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

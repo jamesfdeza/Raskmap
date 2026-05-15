@@ -81,6 +81,7 @@ struct PassportPickerSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

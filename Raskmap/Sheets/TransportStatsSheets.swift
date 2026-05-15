@@ -467,6 +467,7 @@ struct TransportStatsSheet: View {
                     }
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Transporte")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

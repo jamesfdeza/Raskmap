@@ -360,6 +360,7 @@ struct LogrosSheet: View {
                     .buttonStyle(.plain)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Logros")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

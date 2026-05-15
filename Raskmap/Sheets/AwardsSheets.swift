@@ -231,6 +231,7 @@ struct MedalleroSheet: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 24)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Premios personales")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
