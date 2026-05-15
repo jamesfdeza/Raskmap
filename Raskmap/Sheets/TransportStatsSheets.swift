@@ -747,6 +747,7 @@ struct FlightLegsListSheet: View {
                 }
             }
             .listStyle(.plain)
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("✈️ \(legs.count) \(legs.count == 1 ? "vuelo" : "vuelos")")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -840,6 +841,7 @@ struct CountryTripsSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("\(flagEmoji) \(displayName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -898,20 +900,26 @@ struct CountryTripsSheet: View {
                 Text("\(Self.fmt.string(from: trip.dateFrom))\(trip.dateTo.map { " → \(Self.fmt.string(from: $0))" } ?? "")")
             }
             .sheet(item: $editingTrip, onDismiss: {
+                // Defer al final de la animación dismiss: la combinación
+                // fetch + filter + save bloqueaba el último frame al cerrar
+                // EditTripSheet. 0.3s = duración estándar dismiss en iOS.
                 guard country.status == .wantToVisit else { return }
-                let today = Calendar.current.startOfDay(for: Date())
-                let iso = country.isoCode
-                let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
-                let allTrips = modelContext.fetchOrWarn(desc)
-                let futureTrips = allTrips
-                    .filter { Calendar.current.startOfDay(for: $0.dateFrom) > today && !$0.isSegmentChild }
-                    .sorted { $0.dateFrom < $1.dateFrom }
-                if let earliest = futureTrips.first {
-                    country.transport = earliest.transport
-                    country.plannedDate = earliest.dateFrom
-                    country.plannedDateTo = earliest.dateTo
-                    country.plannedTitle = earliest.title
-                    modelContext.saveOrWarn()
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.3))
+                    let today = Calendar.current.startOfDay(for: Date())
+                    let iso = country.isoCode
+                    let desc = FetchDescriptor<Trip>(predicate: #Predicate { $0.isoCode == iso })
+                    let allTrips = modelContext.fetchOrWarn(desc)
+                    let futureTrips = allTrips
+                        .filter { Calendar.current.startOfDay(for: $0.dateFrom) > today && !$0.isSegmentChild }
+                        .sorted { $0.dateFrom < $1.dateFrom }
+                    if let earliest = futureTrips.first {
+                        country.transport = earliest.transport
+                        country.plannedDate = earliest.dateFrom
+                        country.plannedDateTo = earliest.dateTo
+                        country.plannedTitle = earliest.title
+                        modelContext.saveOrWarn()
+                    }
                 }
             }) { trip in
                 EditTripSheet(trip: trip, features: features)

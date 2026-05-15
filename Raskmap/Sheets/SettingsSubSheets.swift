@@ -38,6 +38,7 @@ struct SettingsInfoSheet: View {
                     Spacer(minLength: 48)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -81,6 +82,7 @@ struct LegalInfoSheet: View {
                     Spacer(minLength: 48)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -155,6 +157,7 @@ struct WidgetLockScreenSheet: View {
                     Spacer(minLength: 32)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Pantalla de bloqueo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -229,6 +232,7 @@ struct WidgetWatchSheet: View {
                     Spacer(minLength: 32)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Apple Watch")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

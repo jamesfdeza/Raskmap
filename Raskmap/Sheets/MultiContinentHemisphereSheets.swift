@@ -101,6 +101,7 @@ struct MultiContinentSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 20)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Países pluricontinentales")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -198,6 +199,7 @@ struct MultiHemisphereSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 20)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Países plurihemisferiales")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -292,6 +294,7 @@ struct FavoriteAirportPickerSheet: View {
                     }.buttonStyle(.plain)
                 }
                 .listStyle(.plain)
+                .scrollBounceBehavior(.basedOnSize)
                 .searchable(text: $query, prompt: "Buscar aeropuerto o IATA")
 
                 Button {

@@ -172,6 +172,7 @@ struct SubjectiveCategoriesSheet: View {
                     }
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Categorías personales")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -355,6 +356,7 @@ struct SubjectiveFlagPickerSheet: View {
                     .padding(.bottom, 8)
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("\(medal.emoji) \(category.title)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -463,6 +465,7 @@ struct FlagAlphabetSheet: View {
                     }
                 }
             }
+            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle(countingMode == .all ? "Territorios visitados" : "Países visitados")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

@@ -128,6 +128,7 @@ struct AllCountriesSheet: View {
                 }
             }
         }
+        .scrollBounceBehavior(.basedOnSize)
     }
 }
 
