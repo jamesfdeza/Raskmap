@@ -68,6 +68,12 @@ class Trip {
     /// Cap recomendado: 3-5 fotos × ~400KB resized = ~2MB total por trip.
     @Attribute(.externalStorage)
     var photosData: Data?
+    /// Tags/etiquetas del viaje — texto libre separado por comas o como
+    /// JSON array. Permite al user categorizar trips ("luna de miel",
+    /// "negocios", "verano") y filtrar listas downstream.
+    /// JSON-encoded `[String]` para que cada tag sea una entry independiente
+    /// (más fácil de filtrar que parseando una string comma-separated).
+    var tagsRaw: String?
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,

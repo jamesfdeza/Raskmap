@@ -20,6 +20,29 @@ extension Trip {
     /// de SwiftData ni el sync de CloudKit.
     static let maxPhotosPerTrip: Int = 5
 
+    /// Tags decodificados desde `tagsRaw` (JSON array). Get / set
+    /// transparente — vacío = nil para no inflar el storage de trips sin tags.
+    var tags: [String] {
+        get {
+            guard let raw = tagsRaw,
+                  let data = raw.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        set {
+            let cleaned = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if cleaned.isEmpty {
+                tagsRaw = nil
+                return
+            }
+            if let data = try? JSONEncoder().encode(cleaned),
+               let str = String(data: data, encoding: .utf8) {
+                tagsRaw = str
+            }
+        }
+    }
+
     /// Lista de fotos (JPEG `Data`) decodificadas desde `photosData`.
     /// Get / set transparente: el setter encoda como binary plist y
     /// escribe en `photosData`.

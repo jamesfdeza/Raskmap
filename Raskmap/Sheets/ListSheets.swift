@@ -779,6 +779,31 @@ struct FinalizadoTripDetailSheet: View {
                         }
                     }
 
+                    // MARK: Tags
+                    if let trip = row.trip, !trip.tags.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("TAGS")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.0)
+                                .padding(.horizontal, 20)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(trip.tags, id: \.self) { tag in
+                                        Text("#\(tag)")
+                                            .font(.palatino(.caption, weight: .bold))
+                                            .foregroundStyle(.blue)
+                                            .padding(.horizontal, 10).padding(.vertical, 6)
+                                            .background(Color.blue.opacity(0.1),
+                                                       in: Capsule())
+                                    }
+                                }
+                                .padding(.horizontal, 20)
+                            }
+                        }
+                        .padding(.bottom, 16)
+                    }
+
                     // MARK: Fotos
                     if let trip = row.trip, !trip.photos.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {

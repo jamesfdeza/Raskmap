@@ -37,6 +37,9 @@ struct AddTripSheet: View {
     /// Selección actual del PhotosPicker (transitorio, se procesa a
     /// `tripPhotos` cuando cambia).
     @State private var photosPickerItems: [PhotosPickerItem] = []
+    /// Tags del viaje — string libre separado por comas en el TextField.
+    /// Se parsea a `[String]` al guardar.
+    @State private var tripTagsText: String = ""
     @State private var tripSegments: [TripSegment] = []
     @State private var showAddSegment = false
     @State private var showSaveConfirmation = false
@@ -198,6 +201,12 @@ struct AddTripSheet: View {
         let trimmedNotes = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         trip.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
         trip.photos = tripPhotos
+        // Parsear tags: separadas por comas, trim cada una, sin duplicados.
+        let parsed = tripTagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        trip.tags = Array(NSOrderedSet(array: parsed)) as? [String] ?? parsed
         var newlyVisitedNames: [String] = []
         if !tripSegments.isEmpty {
             let groupID = UUID().uuidString
@@ -336,6 +345,17 @@ struct AddTripSheet: View {
                 TextField("Notas (opcional)", text: $tripNotes, axis: .vertical)
                     .lineLimit(2...6)
                     .font(.palatino(.body))
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
+                    .padding(.horizontal, 16).padding(.bottom, 8)
+
+                // Tags — string libre separado por comas. Más rápido para
+                // user que un chip selector. Se parsea al guardar.
+                TextField("Tags (separados por coma, ej: verano, familia)",
+                          text: $tripTagsText)
+                    .font(.palatino(.body))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                     .padding(.horizontal, 16).padding(.vertical, 14)
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 16).padding(.bottom, 8)

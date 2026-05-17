@@ -30,6 +30,8 @@ struct EditTripSheet: View {
     @State private var tripPhotos: [Data]
     /// Selección actual del PhotosPicker, transitorio.
     @State private var photosPickerItems: [PhotosPickerItem] = []
+    /// Tags del viaje — string libre separado por comas (espejo de trip.tags).
+    @State private var tripTagsText: String
     @State private var localDateFrom: Date
     @State private var localDateTo: Date?
     @State private var tripSegments: [TripSegment] = []
@@ -224,6 +226,7 @@ struct EditTripSheet: View {
         _tripTitle = State(initialValue: trip.title ?? "")
         _tripNotes = State(initialValue: trip.notes ?? "")
         _tripPhotos = State(initialValue: trip.photos)
+        _tripTagsText = State(initialValue: trip.tags.joined(separator: ", "))
         _localDateFrom = State(initialValue: trip.dateFrom)
         _localDateTo = State(initialValue: trip.dateTo)
         _localAirports = State(initialValue: trip.tripAirports)
@@ -352,6 +355,11 @@ struct EditTripSheet: View {
         let trimmedNotes = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         trip.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
         trip.photos = tripPhotos
+        let parsedTags = tripTagsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        trip.tags = Array(NSOrderedSet(array: parsedTags)) as? [String] ?? parsedTags
         if !trip.isSegmentChild {
             trip.dateFrom = calculatedDateFrom
             trip.dateTo = calculatedDateTo
@@ -580,6 +588,22 @@ struct EditTripSheet: View {
                     TextField("Anécdotas, recomendaciones…", text: $tripNotes, axis: .vertical)
                         .lineLimit(3...8)
                         .font(.palatino(.body))
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
+                        .padding(.horizontal, 24)
+                }
+                .padding(.bottom, 16)
+
+                // Tags — string libre separado por comas. Como en AddTripSheet.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TAGS")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary).tracking(1.0)
+                        .padding(.horizontal, 24)
+                    TextField("Ej: verano, familia, luna de miel", text: $tripTagsText)
+                        .font(.palatino(.body))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                         .padding(.horizontal, 16).padding(.vertical, 14)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24)
