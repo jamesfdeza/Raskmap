@@ -721,21 +721,41 @@ struct ContentView: View {
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.cell))
             Spacer()
-            // Filtro del mapa — Menu nativo iOS con las opciones. Solo se
-            // muestra el icono cuando hay filtro activo (≠ .all) para no
-            // saturar la UI cuando no se está usando.
+            // Filtro del mapa — Menu nativo iOS con dos secciones:
+            //  · Filtros básicos (Todos / Visitados / Próximos / Bucket)
+            //  · Filtros por transporte (✈️ 🚗 🚂 🚌 🚢 🚶🏻)
+            // Solo se muestra el icono "fill" cuando hay filtro activo
+            // (≠ .all) para feedback visual.
             Menu {
                 Picker("Filtrar mapa", selection: $mapFilter) {
-                    ForEach(MapFilter.allCases) { f in
+                    ForEach(MapFilter.primaryCases) { f in
                         Label(f.label, systemImage: f.systemImage).tag(f)
                     }
                 }
+                Divider()
+                Section("Por transporte") {
+                    ForEach(PlannedDatePickerSheet.transports, id: \.emoji) { t in
+                        let f = MapFilter.transport(t.emoji)
+                        Button {
+                            mapFilter = f
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(t.emoji)
+                                Text(t.label)
+                                if mapFilter == f {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
             } label: {
-                Image(systemName: mapFilter == .all
-                      ? "line.3.horizontal.decrease.circle"
-                      : "line.3.horizontal.decrease.circle.fill")
+                Image(systemName: mapFilter.isActive
+                      ? "line.3.horizontal.decrease.circle.fill"
+                      : "line.3.horizontal.decrease.circle")
                     .font(.palatino(.title3))
-                    .foregroundStyle(mapFilter == .all ? .primary : Color.blue)
+                    .foregroundStyle(mapFilter.isActive ? Color.blue : .primary)
                     .padding(10)
                     .background(.regularMaterial, in: Circle())
                     .frame(minWidth: TapTarget.min, minHeight: TapTarget.min)

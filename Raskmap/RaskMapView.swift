@@ -135,10 +135,13 @@ struct RaskMapView: UIViewRepresentable {
             // Aplica `mapFilter` para que los países que no matcheen el
             // filtro queden como `.none` (transparentes). El filtro activo
             // se cachea en `coord.lastMapFilter` para detectar cambios en
-            // updateUIView siguientes.
+            // updateUIView siguientes. Para filtros .transport pasamos
+            // los trips agrupados por isoCode (necesitamos saber qué
+            // transports usa cada país).
             coord.lastMapFilter = mapFilter
-            let statusMap = Dictionary(uniqueKeysWithValues: countries.map {
-                ($0.isoCode, mapFilter.effectiveStatus($0.status))
+            let tripsByIso = Dictionary(grouping: trips, by: { $0.isoCode })
+            let statusMap = Dictionary(uniqueKeysWithValues: countries.map { c in
+                (c.isoCode, mapFilter.effectiveStatus(c.status, tripsForCountry: tripsByIso[c.isoCode] ?? []))
             })
             coord.lastKnownStatus = statusMap
             coord.lastHighlighted = highlightedIsoCode
@@ -310,9 +313,12 @@ struct RaskMapView: UIViewRepresentable {
         // Aplica `mapFilter`: si el filtro cambió, esta línea ya genera un
         // newMap diferente al lastKnownStatus → el diff de abajo detecta los
         // países que han ganado/perdido color y re-renderiza solo esos.
+        // Para .transport agrupamos trips por isoCode para que el filtro
+        // pueda chequear qué transports usa cada país.
         coord.lastMapFilter = mapFilter
-        let newMap = Dictionary(uniqueKeysWithValues: countries.map {
-            ($0.isoCode, mapFilter.effectiveStatus($0.status))
+        let tripsByIso = Dictionary(grouping: trips, by: { $0.isoCode })
+        let newMap = Dictionary(uniqueKeysWithValues: countries.map { c in
+            (c.isoCode, mapFilter.effectiveStatus(c.status, tripsForCountry: tripsByIso[c.isoCode] ?? []))
         })
         let oldMap = coord.lastKnownStatus
         guard newMap != oldMap else { return }
