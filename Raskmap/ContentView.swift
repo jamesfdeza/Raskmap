@@ -2938,7 +2938,7 @@ struct AirportData: Identifiable, Codable, Hashable {
         }.joined()
     }
     var countryName: String {
-        Locale(identifier: "es").localizedString(forRegionCode: country) ?? country
+        Locale.current.localizedString(forRegionCode: country) ?? country
     }
 }
 

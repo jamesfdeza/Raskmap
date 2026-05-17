@@ -23,12 +23,15 @@ struct CountryFeature {
 
     // NUEVO: bounding box del país completo
     let boundingMapRect: MKMapRect
-    // Traducir el nombre al español usando el sistema
+    // Traducir el nombre al idioma del sistema (Locale.current). El override
+    // de "PS" → "Palestina" solo aplica cuando el sistema está en español;
+    // en otros idiomas usamos lo que devuelva Locale.current.
     var localizedName: String {
+        let isSpanish = Locale.current.language.languageCode?.identifier == "es"
         let nameOverrides: [String: String] = ["PS": "Palestina"]
         if isoA2 != "-99" {
-            if let override = nameOverrides[isoA2] { return override }
-            if let localized = Locale(identifier: "es").localizedString(forRegionCode: isoA2) {
+            if isSpanish, let override = nameOverrides[isoA2] { return override }
+            if let localized = Locale.current.localizedString(forRegionCode: isoA2) {
                 return localized
             }
         }

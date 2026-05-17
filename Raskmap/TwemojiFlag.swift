@@ -56,8 +56,7 @@ struct TwemojiFlag: View {
     }
 
     private static func accessibilityLabel(for iso2: String) -> String {
-        Locale(identifier: "es")
-            .localizedString(forRegionCode: iso2.uppercased()) ?? iso2.uppercased()
+        Locale.current.localizedString(forRegionCode: iso2.uppercased()) ?? iso2.uppercased()
     }
 }
 
@@ -100,8 +99,7 @@ struct FlagLabel: View {
                 .interpolation(.high)
                 .scaledToFit()
                 .frame(width: size, height: size)
-                .accessibilityLabel(Locale(identifier: "es")
-                    .localizedString(forRegionCode: iso) ?? iso)
+                .accessibilityLabel(Locale.current.localizedString(forRegionCode: iso) ?? iso)
         } else {
             // Fallback (🌐, ✈️, banderas no soportadas): mismo bounding box
             // que la versión Twemoji para que las strips de banderas
