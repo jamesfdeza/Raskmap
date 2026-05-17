@@ -89,32 +89,38 @@ enum Radius {
 /// fuentes están pensadas para títulos, etiquetas y números grandes
 /// donde el tamaño fijo es intencional.
 enum Typography {
+    // Todas las fuentes usan `Font.custom(_:size:relativeTo:)` para que
+    // escalen con Dynamic Type del usuario. Antes eran tamaños fijos →
+    // usuarios con tamaño de texto grande no notaban diferencia (bloqueante
+    // de accesibilidad). Ahora SwiftUI auto-escala respecto al `relativeTo`
+    // text style mientras conserva la fuente custom.
+
     /// 28pt Bold — display grande (números del wrapped, hero text).
-    static let display: Font = .custom("Satoshi-Bold", size: 28)
+    static let display: Font = .custom("Satoshi-Bold", size: 28, relativeTo: .largeTitle)
 
     /// 22pt Bold — títulos de pantalla principal, headers de sheet.
-    static let title: Font = .custom("Satoshi-Bold", size: 22)
+    static let title: Font = .custom("Satoshi-Bold", size: 22, relativeTo: .title2)
 
     /// 18pt Bold — títulos de sección, sub-headers.
-    static let titleS: Font = .custom("Satoshi-Bold", size: 18)
+    static let titleS: Font = .custom("Satoshi-Bold", size: 18, relativeTo: .title3)
 
     /// 17pt Regular — body principal en sheets. Aproxima a `.body` system.
-    static let body: Font = .custom("Satoshi-Regular", size: 17)
+    static let body: Font = .custom("Satoshi-Regular", size: 17, relativeTo: .body)
 
     /// 15pt Medium — body secundario, labels de fila.
-    static let bodyS: Font = .custom("Satoshi-Medium", size: 15)
+    static let bodyS: Font = .custom("Satoshi-Medium", size: 15, relativeTo: .subheadline)
 
     /// 13pt Bold — labels de form, badges, chips.
-    static let label: Font = .custom("Satoshi-Bold", size: 13)
+    static let label: Font = .custom("Satoshi-Bold", size: 13, relativeTo: .footnote)
 
     /// 11pt Bold tracked — eyebrows, all-caps headers ("MIS DESTINOS", "DESDE").
-    static let eyebrow: Font = .custom("Satoshi-Bold", size: 11)
+    static let eyebrow: Font = .custom("Satoshi-Bold", size: 11, relativeTo: .caption)
 
     /// 10pt Medium — text auxiliar mínimo, footnotes.
-    static let caption: Font = .custom("Satoshi-Medium", size: 10)
+    static let caption: Font = .custom("Satoshi-Medium", size: 10, relativeTo: .caption2)
 
     /// 14pt Bold monospaced — números/contadores que deben no saltar.
-    static let mono: Font = .custom("Satoshi-Bold", size: 14).monospacedDigit()
+    static let mono: Font = .custom("Satoshi-Bold", size: 14, relativeTo: .body).monospacedDigit()
 }
 
 // MARK: - Spacing

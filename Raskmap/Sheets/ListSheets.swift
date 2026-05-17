@@ -201,6 +201,7 @@ struct StatusListSheet: View {
                                                 .font(.title3)
                                         }
                                         .buttonStyle(.plain)
+                                        .accessibilityLabel("Eliminar de la lista")
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -225,6 +226,7 @@ struct StatusListSheet: View {
                                                 .font(.title3)
                                         }
                                         .buttonStyle(.plain)
+                                        .accessibilityLabel("Eliminar de la lista")
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -502,6 +504,7 @@ struct FinalizadosListSheet: View {
                                                 .font(.title3)
                                         }
                                         .buttonStyle(.plain)
+                                        .accessibilityLabel("Eliminar de la lista")
                                     }
                                     .padding(.vertical, 2)
                                     .contentShape(Rectangle())
