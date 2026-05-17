@@ -674,7 +674,10 @@ struct EditTripSheet: View {
                                 if localDateTo != nil {
                                     Button { localDateTo = nil } label: {
                                         Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                                    }.buttonStyle(.plain).padding(.trailing, 4)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.trailing, 4)
+                                    .accessibilityLabel("Quitar fecha hasta")
                                     DatePicker("", selection: Binding(
                                         get: { localDateTo ?? localDateFrom },
                                         set: { localDateTo = $0 }

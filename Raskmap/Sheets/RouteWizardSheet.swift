@@ -463,7 +463,9 @@ struct RouteWizardSheet: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Limpiar búsqueda")
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
