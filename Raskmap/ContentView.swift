@@ -109,6 +109,11 @@ struct ContentView: View {
     @State private var showSubscription: Bool = false
     @State private var showReviewAlert: Bool = false
     @State private var prevAchieved: Set<AchievementKind>? = nil
+    /// Tokens para cancelar tasks deferidos cuando dispara otra antes de
+    /// que se complete el sleep — evita race conditions en el cache de
+    /// `cachedNextBanner` y widget sync cuando trips/visited cambian rápido.
+    @State private var tripsChangeToken: UInt64 = 0
+    @State private var visitedChangeToken: UInt64 = 0
     @State private var highlightedIsoCode: String? = nil
     @State private var flightMode: Bool = false
     @State private var flightTransitionTarget: Bool? = nil
@@ -1110,8 +1115,8 @@ struct ContentView: View {
     fileprivate func handleTripsCountChange() {
         // Re-evalúa Country.status: si tras borrar el último trip de un país
         // visited queda sin pasados ni futuros ni visitCount manual, vuelve
-        // a .none (o .wantToVisit si tanto tenía planned). Antes esto solo
-        // corría al arrancar la app y dejaba estados stale entre sesiones.
+        // a .none (o .wantToVisit si tenía planned). Antes esto solo corría
+        // al arrancar la app y dejaba estados stale entre sesiones.
         //
         // ⚡ Defer al final del próximo runloop: este handler se dispara en
         // onChange(of: tripsFingerprint), y cuando un sheet edita un trip,
@@ -1119,11 +1124,19 @@ struct ContentView: View {
         // síncrono, el último frame de la animación dismiss se bloquea por
         // las escrituras a disco (WidgetDataWriter) + el cómputo de
         // nextProximosBanner. Diferir 300ms (~duración animación dismiss)
-        // hace que el cierre del sheet se sienta limpio y luego corre todo
-        // sin bloquear UI. Las operaciones son idempotentes — si trips
-        // cambia 2 veces rápido, ambas tasks se ejecutan pero la 2ª gana.
+        // hace que el cierre del sheet se sienta limpio.
+        //
+        // ⚠️ Race condition: si trips cambia 2+ veces en 300ms (p.ej. user
+        // guarda viaje y enseguida edita otro), múltiples Tasks corren y la
+        // última escritura a `cachedNextBanner` puede no corresponder al
+        // estado "actual" de `trips`. Cancelamos la task previa antes de
+        // arrancar la nueva — la token se incrementa en cada llamada y la
+        // task aborta antes de escribir state si la token ya no es la suya.
+        tripsChangeToken &+= 1
+        let myToken = tripsChangeToken
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(0.3))
+            guard myToken == tripsChangeToken else { return }
             cleanupZeroXVisitedStates()
             cleanupOrphanChildTrips()
             checkAndShowAchievementToasts()
@@ -1165,10 +1178,14 @@ struct ContentView: View {
         // alert es @State y debe estar coherente con el cambio de count.
         if newCount == 5 && !neverShowReview { showReviewAlert = true }
         // Lo demás se difiere para no bloquear el dismiss de sheets que
-        // marquen un país como visitado/no-visitado. Mismo razonamiento
-        // que en handleTripsCountChange — operaciones idempotentes.
+        // marquen un país como visitado/no-visitado. Cancelable vía token —
+        // si visitedCount cambia 2+ veces en 300ms (typical en delete masivo),
+        // la task anterior aborta antes de escribir state stale.
+        visitedChangeToken &+= 1
+        let myToken = visitedChangeToken
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(0.3))
+            guard myToken == visitedChangeToken else { return }
             let b = nextProximosBanner
             cachedNextBanner = b
             WidgetDataWriter.syncNextTrip(flag: b?.flag, days: b?.days, name: b?.name, transport: b?.transport, dateFrom: b?.dateFrom, bookingRef: b?.bookingRef, title: b?.title)

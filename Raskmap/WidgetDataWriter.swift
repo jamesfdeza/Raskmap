@@ -12,7 +12,24 @@ private let appGroupID = "group.com.jaime.raskmap"
 
 struct WidgetDataWriter {
 
-    private static let store: UserDefaults? = UserDefaults(suiteName: appGroupID)
+    /// Store del App Group compartido con los widgets. Si la entitlement de
+    /// AppGroups no está bien configurada (TestFlight provisioning, dev cert
+    /// sin permisos, etc.) este `UserDefaults(suiteName:)` devuelve `nil` y
+    /// TODAS las funciones de sync se vuelven no-op silenciosas → los widgets
+    /// se quedan con datos stale sin pista del por qué.
+    ///
+    /// Logueamos UNA vez en DEBUG si el store falla al abrirse (es `static let`
+    /// → se evalúa al primer uso del struct). En release no logueamos para no
+    /// contaminar Console.app de usuarios reales.
+    private static let store: UserDefaults? = {
+        let s = UserDefaults(suiteName: appGroupID)
+        #if DEBUG
+        if s == nil {
+            print("⚠️ WidgetDataWriter: UserDefaults(suiteName: \"\(appGroupID)\") devolvió nil. Widget sync será no-op. Revisa entitlement de AppGroups en project settings + provisioning profile.")
+        }
+        #endif
+        return s
+    }()
 
     static func sync(countries: [Country]) {
         guard let store else { return }

@@ -106,14 +106,16 @@ struct AddSegmentSheet: View {
             } else {
                 _selectedIsoCodes = State(initialValue: Set(seg.isoCodes))
             }
-        } else if !existingSegments.isEmpty {
+        } else if let last = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom }).last {
             // Smart default: el nuevo tramo arranca justo después del último
             // tramo existente (by chronology). Si el último seg tiene `dateTo`,
             // el nuevo arranca ese mismo día (transit shared); si no, día siguiente.
             // Si el destino del último seg es distinto a la base del trip, lo
             // usamos como "país de origen" inferido para el nuevo tramo.
-            let sorted = existingSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
-            let last = sorted.last!
+            // NOTA: antes era `existingSegments.isEmpty` + `sorted.last!` con
+            // force unwrap. Aunque la precondición lo garantizaba, el
+            // `if let last = ...` es más explícito y a prueba de futuros
+            // refactors que pudieran romper la invariante.
             let lastEnd = cal.startOfDay(for: last.dateTo ?? last.dateFrom)
             let nextDay = cal.date(byAdding: .day, value: 1, to: lastEnd) ?? lastEnd
             // Si lastEnd > tFrom (no es realista), defaulteamos a lastEnd para
@@ -577,8 +579,15 @@ struct AddSegmentSheet: View {
                     }
                 }
 
+                // Computamos una sola vez para enable/disable + uso en la action.
+                let isos = finalIsoCodes
+                let canSave = !isos.isEmpty
                 Button {
-                    let isos = finalIsoCodes
+                    // Guard defensivo: si por algún flujo inesperado llegamos
+                    // aquí con isos vacíos (race state, ruta ✈️ sin destino
+                    // derivable + sin layovers marcados), abortamos en vez de
+                    // guardar un segmento corrupto que rompería `daysPerCountry`.
+                    guard !isos.isEmpty else { return }
                     // Sólo guardamos como visitadas las escalas que realmente
                     // existen en la ruta — evita ISOs huérfanas si el usuario
                     // cambia la ruta tras marcar.
@@ -604,10 +613,12 @@ struct AddSegmentSheet: View {
                     Text(isEditing ? "Guardar cambios" : "Añadir tramo")
                         .font(.custom("Satoshi-Bold", size: 16))
                         .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(accent, in: RoundedRectangle(cornerRadius: Radius.card))
+                        .background(canSave ? accent : Color(.systemGray4),
+                                    in: RoundedRectangle(cornerRadius: Radius.card))
                         .foregroundStyle(.white)
-                        .shadow(color: accent.opacity(0.3), radius: 12, y: 4)
+                        .shadow(color: canSave ? accent.opacity(0.3) : .clear, radius: 12, y: 4)
                 }
+                .disabled(!canSave)
                 .padding(.horizontal, 24).padding(.bottom, 36)
             }
         }
@@ -690,9 +701,15 @@ struct AddSegmentSheet: View {
                     Button {
                         if pickingFrom {
                             dateFrom = chip.value
+                            // Si el nuevo DESDE supera el HASTA actual, nileamos
+                            // HASTA — no tiene sentido un trip con HASTA anterior.
                             if let to = dateTo, chip.value > to { dateTo = nil }
                         } else if !isOneWayFlight {
-                            dateTo = chip.value < dateFrom ? nil : chip.value
+                            // Si el HASTA pickeado es anterior a DESDE, clamp a
+                            // DESDE — trip ida-y-vuelta el mismo día. Antes esto
+                            // hacía `dateTo = nil` silenciosamente, dejando al
+                            // user con la sensación de que el tap no hizo nada.
+                            dateTo = max(chip.value, dateFrom)
                         }
                     } label: {
                         Text(chip.label)

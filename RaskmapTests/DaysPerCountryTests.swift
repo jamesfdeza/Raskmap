@@ -120,6 +120,26 @@ struct DaysPerCountryTests {
         #expect(result["CHN"] == 5)
     }
 
+    @Test("Segmento cuyo destino == trip.isoCode no duplica conteo")
+    func segmentoDestinoIgualPrimaryNoDuplica() {
+        // Trip PAR 1-7 con un seg "bus PAR" 3-5 (tour interno).
+        // Auditoría sospechaba doble cuenta — pero el algoritmo usa Set
+        // semantics + el segmento (prio 100) reemplaza al ambient (prio 1007),
+        // así que PAR queda contado 1 vez por día. Total: PAR=7.
+        let trip = Self.makeTrip(
+            iso: "PAR",
+            from: Self.d(2025, 1, 1),
+            to: Self.d(2025, 1, 7),
+            segments: [
+                Self.seg(transport: "🚌", isos: ["PAR"],
+                         from: Self.d(2025, 1, 3), to: Self.d(2025, 1, 5))
+            ]
+        )
+        let result = daysPerCountry(trips: [trip])
+        #expect(result["PAR"] == 7)  // 7 días, NO 10 ni nada raro
+        #expect(result.count == 1)   // solo PAR aparece
+    }
+
     @Test("Trip Macedonia con escala SRB ida+vuelta y excursión Kosovo de día")
     func macedoniaKosovoCase() {
         // Trip ✈️ a Macedonia 12-18 julio (7 días) con escala SRB ida y vuelta

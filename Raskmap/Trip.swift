@@ -59,10 +59,25 @@ class Trip {
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,
          tripAirports: [TripAirport] = [], tripAirlines: [TripAirline] = []) {
+        // Defensa contra datos inválidos: en DEBUG logueamos; en release
+        // sanitizamos silenciosamente para no crashear ni perder datos.
+        // El crash no es opción en un @Model — los datos pueden venir de
+        // CloudKit sync con un esquema antiguo o roto.
+        #if DEBUG
+        if isoCode.isEmpty {
+            print("⚠️ Trip.init: isoCode vacío. Llamador debería validar antes.")
+        }
+        if let to = dateTo, to < dateFrom {
+            print("⚠️ Trip.init: dateTo (\(to)) < dateFrom (\(dateFrom)). Sanitizando a dateFrom.")
+        }
+        #endif
         self.isoCode = isoCode
         self.title = title
         self.dateFrom = dateFrom
-        self.dateTo = dateTo
+        // Clamp: si dateTo es anterior a dateFrom, lo subimos a dateFrom (trip
+        // ida-y-vuelta el mismo día). Evita rangos invertidos que romperían
+        // `daysPerCountry` con stake silenciosamente skipped (guard t >= f).
+        self.dateTo = dateTo.map { $0 < dateFrom ? dateFrom : $0 }
         self.transport = transport
         self.airport = nil
         self.airlineCountsRaw = nil
