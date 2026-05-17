@@ -403,106 +403,34 @@ struct ContentView: View {
         .padding(.horizontal, 6)
     }
 
+    /// Wrappers delgados que delegan en `BannerComputer` (struct pura
+    /// testable). El tuple-typed return se preserva para no romper a los
+    /// muchos consumers de estos computeds (cachedNextBanner, widget syncs,
+    /// etc.). La lógica real vive en BannerComputer.swift.
     private var nextProximosBanner: (days: Int, flag: String, name: String, isoCode: String, transport: String?, dateFrom: Date?, bookingRef: String, title: String?)? {
-        let today = Calendar.current.startOfDay(for: Date())
-        var entries: [(days: Int, flag: String, name: String, isoCode: String, date: Date, transport: String?, dateFrom: Date?, trip: Trip?, title: String?)] = []
-        // wantToVisit countries — earliest future trip
-        for row in allProximoRows where row.country.status == .wantToVisit {
-            guard let date = row.dateFrom else { continue }
-            let d = Calendar.current.startOfDay(for: date)
-            guard d > today else { continue }
-            let days = Calendar.current.dateComponents([.day], from: today, to: d).day ?? 0
-            let flag = features.first(where: { $0.isoCode == row.isoCode })?.flagEmoji ?? "🌐"
-            let name = features.first(where: { $0.isoCode == row.isoCode })?.localizedName ?? row.country.name
-            entries.append((days, flag, name, row.isoCode, d, row.transport, date, row.trip, row.rowTitle))
-        }
-        // visited countries with future trips
-        for trip in trips where trip.isoCode != "" {
-            let d = Calendar.current.startOfDay(for: trip.dateFrom)
-            guard d >= today else { continue }
-            guard countries.first(where: { $0.isoCode == trip.isoCode })?.status == .visited else { continue }
-            let days = Calendar.current.dateComponents([.day], from: today, to: d).day ?? 0
-            guard days > 0 else { continue }
-            let flag = features.first(where: { $0.isoCode == trip.isoCode })?.flagEmoji ?? "🌐"
-            let name = features.first(where: { $0.isoCode == trip.isoCode })?.localizedName ?? trip.isoCode
-            entries.append((days, flag, name, trip.isoCode, d, trip.transport, trip.dateFrom, trip, trip.title))
-        }
-        guard let next = entries.sorted(by: { $0.date < $1.date }).first else { return nil }
-        let ref = bookingRefFromTrip(next.trip)
-        return (next.days, next.flag, next.name, next.isoCode, next.transport, next.dateFrom, ref, title: next.title)
+        guard let b = BannerComputer.nextProximosBanner(
+            proximoRows: allProximoRows, trips: trips, countries: countries, features: features
+        ) else { return nil }
+        return (b.days, b.flag, b.name, b.isoCode, b.transport, b.dateFrom, b.bookingRef, title: b.title)
     }
 
     private func bookingRefFromTrip(_ trip: Trip?) -> String {
-        guard let trip else { return "" }
-        if let seg = trip.tripSegments.first(where: { $0.transport == "✈️" }),
-           let ref = seg.flightInfo?.bookingRef, !ref.isEmpty { return ref }
-        return trip.flightDetails?.bookingRef ?? ""
+        BannerComputer.bookingRefFromTrip(trip)
     }
 
     /// Días que faltan hasta el próximo vuelo + IATA del aeropuerto de salida.
-    /// Análogo a `nextProximosBanner` pero para el contador del modo vuelo —
-    /// muestra "Quedan N días · MAD" arriba del mapa de vuelos. Devuelve nil
-    /// si no hay ningún trip ✈️ futuro con aeropuertos guardados.
-    /// Usa la misma heurística que `nextFlightAirportsAny()`: ordena trips
-    /// primarios futuros por dateFrom, y para el primero busca un segment
-    /// ✈️ con airports ≥ 2 (o trip legacy con tripAirports ≥ 2).
+    /// Wrapper delgado sobre `BannerComputer.nextFlightCounter`.
     private var nextFlightCounter: (days: Int, depIATA: String)? {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let candidates = trips.filter {
-            !$0.isSegmentChild && cal.startOfDay(for: $0.dateFrom) >= today
-        }.sorted { $0.dateFrom < $1.dateFrom }
-        for trip in candidates {
-            // Caso segments: prioriza el primer segmento ✈️ del trip por
-            // orden cronológico de partida.
-            if let seg = trip.tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
-                            .first(where: { $0.transport == "✈️" && ($0.airports?.count ?? 0) >= 1 }),
-               let firstAp = seg.airports?.first {
-                let days = cal.dateComponents([.day],
-                    from: today,
-                    to: cal.startOfDay(for: seg.dateFrom)).day ?? 0
-                return (max(0, days), firstAp.iata)
-            }
-            // Caso legacy: trip sin segments pero con transport ✈️ + airports.
-            if trip.tripSegments.isEmpty, trip.transport == "✈️",
-               let firstAp = trip.tripAirports.first {
-                let days = cal.dateComponents([.day],
-                    from: today,
-                    to: cal.startOfDay(for: trip.dateFrom)).day ?? 0
-                return (max(0, days), firstAp.iata)
-            }
-        }
-        return nil
+        guard let c = BannerComputer.nextFlightCounter(trips: trips) else { return nil }
+        return (c.days, c.depIATA)
     }
 
-    /// Aeropuertos (IATA) y coordenadas del próximo vuelo. Busca el primer
-    /// trip ✈️ futuro en TODOS los trips (no solo el país del banner) — para
-    /// que el widget de mapa de vuelos muestre la ruta aunque el siguiente
-    /// viaje del banner no sea ✈️ pero haya un próximo vuelo después.
-    /// nil si no hay ningún trip ✈️ futuro con aeropuertos conocidos.
+    /// Aeropuertos (IATA) y coordenadas del próximo vuelo. Wrapper sobre
+    /// `BannerComputer.nextFlightRoute`. Devuelve tuple por compat con
+    /// los call sites existentes (widget sync, mapa de vuelos).
     private func nextFlightAirportsAny() -> (depIATA: String, arrIATA: String, depCoord: CLLocationCoordinate2D, arrCoord: CLLocationCoordinate2D)? {
-        let today = Calendar.current.startOfDay(for: Date())
-        let candidates = trips.filter {
-            !$0.isSegmentChild &&
-            Calendar.current.startOfDay(for: $0.dateFrom) >= today
-        }.sorted { $0.dateFrom < $1.dateFrom }
-        for trip in candidates {
-            if let seg = trip.tripSegments.sorted(by: { $0.dateFrom < $1.dateFrom })
-                            .first(where: { $0.transport == "✈️" && ($0.airports?.count ?? 0) >= 2 }),
-               let aps = seg.airports,
-               let firstAp = aps.first,
-               let lastAp = aps.last,
-               let depCoord = AirportCoordinates.coordinate(for: firstAp.iata),
-               let arrCoord = AirportCoordinates.coordinate(for: lastAp.iata) {
-                return (firstAp.iata, lastAp.iata, depCoord, arrCoord)
-            }
-            if trip.tripSegments.isEmpty, trip.transport == "✈️", trip.tripAirports.count >= 2,
-               let depCoord = AirportCoordinates.coordinate(for: trip.tripAirports[0].iata),
-               let arrCoord = AirportCoordinates.coordinate(for: trip.tripAirports[1].iata) {
-                return (trip.tripAirports[0].iata, trip.tripAirports[1].iata, depCoord, arrCoord)
-            }
-        }
-        return nil
+        guard let r = BannerComputer.nextFlightRoute(trips: trips) else { return nil }
+        return (r.depIATA, r.arrIATA, r.depCoord, r.arrCoord)
     }
 
     /// Pre-índice de features por ISO. Se invocaba O(n²) antes desde
