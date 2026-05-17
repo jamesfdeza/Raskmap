@@ -427,9 +427,17 @@ func daysPerCountry(trips: [Trip]) -> [String: Int] {
         for seg in segs where seg.transport == "✈️" {
             let segStart = cal.startOfDay(for: seg.dateFrom)
             let segEnd = seg.dateTo.map { cal.startOfDay(for: $0) }
+            // Pre-compute sets de ISOs por ruta (ida + vuelta). Antes cada
+            // layoverIso disparaba dos `route.contains { ... }` lineales →
+            // N layovers × M airports = O(N·M). Ahora son lookups O(1) en
+            // sets construidos UNA vez por segmento.
+            let idaA3s: Set<String> = Set((seg.airports ?? [])
+                .compactMap { _IATACountryLookup.iataToA3[$0.iata] })
+            let returnA3s: Set<String> = Set((seg.returnAirports ?? [])
+                .compactMap { _IATACountryLookup.iataToA3[$0.iata] })
             for layoverIso in seg.visitedLayoverISOs ?? [] where !layoverIso.isEmpty {
-                let onIda = _routeContainsIsoA3(layoverIso, route: seg.airports)
-                let onReturn = _routeContainsIsoA3(layoverIso, route: seg.returnAirports)
+                let onIda = idaA3s.contains(layoverIso)
+                let onReturn = returnA3s.contains(layoverIso)
                 // Fallback: si no detectamos el layoverIso en ninguna ruta
                 // (típicamente data legacy donde airports/returnAirports están
                 // vacíos), preservamos el comportamiento anterior — stake ambos.

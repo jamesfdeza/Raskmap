@@ -114,6 +114,14 @@ struct ContentView: View {
     /// `cachedNextBanner` y widget sync cuando trips/visited cambian rápido.
     @State private var tripsChangeToken: UInt64 = 0
     @State private var visitedChangeToken: UInt64 = 0
+    /// Cache decoded de los 3 JSON raws de @AppStorage que `multiContAchievedNow`
+    /// usa para evaluar logros. Antes se decodificaban en CADA llamada a
+    /// `multiContAchievedNow`, ejecutándose 3 × N veces por evaluación.
+    /// Ahora se decode una vez en `.onAppear` y se refrescan via `.onChange`
+    /// del raw correspondiente.
+    @State private var cachedMultiContinentAssignments: [String: String] = [:]
+    @State private var cachedMultiHemisphereAssignments: [String: String] = [:]
+    @State private var cachedMapQuadrants: [String: [MapQuadrant]] = [:]
     @State private var highlightedIsoCode: String? = nil
     @State private var flightMode: Bool = false
     @State private var flightTransitionTarget: Bool? = nil
@@ -141,11 +149,14 @@ struct ContentView: View {
     }
 
     private var multiContAchievedNow: Set<AchievementKind> {
-        let assignments = (try? JSONDecoder().decode([String: String].self, from: Data(multiContinentRaw.utf8))) ?? [:]
+        // Decodings cacheados en @State — refrescados via .onChange de los
+        // raws correspondientes (líneas 998-1001). Antes esta función
+        // decodificaba 3 JSON en CADA invocación; ahora son lookups.
+        let assignments = cachedMultiContinentAssignments
+        let allQuadrants = cachedMapQuadrants
         let today = Calendar.current.startOfDay(for: Date())
         let past = trips.filter { Calendar.current.startOfDay(for: $0.dateFrom) <= today }
         let visited = Set(countries.filter { $0.status == .visited || $0.status == .lived }.map { $0.isoCode })
-        let allQuadrants = (try? JSONDecoder().decode([String: [MapQuadrant]].self, from: Data(mapQuadrantsData.utf8))) ?? [:]
         let earnedZones = earnedPassportZones
         let mode = countingMode
         var result = Set<AchievementKind>()
@@ -198,8 +209,7 @@ struct ContentView: View {
                 let valid = adj.filter { mode.counts($0) }
                 achieved = !valid.isEmpty && valid.allSatisfy { visited.contains($0) }
             case .ambosHemisferios:
-                let hAssign = (try? JSONDecoder().decode([String: String].self, from: Data(multiHemisphereRaw.utf8))) ?? [:]
-                let (hSouth, hAmbos) = AchievementKind.adjustedHemispheres(assignments: hAssign)
+                let (hSouth, hAmbos) = AchievementKind.adjustedHemispheres(assignments: cachedMultiHemisphereAssignments)
                 let hasSouth = visited.contains { (hSouth.contains($0) || hAmbos.contains($0)) && mode.counts($0) }
                 let hasNorth = visited.contains { (!hSouth.contains($0) || hAmbos.contains($0)) && mode.counts($0) }
                 achieved = hasSouth && hasNorth
@@ -995,10 +1005,19 @@ struct ContentView: View {
     @ViewBuilder
     private func bodyWithAchievementHandlers() -> some View {
         bodyWithCoreHandlers()
-            .onChange(of: multiContinentRaw) { _, _ in checkAndShowAchievementToasts() }
-            .onChange(of: multiHemisphereRaw) { _, _ in checkAndShowAchievementToasts() }
+            .onChange(of: multiContinentRaw) { _, newValue in
+                cachedMultiContinentAssignments = (try? JSONDecoder().decode([String: String].self, from: Data(newValue.utf8))) ?? [:]
+                checkAndShowAchievementToasts()
+            }
+            .onChange(of: multiHemisphereRaw) { _, newValue in
+                cachedMultiHemisphereAssignments = (try? JSONDecoder().decode([String: String].self, from: Data(newValue.utf8))) ?? [:]
+                checkAndShowAchievementToasts()
+            }
             .onChange(of: tripsFingerprint) { _, _ in handleTripsCountChange() }
-            .onChange(of: mapQuadrantsData) { _, _ in checkAndShowAchievementToasts() }
+            .onChange(of: mapQuadrantsData) { _, newValue in
+                cachedMapQuadrants = (try? JSONDecoder().decode([String: [MapQuadrant]].self, from: Data(newValue.utf8))) ?? [:]
+                checkAndShowAchievementToasts()
+            }
             // Re-evaluar logros al marcar/desmarcar maravillas modernas —
             // dispara la celebración del logro `sieteMaravillas` cuando se
             // marca la 7ª desde `ModernWondersSheet`.
@@ -2614,6 +2633,12 @@ struct ContentView: View {
         locationManager.requestAndStart()
         autoMarkArrivedTripsAndPlans()
         cleanupZeroXVisitedStates()
+        // Inicializa los caches de decoded JSON ANTES de la primera
+        // evaluación de logros. Los onChange handlers los refrescarán
+        // después si el user toca ajustes pluri/hemi/quadrants.
+        cachedMultiContinentAssignments = (try? JSONDecoder().decode([String: String].self, from: Data(multiContinentRaw.utf8))) ?? [:]
+        cachedMultiHemisphereAssignments = (try? JSONDecoder().decode([String: String].self, from: Data(multiHemisphereRaw.utf8))) ?? [:]
+        cachedMapQuadrants = (try? JSONDecoder().decode([String: [MapQuadrant]].self, from: Data(mapQuadrantsData.utf8))) ?? [:]
         prevAchieved = multiContAchievedNow
     }
 
