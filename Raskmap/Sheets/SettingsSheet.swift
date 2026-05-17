@@ -34,6 +34,10 @@ struct SettingsSheet: View {
 
     @State private var pendingClear: CountryStatus? = nil
     @State private var showWipeConfirm: Bool = false
+    /// Feedback al reintentar sync del widget. Se muestra brevemente
+    /// tras tappear "Reintentar sincronización" para confirmar al user
+    /// que la acción se ejecutó.
+    @State private var widgetSyncToast: String? = nil
     @State private var showWipeFinalConfirm: Bool = false
     @State private var isWiping: Bool = false
     @State private var showWipeDoneToast: Bool = false
@@ -669,6 +673,34 @@ struct SettingsSheet: View {
                             }
                             .buttonStyle(.plain)
                             Divider().padding(.leading, 52)
+                            // Reintentar sync del widget — útil si el widget en
+                            // home/lock screen muestra datos stale (puede pasar
+                            // tras instalar la app, cambios de entitlements, etc).
+                            Button {
+                                retryWidgetSync()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(.blue)
+                                        .frame(width: 24)
+                                    Text("Reintentar sincronización del widget")
+                                        .font(.palatino(.body))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if widgetSyncToast != nil {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.body).foregroundStyle(.green)
+                                    } else {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption).foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            Divider().padding(.leading, 52)
                             // Borrar (GDPR Art. 17 — derecho al olvido)
                             Button {
                                 showWipeConfirm = true
@@ -900,6 +932,24 @@ struct SettingsSheet: View {
             pendingBucketListColor = colorTheme.bucketListColor
         }
         .appColorScheme()
+    }
+
+    /// Re-ejecuta todas las syncs al App Group del widget. Útil cuando el
+    /// widget muestra datos stale tras instalar la app, cambios de
+    /// entitlement o problemas de sync. Da feedback visual con un checkmark
+    /// verde durante 2s en la fila.
+    private func retryWidgetSync() {
+        let countries = fetchAllCountries()
+        WidgetDataWriter.sync(countries: countries)
+        WidgetDataWriter.syncCountingMode(countingMode.rawValue)
+        WidgetCenter.shared.reloadAllTimelines()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        widgetSyncToast = "ok"
+        // Limpia el feedback visual tras 2s para que el icono vuelva al chevron.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            widgetSyncToast = nil
+        }
     }
 
     private func fetchAllCountries() -> [Country] {
