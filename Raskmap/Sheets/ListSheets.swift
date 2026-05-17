@@ -596,6 +596,9 @@ struct FinalizadoTripDetailSheet: View {
     /// recomputamos en `.onAppear` o si cambia el row.
     @State private var cachedDays: [(iso: String, days: Int)] = []
     @State private var cachedTripFingerprint: String = ""
+    /// Foto seleccionada para vista fullscreen — tuple (index, UIImage).
+    /// nil cuando no hay viewer abierto. Tap en thumbnail → asigna.
+    @State private var fullscreenPhoto: (index: Int, image: UIImage)? = nil
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -776,6 +779,33 @@ struct FinalizadoTripDetailSheet: View {
                         }
                     }
 
+                    // MARK: Fotos
+                    if let trip = row.trip, !trip.photos.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("FOTOS")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.0)
+                                .padding(.horizontal, 20)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(Array(trip.photos.enumerated()), id: \.offset) { idx, data in
+                                        if let ui = UIImage(data: data) {
+                                            Image(uiImage: ui)
+                                                .resizable().scaledToFill()
+                                                .frame(width: 140, height: 140)
+                                                .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+                                                .onTapGesture { fullscreenPhoto = (idx, ui) }
+                                                .accessibilityLabel("Foto \(idx + 1) de \(trip.photos.count)")
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 20)
+                            }
+                        }
+                        .padding(.bottom, 16)
+                    }
+
                     // MARK: Notas
                     if let trip = row.trip,
                        let notes = trip.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -858,6 +888,24 @@ struct FinalizadoTripDetailSheet: View {
         .presentationDragIndicator(.visible)
         .onAppear { recomputeDays() }
         .appColorScheme()
+        .overlay {
+            // Viewer fullscreen al tappear un thumbnail. Fondo negro
+            // opaco + imagen fit-to-screen + tap para cerrar.
+            if let pic = fullscreenPhoto {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    Image(uiImage: pic.image)
+                        .resizable().scaledToFit()
+                        .ignoresSafeArea()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { fullscreenPhoto = nil }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .accessibilityAddTraits(.isImage)
+                .accessibilityAction { fullscreenPhoto = nil }
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: fullscreenPhoto?.index)
     }
 
     /// Compone un texto compartible con título + rango de fechas + países +

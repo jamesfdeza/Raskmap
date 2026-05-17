@@ -13,6 +13,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import PhotosUI
 
 // MARK: - Añadir viaje
 struct AddTripSheet: View {
@@ -31,6 +32,11 @@ struct AddTripSheet: View {
     /// Notas largas del viaje — anécdotas, recordatorios, recomendaciones.
     /// Opcional; si queda vacío, se guarda como nil.
     @State private var tripNotes: String = ""
+    /// Fotos seleccionadas para el viaje. Storage = JPEG bytes resized.
+    @State private var tripPhotos: [Data] = []
+    /// Selección actual del PhotosPicker (transitorio, se procesa a
+    /// `tripPhotos` cuando cambia).
+    @State private var photosPickerItems: [PhotosPickerItem] = []
     @State private var tripSegments: [TripSegment] = []
     @State private var showAddSegment = false
     @State private var showSaveConfirmation = false
@@ -191,6 +197,7 @@ struct AddTripSheet: View {
         trip.tripSegments = tripSegments
         let trimmedNotes = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         trip.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+        trip.photos = tripPhotos
         var newlyVisitedNames: [String] = []
         if !tripSegments.isEmpty {
             let groupID = UUID().uuidString
@@ -333,6 +340,11 @@ struct AddTripSheet: View {
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
                     .padding(.horizontal, 16).padding(.bottom, 8)
 
+                // Fotos del viaje — PhotosPicker con max 5. Thumbnails
+                // horizontales debajo cuando hay fotos seleccionadas.
+                photosSection
+                    .padding(.horizontal, 16).padding(.bottom, 8)
+
                 Divider().padding(.horizontal, 16).padding(.vertical, 4)
 
                 // MARK: Tramos adicionales
@@ -456,6 +468,81 @@ struct AddTripSheet: View {
                              onCancel: { showSaveConfirmation = false })
         }
         } // ZStack
+    }
+
+    /// Sección de fotos del viaje. PhotosPicker (max 5) + horizontal scroll
+    /// con thumbnails. Cada thumbnail tiene un botón ✕ para eliminar.
+    /// Las fotos se procesan async (resize + JPEG) al cambiar la selección.
+    @ViewBuilder
+    private var photosSection: some View {
+        let remaining = Trip.maxPhotosPerTrip - tripPhotos.count
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Fotos del viaje")
+                    .font(.palatino(.subheadline, weight: .bold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !tripPhotos.isEmpty {
+                    Text("\(tripPhotos.count)/\(Trip.maxPhotosPerTrip)")
+                        .font(.palatino(.caption)).foregroundStyle(.tertiary)
+                }
+            }
+            if !tripPhotos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(tripPhotos.enumerated()), id: \.offset) { idx, data in
+                            if let ui = UIImage(data: data) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(uiImage: ui).resizable().scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    Button {
+                                        tripPhotos.remove(at: idx)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(.white, .black.opacity(0.6))
+                                    }
+                                    .accessibilityLabel("Eliminar foto")
+                                    .padding(4)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if remaining > 0 {
+                PhotosPicker(selection: $photosPickerItems,
+                             maxSelectionCount: remaining,
+                             matching: .images) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                        Text(tripPhotos.isEmpty ? "Añadir fotos" : "Añadir más (\(remaining) restantes)")
+                            .font(.palatino(.body))
+                    }
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
+                }
+                .onChange(of: photosPickerItems) { _, items in
+                    Task {
+                        var newPhotos: [Data] = []
+                        for item in items {
+                            if let data = await TripPhotoProcessor.processPickerItem(item) {
+                                newPhotos.append(data)
+                            }
+                        }
+                        await MainActor.run {
+                            // Append a las existentes (respetando el cap).
+                            let combined = (tripPhotos + newPhotos).prefix(Trip.maxPhotosPerTrip)
+                            tripPhotos = Array(combined)
+                            photosPickerItems = []
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder

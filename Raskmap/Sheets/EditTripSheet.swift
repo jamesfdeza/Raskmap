@@ -12,6 +12,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import PhotosUI
 
 // MARK: - Editar viaje existente (desde lista Próximos)
 struct EditTripSheet: View {
@@ -25,6 +26,10 @@ struct EditTripSheet: View {
     /// Notas largas — espejo del campo `trip.notes`. Se inicializa en init
     /// con el valor actual y se persiste en `performEditSave()`.
     @State private var tripNotes: String
+    /// Fotos del trip — array de JPEG Data. Espejo de `trip.photos`.
+    @State private var tripPhotos: [Data]
+    /// Selección actual del PhotosPicker, transitorio.
+    @State private var photosPickerItems: [PhotosPickerItem] = []
     @State private var localDateFrom: Date
     @State private var localDateTo: Date?
     @State private var tripSegments: [TripSegment] = []
@@ -218,6 +223,7 @@ struct EditTripSheet: View {
         _selectedTransport = State(initialValue: trip.transport)
         _tripTitle = State(initialValue: trip.title ?? "")
         _tripNotes = State(initialValue: trip.notes ?? "")
+        _tripPhotos = State(initialValue: trip.photos)
         _localDateFrom = State(initialValue: trip.dateFrom)
         _localDateTo = State(initialValue: trip.dateTo)
         _localAirports = State(initialValue: trip.tripAirports)
@@ -345,6 +351,7 @@ struct EditTripSheet: View {
         trip.title = trimmedTitle.isEmpty ? nil : trimmedTitle
         let trimmedNotes = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         trip.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+        trip.photos = tripPhotos
         if !trip.isSegmentChild {
             trip.dateFrom = calculatedDateFrom
             trip.dateTo = calculatedDateTo
@@ -575,6 +582,19 @@ struct EditTripSheet: View {
                         .font(.palatino(.body))
                         .padding(.horizontal, 16).padding(.vertical, 14)
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
+                        .padding(.horizontal, 24)
+                }
+                .padding(.bottom, 16)
+
+                // Fotos del viaje — selector + thumbnails. Mismo patrón que
+                // AddTripSheet pero con `tripPhotos` inicializado desde el
+                // trip existente en init().
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("FOTOS")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary).tracking(1.0)
+                        .padding(.horizontal, 24)
+                    photosSection
                         .padding(.horizontal, 24)
                 }
                 .padding(.bottom, 20)
@@ -887,6 +907,75 @@ struct EditTripSheet: View {
                                  onCancel: { showSaveConfirmation = false })
         }
         } // ZStack
+    }
+
+    /// Sección de fotos: PhotosPicker + thumbnails horizontales con botón
+    /// ✕ para eliminar. Mismo patrón que AddTripSheet — la única diferencia
+    /// es que aquí las fotos vienen ya cargadas del trip existente.
+    @ViewBuilder
+    private var photosSection: some View {
+        let remaining = Trip.maxPhotosPerTrip - tripPhotos.count
+        VStack(alignment: .leading, spacing: 8) {
+            if !tripPhotos.isEmpty {
+                HStack {
+                    Spacer()
+                    Text("\(tripPhotos.count)/\(Trip.maxPhotosPerTrip)")
+                        .font(.palatino(.caption)).foregroundStyle(.tertiary)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(tripPhotos.enumerated()), id: \.offset) { idx, data in
+                            if let ui = UIImage(data: data) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image(uiImage: ui).resizable().scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    Button {
+                                        tripPhotos.remove(at: idx)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(.white, .black.opacity(0.6))
+                                    }
+                                    .accessibilityLabel("Eliminar foto")
+                                    .padding(4)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if remaining > 0 {
+                PhotosPicker(selection: $photosPickerItems,
+                             maxSelectionCount: remaining,
+                             matching: .images) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                        Text(tripPhotos.isEmpty ? "Añadir fotos" : "Añadir más (\(remaining) restantes)")
+                            .font(.palatino(.body))
+                    }
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
+                }
+                .onChange(of: photosPickerItems) { _, items in
+                    Task {
+                        var newPhotos: [Data] = []
+                        for item in items {
+                            if let data = await TripPhotoProcessor.processPickerItem(item) {
+                                newPhotos.append(data)
+                            }
+                        }
+                        await MainActor.run {
+                            let combined = (tripPhotos + newPhotos).prefix(Trip.maxPhotosPerTrip)
+                            tripPhotos = Array(combined)
+                            photosPickerItems = []
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder

@@ -60,6 +60,14 @@ class Trip {
     /// forzados a tener notes. Migration automática en SwiftData: trips
     /// existentes tendrán `notes == nil`, no se rompe nada.
     var notes: String?
+    /// Fotos del viaje — Data binary plist con [Data] (JPEG bytes).
+    /// `@Attribute(.externalStorage)` saca el blob de la fila principal
+    /// y lo guarda como asset externo, evitando bloat de SwiftData/CloudKit
+    /// (que tiene límite de ~1MB por fila). Usar siempre el accessor
+    /// `photos` (computed) — no leer/escribir `photosData` directamente.
+    /// Cap recomendado: 3-5 fotos × ~400KB resized = ~2MB total por trip.
+    @Attribute(.externalStorage)
+    var photosData: Data?
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,
