@@ -24,6 +24,10 @@ struct LogrosSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedKind: AchievementKind? = nil
+    /// Texto de búsqueda libre. Filtra logros por `title` (case + diacritic
+    /// insensitive). Útil para encontrar logros específicos entre los 100+
+    /// que ya tiene el catálogo.
+    @State private var searchQuery: String = ""
 
     private static let dateFmt: DateFormatter = {
         let f = DateFormatter()
@@ -327,15 +331,49 @@ struct LogrosSheet: View {
         // bajamos a 98 llamadas (una por logro) + lookups O(1) en el Set.
         // Esto reduce drásticamente el delay al abrir la sheet de logros.
         let achievedSet: Set<AchievementKind> = Set(AchievementKind.allCases.filter { isAchieved($0) })
+        // Filtro de búsqueda — case + diacritic insensitive sobre el `title`
+        // del logro. Si la query está vacía mostramos todos los logros.
+        let matchOptions: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        let normalizedQuery = searchQuery
+            .trimmingCharacters(in: .whitespaces)
+            .folding(options: matchOptions, locale: .current)
+        let allMatched: [AchievementKind] = normalizedQuery.isEmpty
+            ? AchievementKind.allCases
+            : AchievementKind.allCases.filter {
+                $0.title
+                    .folding(options: matchOptions, locale: .current)
+                    .contains(normalizedQuery)
+            }
         return NavigationStack {
             List {
-                let achievedKinds = achievedSet.sorted { a, b in
-                    if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
-                    return lastTripDate(for: a) > lastTripDate(for: b)
-                }
-                let pendingKinds = AchievementKind.allCases
+                let achievedKinds = allMatched
+                    .filter { achievedSet.contains($0) }
+                    .sorted { a, b in
+                        if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
+                        return lastTripDate(for: a) > lastTripDate(for: b)
+                    }
+                let pendingKinds = allMatched
                     .filter { !achievedSet.contains($0) }
                     .sorted { $0.medalOrder < $1.medalOrder }
+                if achievedKinds.isEmpty && pendingKinds.isEmpty {
+                    // Empty state cuando la query no matchea ningún logro.
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.title2).foregroundStyle(.tertiary)
+                            Text("Sin coincidencias")
+                                .font(.palatino(.body, weight: .bold))
+                            Text("No hay logros con \"\(searchQuery)\"")
+                                .font(.palatino(.caption))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.vertical, 40)
+                        Spacer()
+                    }
+                    .listRowSeparator(.hidden)
+                }
                 ForEach(achievedKinds + pendingKinds, id: \.title) { kind in
                     let unlocked = achievedSet.contains(kind)
                     Button {
@@ -369,6 +407,8 @@ struct LogrosSheet: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
+            .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Buscar logro")
             .navigationTitle("Logros")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
