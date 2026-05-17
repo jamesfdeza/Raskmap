@@ -1296,7 +1296,7 @@ struct YearWrappedSheet: View {
 
     private func monthName(_ m: Int) -> String {
         let df = DateFormatter()
-        df.locale = Locale(identifier: "es_ES")
+        df.locale = Locale.current
         return df.monthSymbols[max(0, min(11, m - 1))]
     }
 

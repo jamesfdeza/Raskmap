@@ -71,11 +71,11 @@ struct EditTripSheet: View {
     }
 
     private static let fmt: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale.current; return f
     }()
 
     private static let segFmt: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .short; f.locale = Locale(identifier: "es_ES"); return f
+        let f = DateFormatter(); f.dateStyle = .short; f.locale = Locale.current; return f
     }()
 
     /// Sección visual de toggles de escalas en el flujo legacy. Replica la

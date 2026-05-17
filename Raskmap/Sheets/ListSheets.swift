@@ -58,7 +58,7 @@ struct StatusListSheet: View {
             if let date = row.dateFrom {
                 let df = DateFormatter()
                 df.dateFormat = "MMMM yyyy"
-                df.locale = Locale(identifier: "es_ES")
+                df.locale = Locale.current
                 key = df.string(from: date).capitalized
             } else {
                 key = "Sin fecha"
@@ -395,7 +395,7 @@ struct FinalizadosListSheet: View {
             if let date = row.dateFrom {
                 let df = DateFormatter()
                 df.dateFormat = "MMMM yyyy"
-                df.locale = Locale(identifier: "es_ES")
+                df.locale = Locale.current
                 key = df.string(from: date).capitalized
             } else {
                 key = "Sin fecha"
@@ -601,7 +601,7 @@ struct FinalizadoTripDetailSheet: View {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .none
-        f.locale = Locale(identifier: "es_ES")
+        f.locale = Locale.current
         return f
     }()
 
@@ -1018,7 +1018,7 @@ private struct FinalizadoSegmentRow: View {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .none
-        f.locale = Locale(identifier: "es_ES")
+        f.locale = Locale.current
         return f
     }()
 

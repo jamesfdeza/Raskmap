@@ -94,7 +94,7 @@ struct RangeDatePicker: UIViewRepresentable {
     func makeUIView(context: Context) -> UICalendarView {
         let v = UICalendarView()
         v.calendar = Calendar.current
-        v.locale = Locale(identifier: "es_ES")
+        v.locale = Locale.current
         v.fontDesign = .rounded
         let sel = UICalendarSelectionSingleDate(delegate: context.coordinator)
         v.selectionBehavior = sel

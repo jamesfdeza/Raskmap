@@ -186,7 +186,7 @@ struct IPadRootView: View {
     private static let dfmt: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
-        f.locale = Locale(identifier: "es_ES")
+        f.locale = Locale.current
         return f
     }()
 

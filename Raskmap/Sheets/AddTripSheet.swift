@@ -43,7 +43,7 @@ struct AddTripSheet: View {
     @State private var sheetDetent: PresentationDetent = .medium
 
     private static let fmt: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale.current; return f
     }()
 
     // Calculated date range from all segments

@@ -33,7 +33,7 @@ struct LogrosSheet: View {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .none
-        f.locale = Locale(identifier: "es")
+        f.locale = Locale.current
         return f
     }()
 

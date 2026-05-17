@@ -532,7 +532,7 @@ struct FlightLegsListSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private static let fmt: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale.current; return f
     }()
 
     /// Un tramo de avión = despegue + aterrizaje.
@@ -781,7 +781,7 @@ struct CountryTripsSheet: View {
     @State private var showSortToast: Bool = false
 
     private static let fmt: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale.current; return f
     }()
 
     private var sortedTrips: [Trip] {
@@ -1140,7 +1140,7 @@ struct TransportTripsListSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private static let fmt: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale(identifier: "es_ES"); return f
+        let f = DateFormatter(); f.dateStyle = .medium; f.locale = Locale.current; return f
     }()
 
     private var sorted: [Trip] {

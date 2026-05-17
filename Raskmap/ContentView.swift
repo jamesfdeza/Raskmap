@@ -1958,7 +1958,7 @@ struct ContentView: View {
     private func searchTripSubtitle(_ trip: Trip) -> String {
         let df = DateFormatter()
         df.dateStyle = .medium
-        df.locale = Locale(identifier: "es_ES")
+        df.locale = Locale.current
         let from = df.string(from: trip.dateFrom)
         if let to = trip.dateTo, to != trip.dateFrom {
             return "\(from) → \(df.string(from: to))"
