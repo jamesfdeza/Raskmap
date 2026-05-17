@@ -21,19 +21,42 @@ private var sharedDefaults: UserDefaults? { UserDefaults(suiteName: appGroupID) 
 
 struct ContentView: View {
     @State private var selectedTab: Int = 0
+    /// Tick que fuerza re-evaluación de las child views cuando el user
+    /// pulla a refrescar — incrementarlo dispara `.id(refreshTick)` y
+    /// SwiftUI recrea las views, re-leyendo el App Group.
+    @State private var refreshTick: Int = 0
 
     var body: some View {
         TabView(selection: $selectedTab) {
             NextTripWatchView()
+                .id("nextTrip-\(refreshTick)")
                 .tag(0)
 
             VisitedGaugeWatchView()
+                .id("gauge-\(refreshTick)")
                 .tag(1)
 
             StatsWatchView()
+                .id("stats-\(refreshTick)")
                 .tag(2)
+
+            VisitedFlagsWatchView()
+                .id("flags-\(refreshTick)")
+                .tag(3)
         }
         .tabViewStyle(.page)
+        .onAppear { refreshTick += 1 }   // re-cargar al volver de bg
+        .toolbar {
+            // Botón refresh en la barra superior — Watch HIG-friendly.
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    refreshTick += 1
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .accessibilityLabel("Actualizar")
+            }
+        }
     }
 }
 
@@ -153,6 +176,72 @@ private struct StatsWatchView: View {
         modeLabel = mode == "un" ? "ONU"
                   : mode == "unPlus" ? "ONU+OBS"
                   : "Todos"
+    }
+}
+
+// MARK: - Tab 4: Banderas visitadas
+
+/// Grid scrollable con las banderas de países visitados. Lee
+/// `widget_all_flags` del App Group — string concatenado de emojis
+/// (cada bandera ocupa 2 unicode scalars).
+private struct VisitedFlagsWatchView: View {
+    @State private var flags: [String] = []
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 32), spacing: 6)
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                if flags.isEmpty {
+                    VStack(spacing: 6) {
+                        Image(systemName: "globe.americas")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                        Text("Sin países visitados")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 30)
+                } else {
+                    Text("\(flags.count) países")
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                    LazyVGrid(columns: columns, spacing: 6) {
+                        ForEach(Array(flags.enumerated()), id: \.offset) { _, flag in
+                            Text(flag).font(.system(size: 22))
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear(perform: load)
+    }
+
+    private func load() {
+        let raw = sharedDefaults?.string(forKey: "widget_top_visited_flags") ?? ""
+        flags = Self.splitFlags(raw)
+    }
+
+    /// Split de un string de banderas emoji a array de strings (cada
+    /// flag = 2 regional indicator scalars). Necesario porque
+    /// `String.split(separator:)` no funciona con emojis compuestos.
+    static func splitFlags(_ raw: String) -> [String] {
+        var result: [String] = []
+        var current = ""
+        for ch in raw {
+            current.append(ch)
+            // Una bandera = 2 scalars regional indicator. Cada `Character`
+            // de SwiftUI ya es un grapheme cluster completo (la bandera).
+            if !current.isEmpty {
+                result.append(current)
+                current = ""
+            }
+        }
+        return result.filter { !$0.isEmpty && $0 != "🌐" }
     }
 }
 
