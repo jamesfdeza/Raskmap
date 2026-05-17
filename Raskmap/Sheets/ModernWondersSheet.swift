@@ -223,11 +223,11 @@ struct ModernWondersSheet: View {
         }
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: Radius.largeCard)
                 .fill(isMarked ? accent.opacity(0.10) : Color(.systemGray6))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: Radius.largeCard)
                 .stroke(isMarked ? accent.opacity(0.45) : Color.clear, lineWidth: 1.5)
         )
         // Tick verde sale DESPUÉS del overlay del borde para no quedar
@@ -242,7 +242,7 @@ struct ModernWondersSheet: View {
                     .offset(x: 6, y: -6)
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .contentShape(RoundedRectangle(cornerRadius: Radius.largeCard))
         .animation(.easeInOut(duration: 0.18), value: isMarked)
     }
 }

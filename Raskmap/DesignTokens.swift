@@ -74,6 +74,10 @@ enum Radius {
     /// 16pt — secciones / containers / dialog content.
     static let section: CGFloat = 16
 
+    /// 18pt — cards de gran tamaño (Wonders sheet, photo thumbnails de
+    /// trips, etc.). Entre `section` (16) y `sheet` (22).
+    static let largeCard: CGFloat = 18
+
     /// 22pt — sheets full-screen, toasts, fondos con elevación notable.
     /// Reservado para el contenedor más exterior de presentaciones.
     static let sheet: CGFloat = 22
