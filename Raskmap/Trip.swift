@@ -55,6 +55,11 @@ class Trip {
     /// trips ✈️ legacy SIN segmentos. Para trips segment-based, las escalas
     /// viven en `seg.visitedLayoverISOs`. `daysPerCountry` lee de ambas fuentes.
     var visitedLayoverISOsRaw: String?
+    /// Notas largas/diario del viaje. Texto libre del usuario — anécdotas,
+    /// recomendaciones, etc. Nullable para que trips legacy no se vean
+    /// forzados a tener notes. Migration automática en SwiftData: trips
+    /// existentes tendrán `notes == nil`, no se rompe nada.
+    var notes: String?
 
     init(isoCode: String, title: String? = nil, dateFrom: Date, dateTo: Date? = nil,
          transport: String? = nil,

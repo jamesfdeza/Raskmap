@@ -22,6 +22,9 @@ struct EditTripSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTransport: String?
     @State private var tripTitle: String
+    /// Notas largas — espejo del campo `trip.notes`. Se inicializa en init
+    /// con el valor actual y se persiste en `performEditSave()`.
+    @State private var tripNotes: String
     @State private var localDateFrom: Date
     @State private var localDateTo: Date?
     @State private var tripSegments: [TripSegment] = []
@@ -214,6 +217,7 @@ struct EditTripSheet: View {
         _tripSegments = State(initialValue: trip.tripSegments.sorted { $0.dateFrom < $1.dateFrom })
         _selectedTransport = State(initialValue: trip.transport)
         _tripTitle = State(initialValue: trip.title ?? "")
+        _tripNotes = State(initialValue: trip.notes ?? "")
         _localDateFrom = State(initialValue: trip.dateFrom)
         _localDateTo = State(initialValue: trip.dateTo)
         _localAirports = State(initialValue: trip.tripAirports)
@@ -339,6 +343,8 @@ struct EditTripSheet: View {
     private func performEditSave() {
         let trimmedTitle = tripTitle.trimmingCharacters(in: .whitespaces)
         trip.title = trimmedTitle.isEmpty ? nil : trimmedTitle
+        let trimmedNotes = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        trip.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
         if !trip.isSegmentChild {
             trip.dateFrom = calculatedDateFrom
             trip.dateTo = calculatedDateTo
@@ -556,7 +562,22 @@ struct EditTripSheet: View {
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
                         .padding(.horizontal, 24)
                 }
-                .padding(.top, 24).padding(.bottom, 20)
+                .padding(.top, 24).padding(.bottom, 16)
+
+                // Notas largas — opcional. Misma estética que TÍTULO.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("NOTAS")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary).tracking(1.0)
+                        .padding(.horizontal, 24)
+                    TextField("Anécdotas, recomendaciones…", text: $tripNotes, axis: .vertical)
+                        .lineLimit(3...8)
+                        .font(.palatino(.body))
+                        .padding(.horizontal, 16).padding(.vertical, 14)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
+                        .padding(.horizontal, 24)
+                }
+                .padding(.bottom, 20)
 
                 // MARK: Transporte + Fechas (solo viajes simples)
                 if tripSegments.isEmpty {

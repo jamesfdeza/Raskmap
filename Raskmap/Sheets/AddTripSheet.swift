@@ -28,6 +28,9 @@ struct AddTripSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var tripTitle: String = ""
+    /// Notas largas del viaje — anécdotas, recordatorios, recomendaciones.
+    /// Opcional; si queda vacío, se guarda como nil.
+    @State private var tripNotes: String = ""
     @State private var tripSegments: [TripSegment] = []
     @State private var showAddSegment = false
     @State private var showSaveConfirmation = false
@@ -186,6 +189,8 @@ struct AddTripSheet: View {
                         tripAirports: finalAirports, tripAirlines: finalAirlines)
         trip.hasLayover = airplaneSeg?.hasLayover ?? false
         trip.tripSegments = tripSegments
+        let trimmedNotes = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        trip.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
         var newlyVisitedNames: [String] = []
         if !tripSegments.isEmpty {
             let groupID = UUID().uuidString
@@ -313,6 +318,16 @@ struct AddTripSheet: View {
                 .padding(.top, 12).padding(.bottom, 4)
 
                 TextField("Título del viaje", text: $tripTitle)
+                    .font(.palatino(.body))
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))
+                    .padding(.horizontal, 16).padding(.bottom, 8)
+
+                // Notas — TextField multilinea opcional. axis: .vertical
+                // permite que crezca con el contenido. Limit 6 líneas visibles;
+                // si el user escribe más, sigue scrolleable internamente.
+                TextField("Notas (opcional)", text: $tripNotes, axis: .vertical)
+                    .lineLimit(2...6)
                     .font(.palatino(.body))
                     .padding(.horizontal, 16).padding(.vertical, 14)
                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.cell))

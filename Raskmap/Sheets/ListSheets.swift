@@ -776,6 +776,28 @@ struct FinalizadoTripDetailSheet: View {
                         }
                     }
 
+                    // MARK: Notas
+                    if let trip = row.trip,
+                       let notes = trip.notes?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("NOTAS")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.0)
+                                .padding(.horizontal, 20)
+                            Text(notes)
+                                .font(.palatino(.body))
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16).padding(.vertical, 14)
+                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))
+                                .padding(.horizontal, 20)
+                        }
+                        .padding(.bottom, 16)
+                    }
+
                     // MARK: Días por país
                     if !daysByCountry.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
