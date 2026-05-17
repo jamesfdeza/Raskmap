@@ -28,6 +28,15 @@ struct LogrosSheet: View {
     /// insensitive). Útil para encontrar logros específicos entre los 100+
     /// que ya tiene el catálogo.
     @State private var searchQuery: String = ""
+    /// Cache del set de logros desbloqueados — calculado UNA vez en
+    /// `.onAppear`. Antes se recomputaba 100 `isAchieved` calls + 500
+    /// `lastTripDate` calls en CADA render del body (incluyendo cada tap
+    /// en un logro). Ahora el body solo lee del cache + filtra por search.
+    @State private var cachedAchievedSet: Set<AchievementKind> = []
+    /// Cache del orden ya sorteado (achieved arriba, pending abajo).
+    /// Recomputado solo cuando se abre la sheet o cuando los datos cambian.
+    @State private var cachedSortedAchieved: [AchievementKind] = []
+    @State private var cachedSortedPending: [AchievementKind] = []
 
     private static let dateFmt: DateFormatter = {
         let f = DateFormatter()
@@ -323,38 +332,45 @@ struct LogrosSheet: View {
         }
     }
 
+    /// Recomputa los caches de achievedSet + arrays sorted. Solo se llama
+    /// en `.onAppear` y cuando cambia algo que afecta al orden (raro
+    /// mientras la sheet está abierta). Bajar de O(N²) en cada body
+    /// render a O(N) (solo el filter por search) elimina el lag al
+    /// tappear logros y el visual "reordenamiento" al cerrar el alert.
+    private func recomputeCaches() {
+        let achieved = Set(AchievementKind.allCases.filter { isAchieved($0) })
+        cachedAchievedSet = achieved
+        cachedSortedAchieved = AchievementKind.allCases
+            .filter { achieved.contains($0) }
+            .sorted { a, b in
+                if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
+                return lastTripDate(for: a) > lastTripDate(for: b)
+            }
+        cachedSortedPending = AchievementKind.allCases
+            .filter { !achieved.contains($0) }
+            .sorted { $0.medalOrder < $1.medalOrder }
+    }
+
     var body: some View {
-        // Pre-computar el set de logros desbloqueados UNA sola vez por render
-        // del body. Antes el body llamaba `isAchieved($0)` 3 veces por logro
-        // (filtro achieved, filtro pending, lookup per-row) → ~294 evaluaciones
-        // de funciones pesadas que iteran trips/countries. Con el cache aquí
-        // bajamos a 98 llamadas (una por logro) + lookups O(1) en el Set.
-        // Esto reduce drásticamente el delay al abrir la sheet de logros.
-        let achievedSet: Set<AchievementKind> = Set(AchievementKind.allCases.filter { isAchieved($0) })
         // Filtro de búsqueda — case + diacritic insensitive sobre el `title`
         // del logro. Si la query está vacía mostramos todos los logros.
+        // Body es ahora O(N) en el peor caso (filter por searchQuery) — el
+        // pesado (isAchieved + lastTripDate sort) está cacheado en @State
+        // y solo se recomputa en .onAppear.
         let matchOptions: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
         let normalizedQuery = searchQuery
             .trimmingCharacters(in: .whitespaces)
             .folding(options: matchOptions, locale: .current)
-        let allMatched: [AchievementKind] = normalizedQuery.isEmpty
-            ? AchievementKind.allCases
-            : AchievementKind.allCases.filter {
-                $0.title
-                    .folding(options: matchOptions, locale: .current)
-                    .contains(normalizedQuery)
-            }
+        let matchesQuery: (AchievementKind) -> Bool = { kind in
+            guard !normalizedQuery.isEmpty else { return true }
+            return kind.title
+                .folding(options: matchOptions, locale: .current)
+                .contains(normalizedQuery)
+        }
         return NavigationStack {
             List {
-                let achievedKinds = allMatched
-                    .filter { achievedSet.contains($0) }
-                    .sorted { a, b in
-                        if a.medalOrder != b.medalOrder { return a.medalOrder < b.medalOrder }
-                        return lastTripDate(for: a) > lastTripDate(for: b)
-                    }
-                let pendingKinds = allMatched
-                    .filter { !achievedSet.contains($0) }
-                    .sorted { $0.medalOrder < $1.medalOrder }
+                let achievedKinds = cachedSortedAchieved.filter(matchesQuery)
+                let pendingKinds = cachedSortedPending.filter(matchesQuery)
                 if achievedKinds.isEmpty && pendingKinds.isEmpty {
                     // Empty state cuando la query no matchea ningún logro.
                     HStack {
@@ -375,7 +391,7 @@ struct LogrosSheet: View {
                     .listRowSeparator(.hidden)
                 }
                 ForEach(achievedKinds + pendingKinds, id: \.title) { kind in
-                    let unlocked = achievedSet.contains(kind)
+                    let unlocked = cachedAchievedSet.contains(kind)
                     Button {
                         if unlocked { selectedKind = kind }
                     } label: {
@@ -409,6 +425,14 @@ struct LogrosSheet: View {
             .scrollBounceBehavior(.basedOnSize)
             .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Buscar logro")
+            .onAppear {
+                // Recomputa los caches al abrir la sheet. La data no
+                // cambia mientras está abierta — taps en logros NO
+                // re-disparan recomputo (eso es el fix principal).
+                if cachedSortedAchieved.isEmpty && cachedSortedPending.isEmpty {
+                    recomputeCaches()
+                }
+            }
             .navigationTitle("Logros")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)

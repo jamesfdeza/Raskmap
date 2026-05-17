@@ -480,6 +480,16 @@ struct RaskMapView: UIViewRepresentable {
                 .filter { $0.boundingMapRect.intersects(visibleRect) }
                 .map { $0.isoCode })
 
+            // Wrap en CATransaction con actions disabled para que CoreAnimation
+            // NO genere implicit animations en cada `setNeedsDisplay`. Antes
+            // cambiar 4 colores a la vez (p.ej. "Restablecer colores") hacía
+            // que MapKit re-rasterizara las tiles del mapa con un flash
+            // visible, como si todo Apple Maps recargara. Con esta wrap la
+            // actualización es instantánea sin transición ni flicker.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            defer { CATransaction.commit() }
+
             for (_, renderer) in rendererCache {
                 guard let polygon = renderer.polygon as? CountryPolygon else { continue }
                 let status = lastKnownStatus[polygon.isoCode] ?? .none
