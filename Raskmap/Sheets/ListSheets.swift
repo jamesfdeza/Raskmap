@@ -192,6 +192,7 @@ struct StatusListSheet: View {
                                             }
                                             .buttonStyle(.plain)
                                             .padding(.trailing, 8)
+                                            .accessibilityLabel(row.trip == nil ? "Añadir fecha" : "Editar fecha")
                                         }
                                         Button {
                                             rowToRemove = row

@@ -721,7 +721,12 @@ struct ContentView: View {
                     .font(.palatino(.title3))
                     .padding(10)
                     .background(.regularMaterial, in: Circle())
+                    // Hit area mínima HIG 44pt — el visual sigue siendo ~42pt
+                    // pero amplía el área tapeable sin cambiar la apariencia.
+                    .frame(minWidth: TapTarget.min, minHeight: TapTarget.min)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel("Buscar país")
         }
         .padding(.horizontal, 6)
     }

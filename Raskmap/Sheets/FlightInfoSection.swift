@@ -507,6 +507,7 @@ struct UsernameEditView: View {
                         .font(.title2)
                         .foregroundStyle(.blue)
                 }
+                .accessibilityLabel("Editar nombre")
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 4)

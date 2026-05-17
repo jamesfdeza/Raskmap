@@ -739,11 +739,15 @@ struct EditTripSheet: View {
                                         } label: {
                                             Image(systemName: "pencil.circle.fill")
                                                 .font(.system(size: 22)).foregroundStyle(accent.opacity(0.8))
-                                        }.buttonStyle(.plain)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Editar tramo")
                                         Button { tripSegments.removeAll { $0.id == seg.id } } label: {
                                             Image(systemName: "xmark.circle.fill")
                                                 .font(.system(size: 22)).foregroundStyle(Color(.systemGray3))
-                                        }.buttonStyle(.plain)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Eliminar tramo")
                                     }
                                     .padding(.horizontal, 16).padding(.vertical, 10)
                                     .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: Radius.card))

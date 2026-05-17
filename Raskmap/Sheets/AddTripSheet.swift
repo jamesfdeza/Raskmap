@@ -412,7 +412,11 @@ struct AddTripSheet: View {
             }
         }
         .presentationDetents([.medium, .large], selection: $sheetDetent)
-        .presentationDragIndicator(.hidden)
+        // Consistencia con el resto de sheets (ModernWondersSheet, EditTripSheet,
+        // ProfileSheet) — todas muestran el dragIndicator para que el user
+        // sepa que puede arrastrar para cerrar/expandir. Antes este era el
+        // único `hidden` del proyecto.
+        .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(showSaveConfirmation)
         .onDisappear {
             if !didSave { onCancel?() }
