@@ -526,7 +526,9 @@ struct RouteWizardSheet: View {
                             Spacer()
                             Button { layoverStops.remove(at: i) } label: {
                                 Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.7))
-                            }.buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Eliminar escala")
                         }
                         .padding(.horizontal, 16).padding(.vertical, 12)
                         if i < layoverStops.count - 1 { Divider().padding(.leading, 16) }
@@ -665,7 +667,9 @@ struct RouteWizardSheet: View {
                             Spacer()
                             Button { returnLayoverStops.remove(at: i) } label: {
                                 Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.7))
-                            }.buttonStyle(.plain)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Eliminar escala de vuelta")
                         }
                         .padding(.horizontal, 16).padding(.vertical, 12)
                         if i < returnLayoverStops.count - 1 { Divider().padding(.leading, 16) }
@@ -748,7 +752,9 @@ struct RoutePickerSheet: View {
                                     .frame(width: 24, alignment: .trailing)
                                 Button { airports.removeAll { $0.iata == ap.iata } } label: {
                                     Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.6))
-                                }.buttonStyle(.plain)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Eliminar aeropuerto \(ap.iata)")
                             }
                             .padding(.horizontal, 16).padding(.vertical, 8)
                             Divider().padding(.leading, 16)
@@ -863,7 +869,7 @@ struct AirlinePickerSheet: View {
                                     .font(.palatino(.caption, weight: .bold))
                                     .frame(width: 24, alignment: .trailing)
                                 Button { selected.removeAll { $0.name == al.name } } label: {
-                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.6))
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red.opacity(0.6)).accessibilityLabel("Eliminar aerolínea \(al.name)")
                                 }.buttonStyle(.plain)
                             }
                             .padding(.horizontal, 16).padding(.vertical, 8)
