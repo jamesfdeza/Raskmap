@@ -581,6 +581,10 @@ struct ContentView: View {
             } message: {
                 Text("Si te está siendo útil, una valoración nos ayuda mucho.")
             }
+            // En iPad (sizeClass .regular) envuelve la app en TabView con
+            // Mapa + Países. En iPhone (compact) no toca nada. Ver
+            // IPadRootView.swift para el detalle.
+            .adaptiveRoot(countries: countries, trips: trips, features: features)
     }
 
     @ViewBuilder

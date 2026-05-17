@@ -270,7 +270,19 @@ private struct AdaptiveRootContainer<IPhoneRoot: View>: View {
 
     var body: some View {
         if sizeClass == .regular {
-            IPadRootView(countries: countries, trips: trips, features: features)
+            // iPad: TabView con 2 tabs — el mapa interactivo (mismo
+            // iPhone root, funciona OK escalado) + el master-detail de
+            // países. Así el user iPad no pierde ninguna funcionalidad.
+            TabView {
+                iPhoneRoot()
+                    .tabItem {
+                        Label("Mapa", systemImage: "map.fill")
+                    }
+                IPadRootView(countries: countries, trips: trips, features: features)
+                    .tabItem {
+                        Label("Países", systemImage: "list.bullet.rectangle")
+                    }
+            }
         } else {
             iPhoneRoot()
         }
