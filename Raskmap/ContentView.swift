@@ -124,6 +124,11 @@ struct ContentView: View {
     @State private var cachedMapQuadrants: [String: [MapQuadrant]] = [:]
     @State private var highlightedIsoCode: String? = nil
     @State private var flightMode: Bool = false
+    /// Filtro visual del mapa principal — "Todos", "Solo visitados",
+    /// "Solo próximos", "Solo bucket list". No persiste entre sesiones
+    /// (volverá a "Todos" al cerrar la app) — intencional: el filtro es
+    /// una herramienta de exploración, no una preferencia.
+    @State private var mapFilter: MapFilter = .all
     @State private var flightTransitionTarget: Bool? = nil
     @State private var flightRouteFilter: FlightRouteFilter = .past
     @State private var flightModeHasRoutes: Bool = true
@@ -716,6 +721,27 @@ struct ContentView: View {
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.cell))
             Spacer()
+            // Filtro del mapa — Menu nativo iOS con las opciones. Solo se
+            // muestra el icono cuando hay filtro activo (≠ .all) para no
+            // saturar la UI cuando no se está usando.
+            Menu {
+                Picker("Filtrar mapa", selection: $mapFilter) {
+                    ForEach(MapFilter.allCases) { f in
+                        Label(f.label, systemImage: f.systemImage).tag(f)
+                    }
+                }
+            } label: {
+                Image(systemName: mapFilter == .all
+                      ? "line.3.horizontal.decrease.circle"
+                      : "line.3.horizontal.decrease.circle.fill")
+                    .font(.palatino(.title3))
+                    .foregroundStyle(mapFilter == .all ? .primary : Color.blue)
+                    .padding(10)
+                    .background(.regularMaterial, in: Circle())
+                    .frame(minWidth: TapTarget.min, minHeight: TapTarget.min)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Filtrar mapa")
             Button(action: { showSearch = true }) {
                 Image(systemName: "magnifyingglass")
                     .font(.palatino(.title3))
@@ -1606,7 +1632,8 @@ struct ContentView: View {
                 onReady: { mapStore.centerOnCountry = $0 },
                 flightMode: flightMode,
                 flightRouteFilter: flightRouteFilter,
-                trips: trips
+                trips: trips,
+                mapFilter: mapFilter
             )
             .ignoresSafeArea()
             menuOverlay()

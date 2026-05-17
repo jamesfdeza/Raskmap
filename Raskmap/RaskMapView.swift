@@ -15,6 +15,11 @@ struct RaskMapView: UIViewRepresentable {
     var flightMode: Bool = false
     var flightRouteFilter: FlightRouteFilter = .past
     var trips: [Trip] = []
+    /// Filtro visual aplicado al mapa. Cuando es `.all`, render normal. Para
+    /// el resto, los países cuyo status no matchea se pintan transparentes
+    /// (status efectivo `.none`). La transformación se hace al construir el
+    /// statusMap; el resto del pipeline de diff/render funciona igual.
+    var mapFilter: MapFilter = .all
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -127,7 +132,14 @@ struct RaskMapView: UIViewRepresentable {
         // ── 1. Primera carga ──
         if !coord.initialLoadDone {
             coord.initialLoadDone = true
-            let statusMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+            // Aplica `mapFilter` para que los países que no matcheen el
+            // filtro queden como `.none` (transparentes). El filtro activo
+            // se cachea en `coord.lastMapFilter` para detectar cambios en
+            // updateUIView siguientes.
+            coord.lastMapFilter = mapFilter
+            let statusMap = Dictionary(uniqueKeysWithValues: countries.map {
+                ($0.isoCode, mapFilter.effectiveStatus($0.status))
+            })
             coord.lastKnownStatus = statusMap
             coord.lastHighlighted = highlightedIsoCode
 
@@ -295,7 +307,13 @@ struct RaskMapView: UIViewRepresentable {
         }
 
         // ── 3. Actualizaciones de status — solo diff ──
-        let newMap = Dictionary(uniqueKeysWithValues: countries.map { ($0.isoCode, $0.status) })
+        // Aplica `mapFilter`: si el filtro cambió, esta línea ya genera un
+        // newMap diferente al lastKnownStatus → el diff de abajo detecta los
+        // países que han ganado/perdido color y re-renderiza solo esos.
+        coord.lastMapFilter = mapFilter
+        let newMap = Dictionary(uniqueKeysWithValues: countries.map {
+            ($0.isoCode, mapFilter.effectiveStatus($0.status))
+        })
         let oldMap = coord.lastKnownStatus
         guard newMap != oldMap else { return }
         coord.lastKnownStatus = newMap
@@ -410,6 +428,10 @@ struct RaskMapView: UIViewRepresentable {
         var lastHighlighted: String? = nil
         var lastLocationIso: String? = nil
         var initialLoadDone = false
+        /// Filtro de mapa activo en el último render. Usado para detectar
+        /// cuándo el user cambia de filtro (p.ej. "Todos" → "Solo visitados")
+        /// y disparar un re-render del statusMap completo.
+        var lastMapFilter: MapFilter = .all
         /// ISOs cuyos polígonos están ACTUALMENTE registrados como overlays
         /// en el MKMapView. Subset de `features` — solo coloreados +
         /// (opcionalmente) el highlight actual si es .none. Mantener este set
