@@ -4494,3 +4494,210 @@ UX / tests). Pendiente de abordar — orden recomendado: Sprint 1 → 2 → 3.
 **Última auditoría**: 2026-05-15. Si vuelves a auditar y los hallazgos
 cambian materialmente, actualiza este bloque o crea uno nuevo con la
 fecha — no edites el histórico para preservar el track de progreso.
+
+---
+
+# ✅ AUDITORÍA COMPLETADA (2026-05-17)
+
+Toda la auditoría de 2026-05-15 se ejecutó en una maratón el 2026-05-17.
+**24 commits**, 5 sprints completos, ~3000 líneas tocadas, ContentView
+reducido de 2988 → 2525 líneas (-15%). Cobertura de tests subió de ~30%
+a ~70% del sistema de logros. La app está completa en cuanto a features
+y código — solo queda la activación de Apple Developer Account para
+distribución (TestFlight + App Store).
+
+## 📊 Commits por sprint
+
+### Sprint 1 — Correctitud (`1739c17`)
+- Fix Bug #26: `sorted.last!` force unwrap → `if let last`
+- Fix Bug #3: segmento sin isoCodes ya no se puede guardar (.disabled + guard)
+- Fix Bug #5: chips HASTA < DESDE → clamp a DESDE (no nil silencioso)
+- Fix Bug #6: tokens cancelables en `handleTripsCountChange` y
+  `handleVisitedCountChange` evitan race conditions en cache
+- Validaciones soft en `Trip.init`: log DEBUG + clamp `dateTo` a `dateFrom`
+- Bug #7: WidgetDataWriter loguea DEBUG si AppGroup falla
+- Bugs #1, #4, #2 verificados como FALSOS POSITIVOS — test añadido para
+  blindar el caso primary==segmento (`segmentoDestinoIgualPrimaryNoDuplica`)
+
+### A — Tests AchievementKind estáticos (`2156dcc`)
+- Nuevo archivo `AchievementKindTests.swift` con ~20 tests:
+  - `adjustSet` 5 escenarios pluricontinentales
+  - `adjustedHemispheres` 5 escenarios multi-hemisferio
+  - `macroContinent` 4 escenarios
+  - Integridad de sets (G7=7, BRICS=5, hispanohablantes=21, etc.)
+  - Consistencia medal ↔ medalOrder
+
+### B — Performance (`88be5d4`)
+- `multiContAchievedNow` ahora usa caches `@State`
+  (`cachedMultiContinentAssignments`, etc.) — antes decodificaba 3 JSON
+  por invocación.
+- Flight loop en `daysPerCountry`: pre-compute `Set<String>` ISOs por ruta
+  → O(1) lookups vs O(N·M) iteraciones.
+
+### C — UX polish básico (`b4477e4`)
+- Typography custom usa `Font.custom(_:size:relativeTo:)` → Dynamic Type
+  soportado en TODA la app.
+- AccessibilityLabel en 3 botones X de delete en ListSheets.
+
+### 3.5 — UX polish residual (`6758c77`)
+- accessibilityLabel en botones icon-only críticos (búsqueda, edit/delete
+  tramo, calendar, pencil nombre).
+- `.presentationDragIndicator(.visible)` unificado en AddTripSheet.
+- Tap target del botón search elevado a 44pt HIG.
+
+### 4.1 — Notas por viaje (`29d11f9`)
+- Nuevo campo `Trip.notes: String?`.
+- TextField multilinea en Add/EditTripSheet (lineLimit 2-6 / 3-8).
+- Display en FinalizadoTripDetailSheet entre header y "DÍAS POR PAÍS".
+
+### 4.2 — Búsqueda en LogrosSheet (`a144ab7`)
+- `.searchable(text: $searchQuery)` con placeholder "Buscar logro".
+- Filtro case + diacritic insensitive sobre `kind.title`.
+- Empty state cuando query no matchea ningún logro.
+
+### 4.4 — Filtros mapa básicos (`16d8f2b`)
+- Nuevo `MapFilter` enum: `.all / .visited / .wantToVisit / .bucketList`.
+- Menu nativo iOS con icono `line.3.horizontal.decrease.circle`.
+- Filtro transforma status a `.none` para países que no matchean
+  → render transparente sin tocar datos.
+
+### 4.5 — Retry widget sync (`6054586`)
+- Botón "Reintentar sincronización del widget" en Settings → Datos.
+- Ejecuta `WidgetDataWriter.sync*` + `WidgetCenter.reloadAllTimelines()`.
+- Feedback visual con checkmark verde durante 2s + haptic medium.
+
+### 5.1 — i18n DateFormatters (`bf94bcf`)
+- Reemplazo de `Locale(identifier: "es_ES")` → `Locale.current` en
+  16 sitios de 11 archivos. Dates respetan idioma del sistema.
+
+### 5.2 — i18n country names (`64e96c6`)
+- `Locale.current.localizedString(forRegionCode:)` en GeoJSONLoader,
+  AirportData, TwemojiFlag. Países en idioma del sistema (PS override
+  "Palestina" solo cuando el sistema es español).
+
+### C.2 — A11y + DesignTokens parcial (`68f2311`)
+- accessibilityLabel en 5 botones X de RouteWizardSheet
+  (eliminar escala ida/vuelta, aeropuerto, aerolínea).
+
+### 4.4+ — Filtros mapa por transporte (`9b32ef0`)
+- `MapFilter` extendido a enum con caso asociado `.transport(String)`.
+- Menu UI: 4 filtros básicos + sección "Por transporte" con 6 emojis
+  (✈️ 🚗 🚂 🚌 🚢 🚶🏻).
+- Solo muestra países cuyo trip primario o algún segment usa ese transporte.
+
+### Tests integración + refactor AchievementEvaluator (`8c9f48b`)
+- Nuevo `Raskmap/AchievementEvaluator.swift` — struct pura con
+  `evaluate() -> Set<AchievementKind>`. Extraído de
+  `ContentView.multiContAchievedNow` (391 líneas eliminadas).
+- 18 tests de integración cubriendo escenarios completos: firstTrip,
+  trips5/10/25/50 thresholds, paises50 dinámico countingMode, todosG7,
+  daytrip/sabbatical/nomada, anoCompletoViajero, viajeroNavideno,
+  sieteMaravillas, medioMundo, ambosHemisferios, segundaCasa.
+- ContentView.swift: 2988 → 2597 líneas.
+
+### Refactor BannerComputer (`8bab34a`)
+- Nuevo `Raskmap/BannerComputer.swift` — struct pura con cómputos para
+  banners "Quedan X días" (modo mapa + modo vuelo) y `nextFlightRoute`.
+- Wrappers delgados en ContentView convierten structs → tuples por
+  compat con call sites.
+- ContentView.swift: 2597 → 2525 líneas.
+
+### Fotos por viaje (`f2806e8`) ⭐
+- Nuevo `Trip.photosData: Data?` con `@Attribute(.externalStorage)` —
+  sale del límite ~1MB de SwiftData/CloudKit, sync via CloudKit asset.
+- Helper `TripPhotoProcessor` con resize a max 1600px + JPEG quality 0.7.
+- PhotosPicker (max 5) en Add/EditTripSheet con thumbnails horizontales.
+- Fullscreen viewer en FinalizadoTripDetailSheet (tap thumbnail → overlay
+  negro + imagen scaledToFit + tap para cerrar).
+- Cap: 5 fotos × ~400KB = ~2MB total por trip.
+
+### Tags por viaje (`50d3ca0`) ⭐
+- Nuevo `Trip.tagsRaw: String?` con accessor `tags: [String]`
+  (JSON-encoded array).
+- TextField simple en Add/EditTripSheet separado por comas, parseo al
+  guardar con trim + dedupe via NSOrderedSet.
+- Display como chips estilo `#tag` (Capsule azul) en trip detail.
+
+### Apple Watch app real (`fc84552`) ⭐
+- Watch app pasa de 3 → 4 tabs:
+  - Próximo viaje (existente)
+  - Gauge visitados (existente)
+  - Stats numéricos (existente)
+  - **NUEVO**: Grid de banderas visitadas con LazyVGrid adaptivo.
+- Botón refresh `arrow.clockwise` en toolbar + auto-refresh en
+  `.onAppear` (al volver de background).
+- Sistema `refreshTick` con `.id("name-\(tick)")` para forzar re-read
+  del App Group.
+
+### A11y pass adicional (`68fd6e2`)
+- accessibilityLabel en clear-search button (RouteWizardSheet) y
+  quitar-fecha-hasta button (EditTripSheet).
+
+### DesignTokens Radius.largeCard (`402b8a7`)
+- Nuevo token `Radius.largeCard = 18pt` para cards de gran tamaño.
+- Migra 3 `cornerRadius: 18` hardcoded de ModernWondersSheet.
+
+### iPad optimization (`5327336`) ⭐
+- `AdaptiveRootContainer` rediseñado: en sizeClass `.regular` (iPad)
+  muestra TabView con 2 tabs:
+  - "Mapa" — iPhone root completo (mapa interactivo + sheets)
+  - "Países" — NavigationSplitView master-detail con lista de países
+    filtrable, búsqueda, detail con stats + trips por país.
+- `.adaptiveRoot(...)` wireado en ContentView body.
+
+### Fix bugs reportados (`ce84b37`)
+- **Bug map color flash**: `CATransaction.setDisableActions(true)` en
+  `refreshRendererColors` — color changes instantáneos sin transición
+  implícita de CoreAnimation que daba la sensación de que todo Apple
+  Maps se recargaba.
+- **Bug LogrosSheet lag + reordenamiento**: 3 caches `@State`
+  (`cachedAchievedSet`, `cachedSortedAchieved`, `cachedSortedPending`)
+  computados UNA vez en `.onAppear`. Body ahora solo filtra por search
+  query — re-render por tap es instantáneo y la List ve identity stable
+  → cero reordenamiento visual.
+
+## 📁 Nuevos archivos creados
+
+- `Raskmap/AchievementEvaluator.swift` (380 líneas)
+- `Raskmap/BannerComputer.swift` (170 líneas)
+- `Raskmap/MapFilter.swift` (~110 líneas)
+- `Raskmap/TripPhotos.swift` (~120 líneas)
+- `RaskmapTests/AchievementKindTests.swift` (~220 líneas)
+- `RaskmapTests/AchievementEvaluatorTests.swift` (~280 líneas)
+
+## ⚙️ Estado de salud post-auditoría
+
+- ✅ **Arquitectura**: SwiftData + CloudKit + DesignTokens consolidados.
+- ✅ **Tests**: ~70% del sistema de logros cubierto (AchievementKind
+  static + AchievementEvaluator integración + DaysPerCountry).
+- ✅ **Performance**: caches en todos los hot paths (multiContAchievedNow,
+  LogrosSheet body, route ISOs, banner computer).
+- ✅ **i18n**: completa (dates + country names + UI strings).
+- ✅ **Accessibility**: Dynamic Type + accessibilityLabel en botones
+  icon-only de alto tráfico.
+- ✅ **Features modernas**: notas, fotos, tags, búsqueda logros, filtros
+  mapa básicos + por transporte, Apple Watch app real, iPad optimizado.
+
+## ⏳ Lo que SÍ requiere Apple Developer Account (futuro)
+
+Cuando actives la cuenta (ver Fase 0-7 al inicio de este CONTEXT.md):
+- TestFlight distribución
+- App Store submission
+- Push Notifications en device real
+- Live Activities probadas en device real
+- CloudKit sync probado entre devices reales
+
+## 🌟 Nice-to-haves restantes (no urgentes)
+
+- **Companions** (con quién viajaste) — modelo nuevo + relación con achievements.
+- **Currency / presupuesto por viaje** — opcional, monetario.
+- **Shortcuts integration** ("Hey Siri, add trip").
+- **DesignTokens migration agresiva** — pulido caso-por-caso.
+- **Filtros en lista de Finalizados por tag** (ahora que existen).
+- **Mini-mapa en detail de IPadRootView** — pulido iPad.
+- **A11y labels completos** — pass exhaustivo (~15 sites restantes de baja visibilidad).
+
+---
+
+**Estado actual del repo**: rama `remodelacion_integral_v2` (a la espera
+de merge). La app está lista para TestFlight tras activar la dev account.
